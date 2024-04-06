@@ -24,6 +24,7 @@ typedef enum Type {
   LAW,
   APP,
   NAT,
+  IND,
   HOL
 } Type;
 
@@ -63,6 +64,7 @@ typedef struct Value {
     Law l;
     App a;
     Nat n;
+    struct Value * i;
   };
 } Value;
 
