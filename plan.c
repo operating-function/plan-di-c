@@ -49,18 +49,18 @@ struct Value;
 typedef struct Law {
   Nat n;
   Nat a;
-  struct Value ** b;
+  struct Value * b;
 } Law;
 
 typedef struct App {
-  struct Value ** f;
-  struct Value ** g;
+  struct Value * f;
+  struct Value * g;
 } App;
 
 typedef struct Value {
   Type type;
   union {
-    struct Value ** p;
+    struct Value * p;
     Law l;
     App a;
     Nat n;
@@ -105,57 +105,57 @@ static inline void ck_nat(char * fn_nm, Value * x) {
   if (x->type != NAT) crash(s);
 }
 
-static inline Type TY(Value ** x) {
-  return (*x)->type;
+static inline Type TY(Value * x) {
+  return x->type;
 }
 
-static inline Value ** IT(Value ** x) {
+static inline Value * IT(Value * x) {
   #ifdef CHECK_TAGS
-  ck_pin("IT", *x);
+  ck_pin("IT", x);
   #endif
-  return (*x)->p;
+  return x->p;
 };
 
-static inline Nat NM(Value ** x) {
+static inline Nat NM(Value * x) {
   #ifdef CHECK_TAGS
-  ck_law("NM", *x);
+  ck_law("NM", x);
   #endif
-  return (*x)->l.n;
+  return x->l.n;
 }
 
-static inline Nat AR(Value ** x) {
+static inline Nat AR(Value * x) {
   #ifdef CHECK_TAGS
-  ck_law("AR", *x);
+  ck_law("AR", x);
   #endif
-  return (*x)->l.a;
+  return x->l.a;
 }
 
-static inline Value ** BD(Value ** x) {
+static inline Value * BD(Value * x) {
   #ifdef CHECK_TAGS
-  ck_law("BD", *x);
+  ck_law("BD", x);
   #endif
-  return (*x)->l.b;
+  return x->l.b;
 }
 
-static inline Value ** HD(Value ** x) {
+static inline Value * HD(Value * x) {
   #ifdef CHECK_TAGS
-  ck_app("HD", *x);
+  ck_app("HD", x);
   #endif
-  return (*x)->a.f;
+  return x->a.f;
 };
 
-static inline Value ** TL(Value ** x) {
+static inline Value * TL(Value * x) {
   #ifdef CHECK_TAGS
-  ck_app("TL", *x);
+  ck_app("TL", x);
   #endif
-  return (*x)->a.g;
+  return x->a.g;
 };
 
-static inline Nat NT(Value ** x) {
+static inline Nat NT(Value * x) {
   #ifdef CHECK_TAGS
-  ck_nat("NT", *x);
+  ck_nat("NT", x);
   #endif
-  return (*x)->n;
+  return x->n;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -188,7 +188,7 @@ void check_nat(Nat n) {
     return;
 }
 
-void check_value(Value **v) {
+void check_value(Value *v) {
   switch (TY(v)) {
     case PIN:
       check_value(IT(v));
@@ -212,9 +212,9 @@ void check_value(Value **v) {
   }
 }
 
-void print_value_internal(Value**, char*, int);
+void print_value_internal(Value*, char*, int);
 
-char * print_value_t(Value ** v) {
+char * print_value_t(Value * v) {
   if (tracing) {
     char * buf = malloc(4096*sizeof(char));
     print_value_internal(v, buf, 0);
@@ -223,13 +223,13 @@ char * print_value_t(Value ** v) {
   return NULL;
 }
 
-char * print_value(Value ** v) {
+char * print_value(Value * v) {
   char * buf = malloc(4096*sizeof(char));
   print_value_internal(v, buf, 0);
   return buf;
 }
 
-void print_value_app(Value ** v, char * buf, int recur) {
+void print_value_app(Value * v, char * buf, int recur) {
   if (TY(v) != APP) {
     return  print_value_internal(v, buf, recur);
   }
@@ -240,7 +240,7 @@ void print_value_app(Value ** v, char * buf, int recur) {
 
 void print_nat_internal(Nat, char *);
 
-void print_value_internal(Value ** v, char * buf, int recur) {
+void print_value_internal(Value * v, char * buf, int recur) {
   if (recur > 10) {
     sprintf(buf + strlen(buf), "‥");
     return;
@@ -340,75 +340,48 @@ Nat d_Nat(u64 n) {
   return (Nat){.type = SMALL, .direct = n};
 }
 
-Value ** a_Nat(u64 n) {
+Value * a_Nat(u64 n) {
   Value * res = (Value *)malloc(sizeof(Value));
   res->type = NAT;
   res->n = d_Nat(n);
-  Value ** ptr = (Value **)malloc(sizeof(Value*));
-  *ptr = res;
-  return ptr;
+  return res;
 }
 
-Value ** a_Big(Nat n) {
+Value * a_Big(Nat n) {
   Value * res = (Value *)malloc(sizeof(Value));
   res->type = NAT;
   res->n = n;
-  Value ** ptr = (Value **)malloc(sizeof(Value*));
-  *ptr = res;
-  return ptr;
+  return res;
 }
 
-Value ** a_Pin(Value ** v) {
+Value * a_Pin(Value * v) {
   Value * res = (Value *)malloc(sizeof(Value));
   res->type = PIN;
   res->p = v;
-  Value ** ptr = (Value **)malloc(sizeof(Value*));
-  *ptr = res;
-  return ptr;
+  return res;
 }
 
-Value ** a_Law(Nat n, Nat a, Value ** b) {
+Value * a_Law(Nat n, Nat a, Value * b) {
   Value * res = (Value *)malloc(sizeof(Value));
   res->type = LAW;
   res->l.n = n;
   res->l.a = a;
   res->l.b = b;
-  Value ** ptr = (Value **)malloc(sizeof(Value*));
-  *ptr = res;
-  return ptr;
+  return res;
 }
 
-Value ** a_App(Value ** f, Value ** g) {
+Value * a_App(Value * f, Value * g) {
   Value * res = (Value *)malloc(sizeof(Value));
   res->type = APP;
   res->a.f = f;
   res->a.g = g;
-  Value ** ptr = (Value **)malloc(sizeof(Value*));
-  *ptr = res;
-  return ptr;
+  return res;
 }
 
-Value ** a_Hol() {
+Value * a_Hol() {
   Value * res = (Value *)malloc(sizeof(Value));
   res->type = HOL;
-  Value ** ptr = (Value **)malloc(sizeof(Value*));
-  *ptr = res;
-  return ptr;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-//  Mutation
-
-void update(Value ** t, Value ** x) {
-  trace_verbose("pre:  %p(%p) <== %p(%p)\n", (void *)t, (void *)*t, (void *)x, (void *)*x);
-  if (TY(x) == HOL) {
-    trace_verbose("update: *t = *x;\n");
-    *t = *x;
-  } else {
-    trace_verbose("update: **t = **x;\n");
-    **t = **x;
-  }
-  trace_verbose("post: %p(%p) <== %p(%p)\n", (void *)t, (void *)*t, (void *)x, (void *)*x);
+  return res;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -616,282 +589,13 @@ Nat Sub(Nat a, Nat b) {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-//  Combinator
-
-Value ** F(Value ** o);
-Value ** E(Value ** o);
-Value ** L(Nat n, Nat e, Value ** v, Value ** b);
-Value ** R(Nat n, Value ** e, Value ** b);
-
-Value ** I(Value ** f, Value ** e, Nat n) {
-  trace_print("I[%s, %s, %s]\n", print_value_t(f), print_value_t(e), print_nat(n));
-  if (EQ(n, d_Nat(0))) {
-    if (TY(e) == APP) {
-      return TL(e);
-    } else {
-      return e;
-    }
-  } else {
-    if (TY(e) == APP) {
-      return I(f, HD(e), Dec(n));
-    } else {
-      return f;
-    }
-  }
-}
-
-Nat A_(Value ** o) {
-  switch (TY(o)) {
-    case APP: {
-      Nat head = A_(HD(o));
-      if (EQ(head, d_Nat(0))) return d_Nat(0);
-      return Dec(head);
-    }
-    case PIN: {
-      Value ** it = IT(o);
-      switch (TY(it)) {
-        case NAT: {
-          Nat nt = NT(it);
-          if ((nt.type) == BIG) return d_Nat(1);
-          switch (nt.direct) {
-            case 1:
-            case 3:  return d_Nat(3);
-            case 4:  return d_Nat(5);
-            default: return d_Nat(1);
-          }
-        }
-        default:
-          return A_(IT(o));
-      }
-    }
-    case LAW:
-      return AR(o);
-    case NAT:
-      return d_Nat(0);
-    case HOL:
-      crash("<<loop>>");
-      return d_Nat(0);
-  }
-}
-
-Nat A(Value ** o) {
-  trace_print("A[%s]\n", print_value_t(o));
-  Nat res = A_(o);
-  // if (tracing) printf(" ==> %s\n", print_value_t(res));
-  return res;
-}
-
-Nat N(Value ** o) {
-  trace_print("N[%s]\n", print_value_t(o));
-  Value ** norm = E(o);
-  if (TY(norm) == NAT) return NT(norm);
-  return d_Nat(0);
-}
-
-Value ** L(Nat i, Nat n, Value ** e, Value ** x) {
-  trace_print("L[%s, %s, %s, %s]\n", print_nat(i), print_nat(n), print_value_t(e), print_value_t(x));
-  if (TY(x) == APP) {
-    if (TY(HD(x)) == APP) {
-      if (TY(HD(HD(x))) == NAT) {
-        if (EQ(NT(HD(HD(x))), d_Nat(1))) {
-          Value ** v = TL(HD(x));
-          Value ** b = TL(x);
-          Value ** ret = I(a_Hol(), e, Sub(n,i));
-          trace_verbose("L: ret: %s\n", print_value_t(ret));
-          update(ret, R(n, e, v));
-          trace_verbose("\t <== %s\n", print_value_t(ret));
-          return L(Inc(i), n, e, b);
-        }
-      }
-    }
-  }
-  return R(n, e, x);
-}
-
-Value ** R(Nat n, Value ** e, Value ** b){
-  trace_print("R[%s, %s, %s]\n", print_nat(n), print_value_t(e), print_value_t(b));
-  if (TY(b) == NAT && LTE(NT(b), n)) {
-    return I(a_Hol(), e, Sub(n, NT(b)));
-  }
-  if (TY(b) == APP) {
-    if (TY(HD(b)) == APP) {
-      if ((TY(HD(HD(b))) == NAT) && EQ(NT(HD(HD(b))), d_Nat(0))) {
-        Value ** f = TL(HD(b));
-        Value ** x = TL(b);
-        return a_App(R(n, e, f), R(n, e, x));
-      }
-    } else if ((TY(HD(b)) == NAT) && EQ(NT(HD(b)), d_Nat(2))) {
-        Value ** x = TL(b);
-        return x;
-    }
-  }
-  return b;
-}
-
-Value ** C(Value ** z, Value ** p, Nat n) {
-  trace_print("C[%s, %s, %s]\n", print_value_t(z), print_value_t(p), print_nat(n));
-  if (EQ(n, d_Nat(0))) {
-    return z;
-  } else {
-    return a_App(p, a_Big(Dec(n)));
-  }
-}
-
-Value ** P(Value ** p, Value ** l, Value ** a, Value ** n, Value ** o) {
-  trace_print("P[%s, %s, %s, %s, %s]\n", print_value_t(p), print_value_t(l), print_value_t(a), print_value_t(n), print_value_t(o));
-  switch (TY(o)) {
-    case APP:
-      return a_App(a_App(a, HD(o)), TL(o));
-    case PIN:
-      return a_App(p, IT(o));
-    case LAW:
-      return a_App(a_App(a_App(l, a_Big(NM(o))), a_Big(AR(o))), BD(o));
-    case NAT:
-      return a_App(n, o);
-    case HOL:
-      crash("<<loop>>");
-      return NULL;
-  }
-}
-
-Value ** S(Value ** o) {
-  trace_print("S[%s]\n", print_value_t(o));
-  if (TY(o) == APP) {
-    switch (TY(HD(o))) {
-      case APP:
-        return a_App(S(HD(o)), TL(o));
-      case PIN: {
-        Value ** v = IT(HD(o));
-        Type t = TY(v);
-        if ((t != LAW) && (t != NAT)) {
-          return S(a_App(v, TL(o)));
-        }
-      }
-      default:
-        return o;
-    }
-  }
-  return o;
-}
-
-Value ** B(Nat a, Nat n, Value ** e, Value ** b, Value ** x) {
-  trace_print("B[%s, %s, %s, %s, %s]\n", print_nat(a), print_nat(n), print_value_t(e), print_value_t(b), print_value_t(x));
-  if (TY(x) == APP) {
-    Value ** h = HD(x);
-    if (TY(h) == APP) {
-      Value ** hh = HD(h);
-      if (TY(hh) == NAT) {
-        if (EQ(NT(hh), d_Nat(1))) {
-          return B(a, Inc(n), a_App(e, a_Hol()), b, TL(x));
-        }
-      }
-    }
-  }
-  return L(Inc(a), n, e, b);
-}
-
-Value ** X(Value ** k, Value ** e) {
-  trace_print("X[%s, %s]\n", print_value_t(k), print_value_t(e));
-  switch (TY(k)) {
-    case HOL:
-      crash("<<loop>>");
-    case APP:
-      return X(HD(k), e);
-    case LAW: {
-      Nat a = AR(k);
-      Value ** b = BD(k);
-      return B(a, a, e, b, b);
-    }
-    case PIN:
-      return X(IT(k), e);
-    case NAT:
-      break;
-  }
-
-  Value **b, **a, **n, **p, **l, **x, **z;
-  Nat k_n = NT(k);
-  if (k_n.type == BIG) crash(print_value(e));
-  switch (k_n.direct) {
-    case 0:
-      x = TL(e);
-      return a_Pin(F(x));
-    case 1:
-      b = TL(e);
-      a = TL(HD(e));
-      n = TL(HD(HD(e)));
-      Nat nn = N(n);
-      trace_print("<makeLaw %s>\n", print_nat(nn));
-      print_depth++;
-      Value **r = a_Law(nn, N(a), F(b));
-      print_depth--;
-      trace_print("</makeLaw %s>\n", print_nat(nn));
-      return r;
-    case 2:
-      x = TL(e);
-      return a_Big(Inc(N(x)));
-    case 3:
-      x = TL(e);
-      p = TL(HD(e));
-      z = TL(HD(HD(e)));
-      return C(z, p, N(x));
-    case 4:
-      x = TL(e);
-      n = TL(HD(e));
-      a = TL(HD(HD(e)));
-      l = TL(HD(HD(HD(e))));
-      p = TL(HD(HD(HD(HD(e)))));
-      return P(p, l, a, n, E(x));
-  }
-  crash(print_value(e));
-  return NULL;
-}
-
-Value ** E(Value ** o) {
-  trace_print("E[%s]\n", print_value_t(o));
-  switch (TY(o)) {
-    case HOL:
-      crash("<<loop>>");
-    case APP:
-      print_depth++;
-      E(HD(o));
-      Nat arity = A(HD(o));
-      trace_verbose("E arity: %s, val: %s\n", print_nat(arity), print_value(HD(o)));
-      if (EQ(arity, d_Nat(1))) {
-        update(o, S(o));
-        trace_verbose("S[] ==>  %s\n", print_value_t(o));
-        update(o, X(o,o));
-        trace_verbose("</X %s>\n", print_value(o));
-        E(o);
-      }
-      print_depth--;
-      trace_verbose("E[] ==> %s\n", print_value_t(o));
-      return o;
-    case PIN:
-    case LAW:
-    case NAT:
-      return o;
-  }
-}
-
-Value ** F(Value ** o) {
-  trace_print("F[%s]\n", print_value_t(o));
-  o = E(o);
-  if (TY(o) == APP) {
-    F(HD(o));
-    F(TL(o));
-  }
-  return o;
-}
-
-
-////////////////////////////////////////////////////////////////////////////////
 //  Seeds
 
-Value ** frag_load(Value ***tab, u64 tabSz, int *, u64 *, u64 **);
+Value * frag_load(Value **tab, u64 tabSz, int *, u64 *, u64 **);
 
-Value ** frag_load_cell(Value ***tab, u64 tabSz, int *use, u64 *acc, u64 **mor) {
-  Value **f = frag_load(tab, tabSz, use, acc, mor);
-  Value **x = frag_load(tab, tabSz, use, acc, mor);
+Value * frag_load_cell(Value **tab, u64 tabSz, int *use, u64 *acc, u64 **mor) {
+  Value *f = frag_load(tab, tabSz, use, acc, mor);
+  Value *x = frag_load(tab, tabSz, use, acc, mor);
   return a_App(f,x);
 }
 
@@ -900,7 +604,7 @@ u64 u64_bits (u64 w) {
   return 64 - __builtin_clzll(w);
 }
 
-Value ** frag_load(Value ***tab, u64 tabSz, int *use, u64 *acc, u64 **mor) {
+Value * frag_load(Value **tab, u64 tabSz, int *use, u64 *acc, u64 **mor) {
   u64 isCell = ((*acc >> *use) & 1ULL);
 
   // move forward by one bit.
@@ -936,7 +640,7 @@ Value ** frag_load(Value ***tab, u64 tabSz, int *use, u64 *acc, u64 **mor) {
   return tab[ref];
 }
 
-Value ** seed_load(u64 *buf) {
+Value * seed_load(u64 *buf) {
   u64 n_holes = buf[0];
   u64 n_bigs  = buf[1];
   u64 n_words = buf[2];
@@ -950,7 +654,7 @@ Value ** seed_load(u64 *buf) {
 
   u64 n_entries = n_bigs + n_words + n_bytes + n_frags;
 
-  Value ***tab = malloc(sizeof(Value*) * n_entries);
+  Value **tab = malloc(sizeof(Value*) * n_entries);
 
   // How big are the bignats?
   u64 bigwidths[n_bigs];
@@ -958,7 +662,7 @@ Value ** seed_load(u64 *buf) {
     bigwidths[i] = buf[5+i];
   }
 
-  Value ***next_ref = tab;
+  Value **next_ref = tab;
   int used = 5 + n_bigs; // number of words used
 
   for (int i=0; i<n_bigs; i++) {
@@ -1020,19 +724,26 @@ u64 *load_seed_file (const char* filename, u64 *sizeOut) {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+//  Interpreter
+
+Value * force(Value * o) {
+  return o;
+}
+
+////////////////////////////////////////////////////////////////////////////////
 //  Runner
 
-void run(Value ** v) {
+void run(Value * v) {
   trace_print("RUN[%s]\n", print_value(v));
   trace_print("  ->\n", print_value(v));
   print_depth++;
-  Value ** res = F(v);
+  Value * res = force(v);
   print_depth--;
   trace_print("%s\n", print_value(res));
 }
 
 // TODO handle atoms bigger than U64_MAX - this will just overflow
-Value **read_atom() {
+Value *read_atom() {
   char c;
   u64 acc = 0;
   while (isdigit(c = getchar())) {
@@ -1050,9 +761,9 @@ void eat_spaces() {
   ungetc(c, stdin);
 }
 
-Value **read_exp();
+Value *read_exp();
 
-Value **read_app(Value **f) {
+Value *read_app(Value *f) {
   while (true) {
     char c = getchar();
     switch (c) {
@@ -1076,7 +787,7 @@ Value **read_app(Value **f) {
 
 #define BUF_LEN 1024
 
-Value **read_sym() {
+Value *read_sym() {
     // TODO handle larger sizes
     // sketch:
     //   - loop with buf, allocating new memory, until done.
@@ -1108,7 +819,7 @@ Value **read_sym() {
     }
 }
 
-Value **read_exp() {
+Value *read_exp() {
   again: {
     char c = getchar();
     if (!c) return NULL;
@@ -1137,7 +848,7 @@ Value **read_exp() {
                 buf[i] = 0;
                 u64 seedSz;
                 u64 *words = load_seed_file(buf, &seedSz);
-                Value **loaded = seed_load(words);
+                Value *loaded = seed_load(words);
                 check_value(loaded);
                 return loaded;
             }
@@ -1147,7 +858,7 @@ Value **read_exp() {
     }
     case '(': {
         eat_spaces();
-        Value **f = read_exp();
+        Value *f = read_exp();
         return read_app(f);
     }
     default:
@@ -1162,7 +873,7 @@ Value **read_exp() {
   }
 }
 
-Value **read_exp_top() {
+Value *read_exp_top() {
  again:
   eat_spaces();
   if (feof(stdin)) return NULL;
@@ -1173,7 +884,7 @@ int main (void) {
   bool isInteractive = isatty(fileno(stdin));
   again:
     if (isInteractive) printf(">> ");
-    Value **v = read_exp_top();
+    Value *v = read_exp_top();
     if (!v) return 0;
     run(v);
     printf("%s\n", print_value(v));
