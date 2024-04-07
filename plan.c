@@ -112,6 +112,8 @@ static inline void ck_nat(char * fn_nm, Value * x) {
   if (x->type != NAT) crash(s);
 }
 
+// TODO put deref inside of these accessors?
+
 static inline Type TY(Value * x) {
   return x->type;
 }
@@ -774,6 +776,7 @@ Value * get_deref(u64 idx) {
   return deref(get(idx));
 }
 
+// TODO avoid cycles
 void update(u64 idx) {
   Value *head = get_deref(0);
   Value *v    = get_deref(idx);
@@ -936,8 +939,28 @@ void backout(u64 depth) {
   set_unwnd(NULL);
 }
 
-void eval_law(Value * x, u64 n) {
+void kal(u64 n, Value * x) {
+  // alloc(1);
+  // update(1);
   crash("TODO");
+}
+
+void eval_law(u64 n, Value * x) {
+  Value * x_ = deref(x);
+  if (TY(x_) == APP) {
+    Value * car = deref(HD(x_));
+    if (TY(car) == APP) {
+      Value * caar = deref(HD(car));
+      if ((TY(caar) == NAT) && EQ(d_Nat(1), NT(caar))) {
+        // ((1 v) k)
+        Value * v = deref(TL(car));
+        Value * k = deref(TL(x_));
+        kal(n+1, v);
+        return eval_law(n+1, k);
+      }
+    }
+  }
+  kal(n, x);
 }
 
 u64 nat_to_u64(Nat x) {
@@ -954,7 +977,7 @@ void law_step(Value * self, u64 depth) {
     push_val(self);
     flip_stack(depth+1);
     u64 ar = nat_to_u64(AR(self));
-    eval_law(BD(self), ar);
+    eval_law(ar, BD(self));
     if (ar < depth) {
       // oversaturated application
       handle_oversaturated_application(depth - ar);
