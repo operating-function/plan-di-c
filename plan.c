@@ -769,6 +769,24 @@ void push(u64 idx) {
   push_val(get(idx));
 }
 
+// before: stack = [n1, n2,     rest..]
+// after:  stack = [app(n2,n1), rest..]
+void mk_app() {
+  Value * n1 = pop();
+  Value * n2 = pop();
+  Value * ap = a_App(n2, n1);
+  push_val(ap);
+}
+
+// before: stack = [n1, n2,     rest..]
+// after:  stack = [app(n1,n2), rest..]
+void mk_app_rev() {
+  Value * n1 = pop();
+  Value * n2 = pop();
+  Value * ap = a_App(n1, n2);
+  push_val(ap);
+}
+
 void force();
 
 void force_whnf() {
