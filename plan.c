@@ -941,10 +941,50 @@ void backout(u64 depth) {
   set_unwnd(NULL);
 }
 
+u64 nat_to_u64(Nat x) {
+  if (x.type == BIG) crash("nat_to_u64: BIG!");
+  return x.direct;
+}
+
+// TODO I think all calls to alloc need to have all relevant values on the
+// stack, so that GC can find them?
+
+// stack invariant: kal leaves 1 entry on the bottom of the stack: the
+// evaluation of `x`.
 void kal(u64 n, Value * x) {
-  // alloc(1);
-  // update(1);
-  crash("TODO");
+  alloc(1);
+  //
+  Value * x_ = deref(x);
+  if (TY(x_) == NAT) {
+    Nat x_nat = NT(x_);
+    if (LT(x_nat, d_Nat(n))) {
+      push(n - nat_to_u64(x_nat));
+      return update(1);
+    }
+  }
+  if (TY(x_) == APP) {
+    Value * car = deref(HD(x_));
+    if (TY(car) == APP) {
+      Value * caar = deref(HD(car));
+      if ((TY(caar) == NAT) && EQ(d_Nat(0), NT(caar))) {
+        // ((0 f) y)
+        Value * f = deref(TL(car));
+        Value * y = deref(TL(x_));
+        kal(n,   f);
+        kal(n+1, y);
+        mk_app();
+        eval();
+        return update(1);
+      }
+    } else if ((TY(car) == NAT) && EQ(NT(car), d_Nat(2))) {
+      // (2 y)
+      Value * y = deref(TL(x_));
+      push_val(y);
+      return update(1);
+    }
+  }
+  push_val(x_);
+  return update(1);
 }
 
 void eval_law(u64 n, Value * x) {
@@ -963,11 +1003,6 @@ void eval_law(u64 n, Value * x) {
     }
   }
   kal(n, x);
-}
-
-u64 nat_to_u64(Nat x) {
-  if (x.type == BIG) crash("nat_to_u64: BIG!");
-  return x.direct;
 }
 
 void law_step(Value * self, u64 depth) {
