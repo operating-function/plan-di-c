@@ -747,9 +747,28 @@ Value * pop() {
   return ret;
 }
 
+// TODO when to use this vs pop?
+Value * pop_deref() {
+  if (sp == 0) crash("pop: empty stack");
+  Value * ret = stack[sp];
+  sp--;
+  while (ret->type == IND) {
+    ret = ret->i;
+  }
+  return ret;
+}
+
 Value * get(u64 idx) {
   if (idx > sp) crash("get: indexed off stack");
   return stack[sp-idx];
+}
+
+Value * deref(u64 idx) {
+  Value * x = get(idx);
+  while (x->type == IND) {
+    x = x->i;
+  }
+  return x;
 }
 
 void update(u64 idx) {
@@ -802,7 +821,7 @@ void slide(u64 count) {
 void force();
 
 void force_whnf() {
-  Value *top = pop(0);
+  Value *top = pop_deref(0);
   if (top->type == APP) {
     push_val(TL(top));
     push_val(HD(top));
@@ -820,6 +839,68 @@ void force() {
     force_whnf();
   } else {
     pop();
+  }
+}
+
+void mk_pin() {
+  Value * top = pop_deref();
+  if (top->type == HOL) crash("mk_pin: hol");
+  Value * p = a_Pin(top);
+  push_val(p);
+}
+
+void mk_law() {
+  Value * n = pop_deref();
+  Value * a = pop_deref();
+  Value * b = pop_deref();
+  Nat n_ = NT(n);
+  Nat a_ = NT(a);
+  push_val(a_Law(n_, a_, b));
+}
+
+void incr() {
+  Value * x = pop_deref();
+  Nat n = NT(x);
+  push_val(a_Big(Inc(n)));
+}
+
+void nat_case() {
+  Value * z = pop_deref();
+  Value * p = pop_deref();
+  Value * x = pop_deref();
+  if (x->type == NAT) {
+    Nat x_ = NT(x);
+    if (GT(x_, d_Nat(0))) {
+      Value * dec_x = a_Big(Dec(x_));
+      Value * ap    = a_App(p, dec_x);
+      push_val(ap);
+    }
+  } else {
+    push_val(z);
+  }
+}
+
+void plan_case() {
+  Value * p = pop_deref();
+  Value * l = pop_deref();
+  Value * a = pop_deref();
+  Value * n = pop_deref();
+  Value * x = pop_deref();
+  switch (x->type) {
+    case PIN: {
+      break;
+    }
+    case LAW: {
+      break;
+    }
+    case APP: {
+      break;
+    }
+    case NAT: {
+      break;
+    }
+    case HOL: crash("plan_case: HOL");
+    case IND: crash("plan_case: IND: impossible");
   }
 }
 
