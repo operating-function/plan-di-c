@@ -826,7 +826,7 @@ void slide(u64 count) {
   stack[sp] = top;
 }
 
-void law_step(Law l) {
+void law_step(Law l, u64 depth) {
   crash("TODO");
 }
 
@@ -835,37 +835,54 @@ void backout() {
   set_unwnd(NULL);
 }
 
-void unwind() {
+u64 do_prim(Nat prim) {
+  return 1;
+}
+
+void eval();
+
+void unwind(u64 depth) {
   Value * x = get_deref(0);
   switch (TY(x)) {
     case APP: {
       push_val(HD(x));
-      unwind();
+      unwind(depth+1);
       break;
     }
     case LAW: {
-      law_step(x->l);
+      law_step(x->l, depth);
       break;
     }
     case PIN: {
       Value * y = deref(x->p);
       switch (y->type) {
         case NAT: {
-          // doPrim on nat value
-          // setup_call
-          // backout if not a primop
-          crash("TODO");
+          // setup the call by pulling the TLs out of all apps which we have
+          // unwound.
+          for (u64 i = 0; i < depth; i++) {
+            stack[sp-i] = TL(stack[sp-i]);
+          }
+          // run primop.
+          u64 prim_arity = do_prim(NT(y));
+          // if our application is oversaturated, `depth` will exceed the arity.
+          // in this case, we want to re-assemble the apps, and eval the result.
+          for (u64 i = 0; i < (depth-prim_arity); i++) {
+            mk_app_rev();
+          }
+          eval();
           break;
         }
         // unwind "through" pins & apps
+        // we don't increment `depth` here because we are just setting up
+        // for the above APP case, which increments `depth`.
         case APP:
         case PIN: {
           push_val(y);
-          unwind();
+          unwind(depth);
           break;
         }
         case LAW: {
-          law_step(y->l);
+          law_step(y->l, depth);
           break;
         }
         case HOL: {
@@ -894,7 +911,7 @@ void eval() {
   switch (TY(x)) {
     case APP: {
       set_unwnd(x);
-      unwind();
+      unwind(0);
       break;
     }
     case PIN:
