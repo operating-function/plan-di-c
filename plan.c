@@ -844,9 +844,9 @@ void mk_pin() {
 }
 
 void mk_law() {
-  Value * n = pop_deref();
-  Value * a = pop_deref();
   Value * b = pop_deref();
+  Value * a = pop_deref();
+  Value * n = pop_deref();
   Nat n_ = NT(n);
   Nat a_ = NT(a);
   push_val(a_Law(n_, a_, b));
@@ -859,9 +859,9 @@ void incr() {
 }
 
 void nat_case() {
-  Value * z = pop_deref();
-  Value * p = pop_deref();
   Value * x = pop_deref();
+  Value * p = pop_deref();
+  Value * z = pop_deref();
   if (TY(x) == NAT) {
     Nat x_ = NT(x);
     if (GT(x_, d_Nat(0))) {
@@ -875,11 +875,11 @@ void nat_case() {
 }
 
 void plan_case() {
-  Value * p = pop_deref();
-  Value * l = pop_deref();
-  Value * a = pop_deref();
-  Value * n = pop_deref();
   Value * x = pop_deref();
+  Value * n = pop_deref();
+  Value * a = pop_deref();
+  Value * l = pop_deref();
+  Value * p = pop_deref();
   switch (TY(x)) {
     case PIN: {
       Value * ap = a_App(p, IT(x));
