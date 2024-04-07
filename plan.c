@@ -60,11 +60,11 @@ typedef struct App {
 typedef struct Value {
   Type type;
   union {
-    struct Value * p;
-    Law l;
-    App a;
-    Nat n;
-    struct Value * i;
+    struct Value * p; // PIN
+    Law l;            // LAW
+    App a;            // APP
+    Nat n;            // NAT
+    struct Value * i; // IND
   };
 } Value;
 
@@ -748,6 +748,13 @@ void clone() {
   sp++;
 }
 
+Value * deref(Value * x) {
+  while (TY(x) == IND) {
+    x = x->i;
+  }
+  return x;
+}
+
 Value * pop() {
   if (sp == 0) crash("pop: empty stack");
   Value * ret = stack[sp];
@@ -760,10 +767,7 @@ Value * pop_deref() {
   if (sp == 0) crash("pop: empty stack");
   Value * ret = stack[sp];
   sp--;
-  while (ret->type == IND) {
-    ret = ret->i;
-  }
-  return ret;
+  return deref(ret);
 }
 
 Value * get(u64 idx) {
@@ -772,33 +776,7 @@ Value * get(u64 idx) {
 }
 
 Value * get_deref(u64 idx) {
-  Value * x = get(idx);
-  while (TY(x) == IND) {
-    x = x->i;
-  }
-  return x;
-}
-
-void unwind() {
-  crash("TODO unwind");
-}
-
-void eval() {
-  Value * x = get_deref(0);
-  switch (TY(x)) {
-    case APP: {
-      set_unwnd(x);
-      unwind();
-      break;
-    }
-    case PIN:
-    case LAW:
-    case NAT: {
-      return;
-    }
-    case HOL: crash("eval: HOL");
-    case IND: crash("eval: IND");
-  }
+  return deref(get(idx));
 }
 
 void update(u64 idx) {
@@ -846,6 +824,87 @@ void slide(u64 count) {
   Value * top = get_deref(0);
   sp -= count;
   stack[sp] = top;
+}
+
+void law_step(Law l) {
+  crash("TODO");
+}
+
+void backout() {
+  push_val(get_unwnd());
+  set_unwnd(NULL);
+}
+
+void unwind() {
+  Value * x = get_deref(0);
+  switch (TY(x)) {
+    case APP: {
+      push_val(HD(x));
+      unwind();
+      break;
+    }
+    case LAW: {
+      law_step(x->l);
+      break;
+    }
+    case PIN: {
+      Value * y = deref(x->p);
+      switch (y->type) {
+        case NAT: {
+          // doPrim on nat value
+          // setup_call
+          // backout if not a primop
+          crash("TODO");
+          break;
+        }
+        // unwind "through" pins & apps
+        case APP:
+        case PIN: {
+          push_val(y);
+          unwind();
+          break;
+        }
+        case LAW: {
+          law_step(y->l);
+          break;
+        }
+        case HOL: {
+          crash("unwind: <loop>");
+        }
+        case IND: {
+          crash("unwind: bad deref");
+        }
+      }
+    }
+    case NAT: {
+      backout();
+      break;
+    }
+    case HOL: {
+      crash("unwind: <loop>");
+    }
+    case IND: {
+      crash("unwind: bad deref");
+    }
+  }
+}
+
+void eval() {
+  Value * x = get_deref(0);
+  switch (TY(x)) {
+    case APP: {
+      set_unwnd(x);
+      unwind();
+      break;
+    }
+    case PIN:
+    case LAW:
+    case NAT: {
+      return;
+    }
+    case HOL: crash("eval: HOL");
+    case IND: crash("eval: IND");
+  }
 }
 
 void force();
