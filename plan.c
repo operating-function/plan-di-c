@@ -907,6 +907,15 @@ void setup_call(u64 depth) {
   }
 }
 
+void flip_stack(u64 depth) {
+  Value * tmp;
+  for (u64 i = 0; i < depth/2; i++) {
+    tmp = stack[sp-i];
+    stack[sp-i] = stack[sp-(depth-i)];
+    stack[sp-(depth-i)] = tmp;
+  }
+}
+
 void eval();
 
 void handle_oversaturated_application(u64 count) {
@@ -927,7 +936,7 @@ void backout(u64 depth) {
   set_unwnd(NULL);
 }
 
-void eval_law() {
+void eval_law(Value * x, u64 n) {
   crash("TODO");
 }
 
@@ -943,9 +952,9 @@ void law_step(Value * self, u64 depth) {
   } else {
     setup_call(depth);
     push_val(self);
-    push_val(BD(self));
-    eval_law();
+    flip_stack(depth+1);
     u64 ar = nat_to_u64(AR(self));
+    eval_law(BD(self), ar);
     if (ar < depth) {
       // oversaturated application
       handle_oversaturated_application(depth - ar);
@@ -1027,6 +1036,7 @@ void unwind(u64 depth) {
         case NAT: {
           pop();
           setup_call(depth);
+          flip_stack(depth);
           // run primop.
           u64 prim_arity = do_prim(NT(y), depth);
           if (prim_arity == 0) {
