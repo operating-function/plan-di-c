@@ -886,25 +886,25 @@ void plan_case() {
     case PIN: {
       Value * ap = a_App(p, IT(x));
       push_val(ap);
-      break;
+      return;
     }
     case LAW: {
       Value * ap1 = a_App(l,   a_Big(NM(x)));
       Value * ap2 = a_App(ap1, a_Big(AR(x)));
       Value * ap3 = a_App(ap2, BD(x));
       push_val(ap3);
-      break;
+      return;
     }
     case APP: {
       Value * ap1 = a_App(a,   HD(x));
       Value * ap2 = a_App(ap1, TL(x));
       push_val(ap2);
-      break;
+      return;
     }
     case NAT: {
       Value * ap = a_App(n, x);
       push_val(ap);
-      break;
+      return;
     }
     case HOL: crash("plan_case: HOL");
     case IND: crash("plan_case: IND: impossible");
@@ -1091,13 +1091,11 @@ void unwind(u64 depth) {
   switch (TY(x)) {
     case APP: {
       push_val(HD(x));
-      unwind(depth+1);
-      break;
+      return unwind(depth+1);
     }
     case LAW: {
       pop();
-      law_step(x, depth);
-      break;
+      return law_step(x, depth);
     }
     case PIN: {
       Value * y = deref(x->p);
@@ -1118,7 +1116,6 @@ void unwind(u64 depth) {
             // application was perfectly saturated, do nothing
             return;
           }
-          break;
         }
         // unwind "through" pins & apps
         // we don't increment `depth` here because we are just setting up
@@ -1127,13 +1124,11 @@ void unwind(u64 depth) {
         case PIN: {
           pop();
           push_val(y);
-          unwind(depth);
-          break;
+          return unwind(depth);
         }
         case LAW: {
           pop();
-          law_step(y, depth);
-          break;
+          return law_step(y, depth);
         }
         case HOL: {
           crash("unwind: <loop>");
@@ -1161,7 +1156,7 @@ void eval() {
     case APP: {
       set_unwnd(x);
       unwind(0);
-      break;
+      return;
     }
     case PIN:
     case LAW:
