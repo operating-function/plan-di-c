@@ -776,12 +776,14 @@ Value * get_deref(u64 idx) {
   return deref(get(idx));
 }
 
-// TODO avoid cycles
 void update(u64 idx) {
   Value *head = get_deref(0);
   Value *v    = get_deref(idx);
-  v->type = IND;
-  v->i    = head;
+  if (head != v) {
+    // no update needed if equal, and IND on self would form a cycle.
+    v->type = IND;
+    v->i    = head;
+  }
   pop();
 }
 
