@@ -1110,11 +1110,12 @@ void unwind(u64 depth) {
           if (prim_arity == 0) {
             // 0 indicates an invalid primop or an unsaturated application, so
             // we backout
-            backout(depth);
+            return backout(depth);
           } else if (prim_arity < depth) {
-            handle_oversaturated_application(depth - prim_arity);
+            return handle_oversaturated_application(depth - prim_arity);
           } else {
             // application was perfectly saturated, do nothing
+            return;
           }
           break;
         }
@@ -1142,8 +1143,7 @@ void unwind(u64 depth) {
       }
     }
     case NAT: {
-      backout(depth);
-      break;
+      return backout(depth);
     }
     case HOL: {
       crash("unwind: <loop>");
@@ -1197,7 +1197,7 @@ void force() {
 ////////////////////////////////////////////////////////////////////////////////
 //  Runner
 
-void run(Value * v) {
+Value * run(Value * v) {
   trace_print("RUN[%s]\n", print_value(v));
   trace_print("  ->\n", print_value(v));
   //
@@ -1210,8 +1210,9 @@ void run(Value * v) {
   print_depth++;
   force();
   print_depth--;
-  Value *res = stack[sp];
+  Value *res = pop_deref();
   trace_print("%s\n", print_value(res));
+  return res;
 }
 
 // TODO handle atoms bigger than U64_MAX - this will just overflow
@@ -1358,8 +1359,8 @@ int main (void) {
     if (isInteractive) printf(">> ");
     Value *v = read_exp_top();
     if (!v) return 0;
-    run(v);
-    printf("%s\n", print_value(v));
+    Value * res = run(v);
+    printf("%s\n", print_value(res));
     goto again;
     return 0;
 }
