@@ -888,15 +888,26 @@ void plan_case() {
   Value * x = pop_deref();
   switch (x->type) {
     case PIN: {
+      Value * ap = a_App(p, IT(x));
+      push_val(ap);
       break;
     }
     case LAW: {
+      Value * ap1 = a_App(l,   a_Big(NM(x)));
+      Value * ap2 = a_App(ap1, a_Big(AR(x)));
+      Value * ap3 = a_App(ap2, BD(x));
+      push_val(ap3);
       break;
     }
     case APP: {
+      Value * ap1 = a_App(a,   HD(x));
+      Value * ap2 = a_App(ap1, TL(x));
+      push_val(ap2);
       break;
     }
     case NAT: {
+      Value * ap = a_App(n, x);
+      push_val(ap);
       break;
     }
     case HOL: crash("plan_case: HOL");
