@@ -740,6 +740,11 @@ void set_unwnd(Value * x) {
   unwnd = x;
 }
 
+void clear_unwnd() {
+  if (unwnd == NULL) crash("clear_unwnd: null unwnd!");
+  unwnd = NULL;
+}
+
 Value * get_unwnd() {
   if (unwnd == NULL) crash("get_unwnd: null unwnd!");
   return unwnd;
@@ -938,7 +943,7 @@ void backout(u64 depth) {
     pop();
   }
   push_val(get_unwnd());
-  set_unwnd(NULL);
+  clear_unwnd();
 }
 
 u64 nat_to_u64(Nat x) {
@@ -1010,6 +1015,7 @@ void law_step(Value * self, u64 depth) {
     // unsaturated application
     backout(depth);
   } else {
+    pop();
     setup_call(depth);
     push_val(self);
     flip_stack(depth+1);
