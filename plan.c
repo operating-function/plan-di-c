@@ -732,9 +732,6 @@ u64 *load_seed_file (const char* filename, u64 *sizeOut) {
 ////////////////////////////////////////////////////////////////////////////////
 //  Interpreter
 
-void eval() {
-}
-
 void clone() {
   stack[sp+1] = stack[sp];
   sp++;
@@ -763,7 +760,7 @@ Value * get(u64 idx) {
   return stack[sp-idx];
 }
 
-Value * deref(u64 idx) {
+Value * get_deref(u64 idx) {
   Value * x = get(idx);
   while (TY(x) == IND) {
     x = x->i;
@@ -771,9 +768,29 @@ Value * deref(u64 idx) {
   return x;
 }
 
+void unwind() {
+  crash("TODO unwind");
+}
+
+void eval() {
+  Value * x = get_deref(0);
+  switch (TY(x)) {
+    case PIN: {
+    }
+    case LAW: {
+    }
+    case APP: {
+    }
+    case NAT: {
+    }
+    case HOL: crash("eval: HOL");
+    case IND: crash("eval: IND");
+  }
+}
+
 void update(u64 idx) {
-  Value *head = get(0);
-  Value *v    = get(idx);
+  Value *head = get_deref(0);
+  Value *v    = get_deref(idx);
   v->type = IND;
   v->i    = head;
   pop();
@@ -785,7 +802,7 @@ void push_val(Value *x) {
 }
 
 void push(u64 idx) {
-  push_val(get(idx));
+  push_val(get_deref(idx));
 }
 
 // before: stack = [n1, n2,     rest..]
@@ -813,7 +830,7 @@ void alloc(u64 count) {
 }
 
 void slide(u64 count) {
-  Value * top = get(0);
+  Value * top = get_deref(0);
   sp -= count;
   stack[sp] = top;
 }
