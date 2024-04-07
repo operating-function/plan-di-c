@@ -915,40 +915,53 @@ void backout(u64 depth) {
 void force();
 void eval();
 
-// 0 indicates an invalid primop. in that case, we do not act on tthe stack,
+// 0 indicates an invalid primop. in that case, we do not act on the stack,
 // but leave it as-is and simply return.
-u64 do_prim(Nat prim) {
+//
+// if depth is less than arity, our primop is not fully saturated. we return 0
+// in this case as well.
+u64 do_prim(Nat prim, u64 depth) {
   if (prim.type == BIG) return 0;
   switch (prim.direct) {
     case 0: {
+      u64 arity = 1;
+      if (depth < arity) return 0;
       push(0);
       force();
       mk_pin();
-      return 1;
+      return arity;
     }
     case 1: {
+      u64 arity = 3;
+      if (depth < arity) return 0;
       push(0); force(); // n
       push(1); force(); // a
       push(2); force(); // b
       mk_law();
-      return 3;
+      return arity;
     }
     case 2: {
+      u64 arity = 1;
+      if (depth < arity) return 0;
       eval();
       incr();
-      return 1;
+      return arity;
     }
     case 3: {
+      u64 arity = 3;
+      if (depth < arity) return 0;
       push(2); force(); // x
       nat_case();
       eval();
-      return 3;
+      return arity;
     }
     case 4: {
+      u64 arity = 5;
+      if (depth < arity) return 0;
       push(4); force(); // x
       plan_case();
       eval();
-      return 5;
+      return arity;
     }
     default:
       return 0;
@@ -977,17 +990,20 @@ void unwind(u64 depth) {
             stack[sp-i] = TL(stack[sp-i]);
           }
           // run primop.
-          u64 prim_arity = do_prim(NT(y));
+          u64 prim_arity = do_prim(NT(y), depth);
           if (prim_arity == 0) {
-            // 0 indicates an invalid primop, so we backout
+            // 0 indicates an invalid primop or an unsaturated application, so
+            // we backout
             backout(depth);
-          } else {
+          } else if (prim_arity < depth) {
             // if our application is oversaturated, `depth` will exceed the arity.
             // in this case, we want to re-assemble the apps, and eval the result.
             for (u64 i = 0; i < (depth-prim_arity); i++) {
               mk_app_rev();
             }
             eval();
+          } else {
+            // application was perfectly saturated, do nothing
           }
           break;
         }
