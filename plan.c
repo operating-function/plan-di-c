@@ -747,22 +747,25 @@ Value * pop() {
   return ret;
 }
 
-Value * get(u64 i) {
-  if (i > sp) crash("get: indexed off stack");
-  return stack[sp-i];
+Value * get(u64 idx) {
+  if (idx > sp) crash("get: indexed off stack");
+  return stack[sp-idx];
 }
 
-void update(u64 i) {
+void update(u64 idx) {
   Value *head = get(0);
-  Value *v    = get(i);
+  Value *v    = get(idx);
   v->type = IND;
   v->i    = head;
   pop();
 }
 
-void push(Value *x) {
+void push_val(Value *x) {
   sp++;
   stack[sp] = x;
+}
+
+void push(u64 idx) {
 }
 
 void force();
@@ -770,8 +773,8 @@ void force();
 void force_whnf() {
   Value *top = pop(0);
   if (top->type == APP) {
-    push(TL(top));
-    push(HD(top));
+    push_val(TL(top));
+    push_val(HD(top));
     force_whnf();
     force();
   }
