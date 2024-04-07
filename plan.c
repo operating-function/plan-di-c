@@ -968,6 +968,23 @@ u64 do_prim(Nat prim, u64 depth) {
   }
 }
 
+void setup_call(u64 depth) {
+  // setup the call by pulling the TLs out of all apps which we have
+  // unwound.
+  for (u64 i = 0; i < depth; i++) {
+    stack[sp-i] = TL(stack[sp-i]);
+  }
+}
+
+void handle_oversaturated_application(u64 count) {
+  // if our application is oversaturated, `depth` will exceed the arity. in this
+  // case, we want to re-assemble the apps, and eval the result.
+  for (u64 i = 0; i < count; i++) {
+    mk_app_rev();
+  }
+  eval();
+}
+
 void unwind(u64 depth) {
   Value * x = get_deref(0);
   switch (TY(x)) {
@@ -984,11 +1001,7 @@ void unwind(u64 depth) {
       Value * y = deref(x->p);
       switch (y->type) {
         case NAT: {
-          // setup the call by pulling the TLs out of all apps which we have
-          // unwound.
-          for (u64 i = 0; i < depth; i++) {
-            stack[sp-i] = TL(stack[sp-i]);
-          }
+          setup_call(depth);
           // run primop.
           u64 prim_arity = do_prim(NT(y), depth);
           if (prim_arity == 0) {
@@ -996,12 +1009,7 @@ void unwind(u64 depth) {
             // we backout
             backout(depth);
           } else if (prim_arity < depth) {
-            // if our application is oversaturated, `depth` will exceed the arity.
-            // in this case, we want to re-assemble the apps, and eval the result.
-            for (u64 i = 0; i < (depth-prim_arity); i++) {
-              mk_app_rev();
-            }
-            eval();
+            handle_oversaturated_application(depth - prim_arity);
           } else {
             // application was perfectly saturated, do nothing
           }
