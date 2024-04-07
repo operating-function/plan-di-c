@@ -765,7 +765,7 @@ Value * get(u64 idx) {
 
 Value * deref(u64 idx) {
   Value * x = get(idx);
-  while (x->type == IND) {
+  while (TY(x) == IND) {
     x = x->i;
   }
   return x;
@@ -822,7 +822,7 @@ void force();
 
 void force_whnf() {
   Value *top = pop_deref(0);
-  if (top->type == APP) {
+  if (TY(top) == APP) {
     push_val(TL(top));
     push_val(HD(top));
     force_whnf();
@@ -832,7 +832,7 @@ void force_whnf() {
 
 void force() {
   Value *top = stack[sp];
-  if (top->type == APP) {
+  if (TY(top) == APP) {
     clone();
     eval();
     update(1);
@@ -844,7 +844,7 @@ void force() {
 
 void mk_pin() {
   Value * top = pop_deref();
-  if (top->type == HOL) crash("mk_pin: hol");
+  if (TY(top) == HOL) crash("mk_pin: hol");
   Value * p = a_Pin(top);
   push_val(p);
 }
@@ -868,7 +868,7 @@ void nat_case() {
   Value * z = pop_deref();
   Value * p = pop_deref();
   Value * x = pop_deref();
-  if (x->type == NAT) {
+  if (TY(x) == NAT) {
     Nat x_ = NT(x);
     if (GT(x_, d_Nat(0))) {
       Value * dec_x = a_Big(Dec(x_));
@@ -886,7 +886,7 @@ void plan_case() {
   Value * a = pop_deref();
   Value * n = pop_deref();
   Value * x = pop_deref();
-  switch (x->type) {
+  switch (TY(x)) {
     case PIN: {
       Value * ap = a_App(p, IT(x));
       push_val(ap);
