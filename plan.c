@@ -826,128 +826,6 @@ void slide(u64 count) {
   stack[sp] = top;
 }
 
-void law_step(Law l, u64 depth) {
-  crash("TODO");
-}
-
-void backout() {
-  push_val(get_unwnd());
-  set_unwnd(NULL);
-}
-
-u64 do_prim(Nat prim) {
-  return 1;
-}
-
-void eval();
-
-void unwind(u64 depth) {
-  Value * x = get_deref(0);
-  switch (TY(x)) {
-    case APP: {
-      push_val(HD(x));
-      unwind(depth+1);
-      break;
-    }
-    case LAW: {
-      law_step(x->l, depth);
-      break;
-    }
-    case PIN: {
-      Value * y = deref(x->p);
-      switch (y->type) {
-        case NAT: {
-          // setup the call by pulling the TLs out of all apps which we have
-          // unwound.
-          for (u64 i = 0; i < depth; i++) {
-            stack[sp-i] = TL(stack[sp-i]);
-          }
-          // run primop.
-          u64 prim_arity = do_prim(NT(y));
-          // if our application is oversaturated, `depth` will exceed the arity.
-          // in this case, we want to re-assemble the apps, and eval the result.
-          for (u64 i = 0; i < (depth-prim_arity); i++) {
-            mk_app_rev();
-          }
-          eval();
-          break;
-        }
-        // unwind "through" pins & apps
-        // we don't increment `depth` here because we are just setting up
-        // for the above APP case, which increments `depth`.
-        case APP:
-        case PIN: {
-          push_val(y);
-          unwind(depth);
-          break;
-        }
-        case LAW: {
-          law_step(y->l, depth);
-          break;
-        }
-        case HOL: {
-          crash("unwind: <loop>");
-        }
-        case IND: {
-          crash("unwind: bad deref");
-        }
-      }
-    }
-    case NAT: {
-      backout();
-      break;
-    }
-    case HOL: {
-      crash("unwind: <loop>");
-    }
-    case IND: {
-      crash("unwind: bad deref");
-    }
-  }
-}
-
-void eval() {
-  Value * x = get_deref(0);
-  switch (TY(x)) {
-    case APP: {
-      set_unwnd(x);
-      unwind(0);
-      break;
-    }
-    case PIN:
-    case LAW:
-    case NAT: {
-      return;
-    }
-    case HOL: crash("eval: HOL");
-    case IND: crash("eval: IND");
-  }
-}
-
-void force();
-
-void force_whnf() {
-  Value *top = pop_deref(0);
-  if (TY(top) == APP) {
-    push_val(TL(top));
-    push_val(HD(top));
-    force_whnf();
-    force();
-  }
-}
-
-void force() {
-  Value *top = stack[sp];
-  if (TY(top) == APP) {
-    clone();
-    eval();
-    update(1);
-    force_whnf();
-  } else {
-    pop();
-  }
-}
-
 void mk_pin() {
   Value * top = pop_deref();
   if (TY(top) == HOL) crash("mk_pin: hol");
@@ -1018,6 +896,172 @@ void plan_case() {
     }
     case HOL: crash("plan_case: HOL");
     case IND: crash("plan_case: IND: impossible");
+  }
+}
+
+void law_step(Law l, u64 depth) {
+  crash("TODO");
+}
+
+void backout(u64 depth) {
+  // pop stack of unwound apps.
+  for (u64 i = 0; i < depth; i++) {
+    pop();
+  }
+  push_val(get_unwnd());
+  set_unwnd(NULL);
+}
+
+void force();
+void eval();
+
+// 0 indicates an invalid primop. in that case, we do not act on tthe stack,
+// but leave it as-is and simply return.
+u64 do_prim(Nat prim) {
+  if (prim.type == BIG) return 0;
+  switch (prim.direct) {
+    case 0: {
+      push(0);
+      force();
+      mk_pin();
+      return 1;
+    }
+    case 1: {
+      push(0); force(); // n
+      push(1); force(); // a
+      push(2); force(); // b
+      mk_law();
+      return 3;
+    }
+    case 2: {
+      eval();
+      incr();
+      return 1;
+    }
+    case 3: {
+      push(2); force(); // x
+      nat_case();
+      eval();
+      return 3;
+    }
+    case 4: {
+      push(4); force(); // x
+      plan_case();
+      eval();
+      return 5;
+    }
+    default:
+      return 0;
+  }
+}
+
+void unwind(u64 depth) {
+  Value * x = get_deref(0);
+  switch (TY(x)) {
+    case APP: {
+      push_val(HD(x));
+      unwind(depth+1);
+      break;
+    }
+    case LAW: {
+      law_step(x->l, depth);
+      break;
+    }
+    case PIN: {
+      Value * y = deref(x->p);
+      switch (y->type) {
+        case NAT: {
+          // setup the call by pulling the TLs out of all apps which we have
+          // unwound.
+          for (u64 i = 0; i < depth; i++) {
+            stack[sp-i] = TL(stack[sp-i]);
+          }
+          // run primop.
+          u64 prim_arity = do_prim(NT(y));
+          if (prim_arity == 0) {
+            // 0 indicates an invalid primop, so we backout
+            backout(depth);
+          } else {
+            // if our application is oversaturated, `depth` will exceed the arity.
+            // in this case, we want to re-assemble the apps, and eval the result.
+            for (u64 i = 0; i < (depth-prim_arity); i++) {
+              mk_app_rev();
+            }
+            eval();
+          }
+          break;
+        }
+        // unwind "through" pins & apps
+        // we don't increment `depth` here because we are just setting up
+        // for the above APP case, which increments `depth`.
+        case APP:
+        case PIN: {
+          push_val(y);
+          unwind(depth);
+          break;
+        }
+        case LAW: {
+          law_step(y->l, depth);
+          break;
+        }
+        case HOL: {
+          crash("unwind: <loop>");
+        }
+        case IND: {
+          crash("unwind: bad deref");
+        }
+      }
+    }
+    case NAT: {
+      backout(depth);
+      break;
+    }
+    case HOL: {
+      crash("unwind: <loop>");
+    }
+    case IND: {
+      crash("unwind: bad deref");
+    }
+  }
+}
+
+void eval() {
+  Value * x = get_deref(0);
+  switch (TY(x)) {
+    case APP: {
+      set_unwnd(x);
+      unwind(0);
+      break;
+    }
+    case PIN:
+    case LAW:
+    case NAT: {
+      return;
+    }
+    case HOL: crash("eval: HOL");
+    case IND: crash("eval: IND");
+  }
+}
+
+void force_whnf() {
+  Value *top = pop_deref(0);
+  if (TY(top) == APP) {
+    push_val(TL(top));
+    push_val(HD(top));
+    force_whnf();
+    force();
+  }
+}
+
+void force() {
+  Value * top = get_deref(0);
+  if (TY(top) == APP) {
+    clone();
+    eval();
+    update(1);
+    force_whnf();
+  } else {
+    pop();
   }
 }
 
