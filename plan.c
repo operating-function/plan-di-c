@@ -1202,7 +1202,7 @@ void run(Value * v) {
   stack = malloc(4096*sizeof(Value *));
   sp = 0;
   //
-  stack[sp] = v;
+  push_val(v);
   clone();
   //
   print_depth++;
