@@ -787,6 +787,18 @@ void mk_app_rev() {
   push_val(ap);
 }
 
+void alloc(u64 count) {
+  for (u64 i = 0; i < count; i++) {
+    push_val(a_Hol());
+  }
+}
+
+void slide(u64 count) {
+  Value * top = get(0);
+  sp -= count;
+  stack[sp] = top;
+}
+
 void force();
 
 void force_whnf() {
