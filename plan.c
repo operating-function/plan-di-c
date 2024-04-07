@@ -735,21 +735,6 @@ u64 *load_seed_file (const char* filename, u64 *sizeOut) {
 ////////////////////////////////////////////////////////////////////////////////
 //  Interpreter
 
-void set_unwnd(Value * x) {
-  if (unwnd != NULL) crash("set_unwnd: non-null unwnd!");
-  unwnd = x;
-}
-
-void clear_unwnd() {
-  if (unwnd == NULL) crash("clear_unwnd: null unwnd!");
-  unwnd = NULL;
-}
-
-Value * get_unwnd() {
-  if (unwnd == NULL) crash("get_unwnd: null unwnd!");
-  return unwnd;
-}
-
 Value * deref(Value * x) {
   while (TY(x) == IND) {
     x = x->i;
@@ -917,7 +902,6 @@ void setup_call(u64 depth) {
   for (u64 i = 0; i < depth; i++) {
     stack[sp-i] = TL(stack[sp-i]);
   }
-  clear_unwnd();
 }
 
 void flip_stack(u64 depth) {
@@ -938,6 +922,7 @@ void handle_oversaturated_application(u64 count) {
     mk_app_rev();
   }
   eval();
+  slide(1);
 }
 
 void backout(u64 depth) {
@@ -945,8 +930,8 @@ void backout(u64 depth) {
   for (u64 i = 0; i < depth; i++) {
     pop();
   }
-  push_val(get_unwnd());
-  clear_unwnd();
+  // `eval` saved the outermost APP, and that should now be at the bottom
+  // of the stack.
 }
 
 u64 nat_to_u64(Nat x) {
@@ -1101,7 +1086,7 @@ void unwind(u64 depth) {
       Value * y = deref(x->p);
       switch (y->type) {
         case NAT: {
-          pop();
+          pop(); // pop our primop
           setup_call(depth);
           flip_stack(depth);
           // run primop.
@@ -1113,8 +1098,9 @@ void unwind(u64 depth) {
           } else if (prim_arity < depth) {
             return handle_oversaturated_application(depth - prim_arity);
           } else {
-            // application was perfectly saturated, do nothing
-            return;
+            // application was perfectly saturated, so just slide the unwind
+            // which `eval` stored for us.
+            return slide(1);
           }
         }
         // unwind "through" pins & apps
@@ -1122,12 +1108,12 @@ void unwind(u64 depth) {
         // for the above APP case, which increments `depth`.
         case APP:
         case PIN: {
-          pop();
+          pop(); // pop outer pin
           push_val(y);
           return unwind(depth);
         }
         case LAW: {
-          pop();
+          pop(); // pop law
           return law_step(y, depth);
         }
         case HOL: {
@@ -1154,9 +1140,9 @@ void eval() {
   Value * x = get_deref(0);
   switch (TY(x)) {
     case APP: {
-      set_unwnd(x);
-      unwind(0);
-      return;
+      // we save the outermost APP here, so that `backout` can restore it.
+      clone();
+      return unwind(0);
     }
     case PIN:
     case LAW:
