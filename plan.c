@@ -917,6 +917,7 @@ void setup_call(u64 depth) {
   for (u64 i = 0; i < depth; i++) {
     stack[sp-i] = TL(stack[sp-i]);
   }
+  clear_unwnd();
 }
 
 void flip_stack(u64 depth) {
