@@ -1017,6 +1017,7 @@ void unwind(u64 depth) {
       break;
     }
     case LAW: {
+      pop();
       law_step(x, depth);
       break;
     }
@@ -1024,6 +1025,7 @@ void unwind(u64 depth) {
       Value * y = deref(x->p);
       switch (y->type) {
         case NAT: {
+          pop();
           setup_call(depth);
           // run primop.
           u64 prim_arity = do_prim(NT(y), depth);
@@ -1043,11 +1045,13 @@ void unwind(u64 depth) {
         // for the above APP case, which increments `depth`.
         case APP:
         case PIN: {
+          pop();
           push_val(y);
           unwind(depth);
           break;
         }
         case LAW: {
+          pop();
           law_step(y, depth);
           break;
         }
