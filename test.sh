@@ -67,6 +67,7 @@ check() {
 echo "basic"
 echo "5" "($Inc 4)"
 echo "1" "($Inc ($PlanCase 1 0 0 0 (4 9)))"
+echo "7" "($Dec 8)"
 echo "8" "(($MkLaw 1 2 (2 ($Inc 7))) 3 4)"
 echo "{1 2 0}" "(($MkLaw 1 2 0) 9 7)"
 echo "9" "(($MkLaw 1 2 1) 9 7)"
