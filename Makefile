@@ -11,4 +11,4 @@ plan_with_tracing: plan_with_tracing.c
 	gcc $^ -o $@
 
 plan_debug: plan.c
-	gcc -g $^ -o $@
+	gcc -g -O0 $^ -o $@
