@@ -792,6 +792,8 @@ void update(u64 idx) {
   pop();
 }
 
+// TODO we could increment after pushing, and use `sp-1` for get/pop, in order
+// to not waste the 0th index of the stack?
 void push_val(Value *x) {
   // TODO bounds check
   sp++;
