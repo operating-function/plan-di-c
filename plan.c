@@ -69,6 +69,12 @@ typedef struct Value {
 } Value;
 
 ////////////////////////////////////////////////////////////////////////////////
+//  Globals
+
+Value **stack;
+u64 sp;
+
+////////////////////////////////////////////////////////////////////////////////
 //  Crash
 
 void crash(char * s) {
@@ -726,8 +732,61 @@ u64 *load_seed_file (const char* filename, u64 *sizeOut) {
 ////////////////////////////////////////////////////////////////////////////////
 //  Interpreter
 
-Value * force(Value * o) {
-  return o;
+void eval() {
+}
+
+void clone() {
+  stack[sp+1] = stack[sp];
+  sp++;
+}
+
+Value * pop() {
+  if (sp == 0) crash("pop: empty stack");
+  Value * ret = stack[sp];
+  sp--;
+  return ret;
+}
+
+Value * get(u64 i) {
+  if (i > sp) crash("get: indexed off stack");
+  return stack[sp-i];
+}
+
+void update(u64 i) {
+  Value *head = get(0);
+  Value *v    = get(i);
+  v->type = IND;
+  v->i    = head;
+  pop();
+}
+
+void push(Value *x) {
+  sp++;
+  stack[sp] = x;
+}
+
+void force();
+
+void force_whnf() {
+  Value *top = pop(0);
+  if (top->type == APP) {
+    push(TL(top));
+    push(HD(top));
+    force_whnf();
+    force();
+  }
+}
+
+void force() {
+  Value *top = stack[sp];
+  if (top->type == APP) {
+    clone();
+    eval();
+    update(1);
+    force_whnf();
+  } else {
+    pop();
+  }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -736,9 +795,17 @@ Value * force(Value * o) {
 void run(Value * v) {
   trace_print("RUN[%s]\n", print_value(v));
   trace_print("  ->\n", print_value(v));
+  //
+  stack = malloc(4096*sizeof(Value *));
+  sp = 0;
+  //
+  stack[sp] = v;
+  clone();
+  //
   print_depth++;
-  Value * res = force(v);
+  force();
   print_depth--;
+  Value *res = stack[sp];
   trace_print("%s\n", print_value(res));
 }
 
