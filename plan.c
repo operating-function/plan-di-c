@@ -899,8 +899,23 @@ void plan_case() {
   }
 }
 
-void law_step(Law l, u64 depth) {
-  crash("TODO");
+void setup_call(u64 depth) {
+  // setup the call by pulling the TLs out of all apps which we have
+  // unwound.
+  for (u64 i = 0; i < depth; i++) {
+    stack[sp-i] = TL(stack[sp-i]);
+  }
+}
+
+void eval();
+
+void handle_oversaturated_application(u64 count) {
+  // if our application is oversaturated, `depth` will exceed the arity. in this
+  // case, we want to re-assemble the apps, and eval the result.
+  for (u64 i = 0; i < count; i++) {
+    mk_app_rev();
+  }
+  eval();
 }
 
 void backout(u64 depth) {
@@ -912,8 +927,33 @@ void backout(u64 depth) {
   set_unwnd(NULL);
 }
 
+void eval_law() {
+  crash("TODO");
+}
+
+u64 nat_to_u64(Nat x) {
+  if (x.type == BIG) crash("nat_to_u64: BIG!");
+  return x.direct;
+}
+
+void law_step(Value * self, u64 depth) {
+  if (GT(AR(self), d_Nat(depth))) {
+    // unsaturated application
+    backout(depth);
+  } else {
+    setup_call(depth);
+    push_val(self);
+    push_val(BD(self));
+    eval_law();
+    u64 ar = nat_to_u64(AR(self));
+    if (ar < depth) {
+      // oversaturated application
+      handle_oversaturated_application(depth - ar);
+    }
+  }
+}
+
 void force();
-void eval();
 
 // 0 indicates an invalid primop. in that case, we do not act on the stack,
 // but leave it as-is and simply return.
@@ -968,23 +1008,6 @@ u64 do_prim(Nat prim, u64 depth) {
   }
 }
 
-void setup_call(u64 depth) {
-  // setup the call by pulling the TLs out of all apps which we have
-  // unwound.
-  for (u64 i = 0; i < depth; i++) {
-    stack[sp-i] = TL(stack[sp-i]);
-  }
-}
-
-void handle_oversaturated_application(u64 count) {
-  // if our application is oversaturated, `depth` will exceed the arity. in this
-  // case, we want to re-assemble the apps, and eval the result.
-  for (u64 i = 0; i < count; i++) {
-    mk_app_rev();
-  }
-  eval();
-}
-
 void unwind(u64 depth) {
   Value * x = get_deref(0);
   switch (TY(x)) {
@@ -994,7 +1017,7 @@ void unwind(u64 depth) {
       break;
     }
     case LAW: {
-      law_step(x->l, depth);
+      law_step(x, depth);
       break;
     }
     case PIN: {
@@ -1025,7 +1048,7 @@ void unwind(u64 depth) {
           break;
         }
         case LAW: {
-          law_step(y->l, depth);
+          law_step(y, depth);
           break;
         }
         case HOL: {
