@@ -73,6 +73,7 @@ typedef struct Value {
 
 Value **stack;
 u64 sp;
+Value * unwnd = NULL;
 
 ////////////////////////////////////////////////////////////////////////////////
 //  Crash
@@ -732,6 +733,16 @@ u64 *load_seed_file (const char* filename, u64 *sizeOut) {
 ////////////////////////////////////////////////////////////////////////////////
 //  Interpreter
 
+void set_unwnd(Value * x) {
+  if (unwnd != NULL) crash("set_unwnd: non-null unwnd!");
+  unwnd = x;
+}
+
+Value * get_unwnd() {
+  if (unwnd == NULL) crash("get_unwnd: null unwnd!");
+  return unwnd;
+}
+
 void clone() {
   stack[sp+1] = stack[sp];
   sp++;
@@ -775,13 +786,15 @@ void unwind() {
 void eval() {
   Value * x = get_deref(0);
   switch (TY(x)) {
-    case PIN: {
-    }
-    case LAW: {
-    }
     case APP: {
+      set_unwnd(x);
+      unwind();
+      break;
     }
+    case PIN:
+    case LAW:
     case NAT: {
+      return;
     }
     case HOL: crash("eval: HOL");
     case IND: crash("eval: IND");
