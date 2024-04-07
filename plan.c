@@ -743,11 +743,6 @@ Value * get_unwnd() {
   return unwnd;
 }
 
-void clone() {
-  stack[sp+1] = stack[sp];
-  sp++;
-}
-
 Value * deref(Value * x) {
   while (TY(x) == IND) {
     x = x->i;
@@ -788,12 +783,17 @@ void update(u64 idx) {
 }
 
 void push_val(Value *x) {
+  // TODO bounds check
   sp++;
   stack[sp] = x;
 }
 
 void push(u64 idx) {
   push_val(get_deref(idx));
+}
+
+void clone() {
+  push_val(get_deref(0));
 }
 
 // before: stack = [n1, n2,     rest..]
