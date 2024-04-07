@@ -766,6 +766,7 @@ void push_val(Value *x) {
 }
 
 void push(u64 idx) {
+  push_val(get(idx));
 }
 
 void force();
