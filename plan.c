@@ -837,6 +837,14 @@ void print_heap(FILE *f, Node *input, Node *seen) {
   return print_heap(f, input, seen);
 }
 
+void print_stack(FILE *f, Node *input) {
+  // TODO print stack
+  // - print stack top
+  // - follow the `dotIndexedList "stack" (length stack)` approach of p-g-m-hs.
+  // - draw arrows between each `stack<N>` node and their correspoding address
+  //   (this should connect up w/ the heap rendering from above).
+}
+
 Node * stack_to_list() {
   Node * l = NULL;
   for (u64 i = 0; i < sp-1; i++) {
@@ -854,12 +862,7 @@ void write_dot(char *label) {
   fprintf(f, "label = \"%s\";\n", label);
   Node * stack_input = NULL;
   print_heap(f, stack_to_list(), NULL);
-  // TODO print stack
-  // - print stack top
-  // - follow the `dotIndexedList "stack" (length stack)` approach of p-g-m-hs.
-  // - draw arrows between each `stack<N>` node and their correspoding address
-  //   (this should connect up w/ the heap rendering from above).
-  //
+  print_stack(f, stack_to_list());
   // I think this *should* work. one issue is that eval_law does not use the
   // stack for its values. I believe this makes it "not GC safe" and is smth
   // we'll want to change.
