@@ -1099,7 +1099,6 @@ void handle_oversaturated_application(u64 count) {
     mk_app_rev();
   }
   eval();
-  slide(1);
 }
 
 void backout(u64 depth) {
@@ -1263,7 +1262,7 @@ u64 do_prim(Nat prim, u64 depth) {
     case 4: {
       u64 arity = 5;
       if (depth < arity) return 0;
-      push(0); force(); // x
+      eval(); // x
       plan_case();
       eval();
       return arity;
@@ -1304,9 +1303,8 @@ void unwind(u64 depth) {
           } else if (prim_arity < depth) {
             return handle_oversaturated_application(depth - prim_arity);
           } else {
-            // application was perfectly saturated, so just slide the unwind
-            // which `eval` stored for us.
-            return slide(1);
+            // application was perfectly saturated.
+            return;
           }
         }
         // unwind "through" pins & apps
@@ -1348,8 +1346,6 @@ void eval() {
   Value * x = get_deref(0);
   switch (TY(x)) {
     case APP: {
-      // we save the outermost APP here, so that `backout` can restore it.
-      clone();
       return unwind(0);
     }
     case PIN:
