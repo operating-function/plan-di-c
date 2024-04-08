@@ -1404,6 +1404,7 @@ Value * run(Value * v) {
   print_depth++;
   force();
   print_depth--;
+  write_dot("main final");
   Value *res = pop_deref();
   trace_print("%s\n", print_value(res));
   return res;
