@@ -19,6 +19,18 @@ Node * reverse(Node *head) {
   return ret;
 }
 
+bool null_list(Node *head) {
+  return (head == NULL);
+}
+
+bool member_list(void *ptr, Node *head) {
+  while (head != NULL) {
+    if (ptr == head->ptr) return true;
+    head = head->next;
+  }
+  return false;
+}
+
 void free_list(Node *head, bool free_contents) {
   Node *tmp;
 

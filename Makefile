@@ -7,6 +7,9 @@ test: plan
 linked_list.o: linked_list.h linked_list.c
 	gcc -g -c $^
 
+linked_list_test: linked_list.o linked_list_test.c
+	gcc -g $^ -o $@
+
 plan: linked_list.o plan.c
 	gcc $^ -o $@
 

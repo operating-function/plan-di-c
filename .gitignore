@@ -2,6 +2,7 @@ a.out
 plan
 plan_with_tracing
 plan_debug
+linked_list_test
 
 *.h.gch
 *.o
