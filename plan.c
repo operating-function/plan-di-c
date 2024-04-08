@@ -300,7 +300,9 @@ void print_value_internal(Value * v, char * buf, int recur) {
 char * print_nat(Nat n) {
   // TODO this is presumably unsafe for large nats?
   char * buf = malloc(512*sizeof(char));
-  print_nat_internal(n, buf);
+  if (n.type == BIG) crash("print_nat: unimpl: BIG");
+  sprintf(buf, "%lu", n.direct);
+  // print_nat_internal(n, buf);
   return buf;
 }
 
@@ -843,13 +845,13 @@ void print_stack(FILE *f, Node *input) {
   fprintf(f, "stack [label=\"<ss> stack");
   for (int i = 0; i < length_list(input); i++)
     fprintf(f, "|<s%d>", i);
-  fprintf(f, "\", color=blue, height=2.5];");
+  fprintf(f, "\", color=blue, height=2.5];\n");
 
   // print edges between stack topper Values
   int i = 0;
   while (input != NULL) {
     Value * v = (Value *)input->ptr;
-    fprintf(f, "stack:s%d -> N%p", i, v);
+    fprintf(f, "stack:s%d -> N%p;\n", i, v);
     input = input->next;
     i++;
   }
@@ -857,8 +859,9 @@ void print_stack(FILE *f, Node *input) {
 
 Node * stack_to_list() {
   Node * l = NULL;
+  if (sp == 0) return l;
   for (u64 i = 0; i < sp-1; i++) {
-    l = cons(get(i), l);
+    l = cons((void *)get(i), l);
   }
   return l;
 }
@@ -874,8 +877,10 @@ void write_dot(char *label) {
   fprintf(f, "digraph {\nbgcolor=\"#665c54\"\n");
   fprintf(f, "label = \"%s\";\n", label);
   Node * stack_input = NULL;
-  print_heap(f, stack_to_list(), NULL);
+  fprintf(f, "\n// stack\n");
   print_stack(f, stack_to_list());
+  fprintf(f, "\n// heap\n");
+  print_heap(f, stack_to_list(), NULL);
   fprintf(f, "}\n");
   fclose(f);
 }
