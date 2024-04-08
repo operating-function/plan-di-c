@@ -1215,27 +1215,49 @@ void law_step(Value * self, u64 depth) {
 
 void force();
 
+// 0 indicates an invalid primop.
+u64 prim_arity(u64 prim) {
+  switch (prim) {
+    case 0: { // mk_pin
+      return 1;
+    }
+    case 1: { // mk_law
+      return 3;
+    }
+    case 2: { // incr
+      return 1;
+    }
+    case 3: { // nat_case
+      return 3;
+    }
+    case 4: { // plan_case
+      return 5;
+    }
+    default:
+      return 0;
+  }
+}
+
 // 0 indicates an invalid primop. in that case, we do not act on the stack,
 // but leave it as-is and simply return.
 //
 // if depth is less than arity, our primop is not fully saturated. we return 0
 // in this case as well.
-u64 do_prim(Nat prim, u64 depth) {
+u64 do_prim(u64 prim, u64 depth) {
   char lab[40];
-  sprintf(lab, "do_prim: %s, depth: %lu", print_nat(prim), depth);
+  sprintf(lab, "do_prim: %lu, depth: %lu", prim, depth);
   write_dot(lab);
   //
-  if (prim.type == BIG) return 0;
-  switch (prim.direct) {
+  switch (prim) {
     case 0: { // mk_pin
-      u64 arity = 1;
+      u64 arity = prim_arity(prim);
       if (depth < arity) return 0;
       push(0); force();
       mk_pin();
       return arity;
     }
     case 1: { // mk_law
-      u64 arity = 3;
+      u64 arity = prim_arity(prim);
       if (depth < arity) return 0;
       push(0); force(); // n
       push(1); force(); // a
@@ -1244,14 +1266,14 @@ u64 do_prim(Nat prim, u64 depth) {
       return arity;
     }
     case 2: { // incr
-      u64 arity = 1;
+      u64 arity = prim_arity(prim);
       if (depth < arity) return 0;
       eval();
       incr();
       return arity;
     }
     case 3: { // nat_case
-      u64 arity = 3;
+      u64 arity = prim_arity(prim);
       if (depth < arity) return 0;
       eval(); // x
       nat_case();
@@ -1259,7 +1281,7 @@ u64 do_prim(Nat prim, u64 depth) {
       return arity;
     }
     case 4: { // plan_case
-      u64 arity = 5;
+      u64 arity = prim_arity(prim);
       if (depth < arity) return 0;
       eval(); // x
       plan_case();
@@ -1292,17 +1314,17 @@ void unwind(u64 depth) {
         case NAT: {
           pop(); // pop primop
           setup_call(depth);
-          flip_stack(depth); // TODO we should only flip_stack(prim_arity), not
-                             // depth. "outer" applications should stay where
-                             // they are.
+          u64 prim_u64 = nat_to_u64(NT(y));
+          u64 arity = prim_arity(prim_u64);
+          flip_stack(arity);
           // run primop.
-          u64 prim_arity = do_prim(NT(y), depth);
-          if (prim_arity == 0) {
+          do_prim(prim_u64, depth);
+          if (arity == 0) {
             // 0 indicates an invalid primop or an unsaturated application, so
             // we backout
             return backout(depth);
-          } else if (prim_arity < depth) {
-            return handle_oversaturated_application(depth - prim_arity);
+          } else if (arity < depth) {
+            return handle_oversaturated_application(depth - arity);
           } else {
             // application was perfectly saturated.
             return;
