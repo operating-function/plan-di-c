@@ -3,6 +3,9 @@ plan
 plan_with_tracing
 plan_debug
 
+*.h.gch
+*.o
+
 .direnv/
 result*
 
