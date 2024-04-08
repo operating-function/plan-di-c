@@ -860,7 +860,7 @@ void print_stack(FILE *f, Node *input) {
 Node * stack_to_list() {
   Node * l = NULL;
   if (sp == 0) return l;
-  for (u64 i = 0; i < sp-1; i++) {
+  for (u64 i = 0; i < sp; i++) {
     l = cons((void *)get(i), l);
   }
   return l;
