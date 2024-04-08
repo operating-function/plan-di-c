@@ -113,6 +113,12 @@ static inline void ck_nat(char * fn_nm, Value * x) {
   if (x->type != NAT) crash(s);
 }
 
+static inline void ck_ind(char * fn_nm, Value * x) {
+  char s[14];
+  sprintf(s, "%s not a IND!", fn_nm);
+  if (x->type != IND) crash(s);
+}
+
 // TODO put deref inside of these accessors?
 
 static inline Type TY(Value * x) {
@@ -166,6 +172,13 @@ static inline Nat NT(Value * x) {
   ck_nat("NT", x);
   #endif
   return x->n;
+};
+
+static inline Value * IN(Value * x) {
+  #ifdef CHECK_TAGS
+  ck_ind("IN", x);
+  #endif
+  return x->i;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -738,7 +751,7 @@ u64 *load_seed_file (const char* filename, u64 *sizeOut) {
 
 Value * deref(Value * x) {
   while (TY(x) == IND) {
-    x = x->i;
+    x = IN(x);
   }
   return x;
 }
