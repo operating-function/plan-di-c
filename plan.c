@@ -807,8 +807,8 @@ void print_heap(FILE *f, Node *input, Node *seen) {
     case LAW: {
       char * nm_s = print_nat(NM(v));
       char * ar_s = print_nat(AR(v));
-      fprintf(f, "N%p [label=law_%s_%s];\n", v, nm_s, ar_s);
-      fprintf(f, "N%p -> N%p [label=code];\n", v, BD(v));
+      fprintf(f, "N%p [label=\"law nm:%s ar:%s\"];\n", v, nm_s, ar_s);
+      fprintf(f, "N%p -> N%p [label=bd];\n", v, BD(v));
       input = cons((void *)BD(v), input);
       break;
     }
