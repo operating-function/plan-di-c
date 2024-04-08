@@ -89,16 +89,23 @@ void crash(char * s) {
 
 #define CHECK_TAGS 1
 
+Value * deref(Value * x);
+
 static inline void ck_pin(char * fn_nm, Value * x) {
   char s[14];
   sprintf(s, "%s not a PIN!", fn_nm);
   if (x->type != PIN) crash(s);
 }
 
+// we allow PIN LAWs
 static inline void ck_law(char * fn_nm, Value * x) {
-  char s[14];
-  sprintf(s, "%s not a LAW!", fn_nm);
-  if (x->type != LAW) crash(s);
+  char s[28];
+  sprintf(s, "%s not a LAW or PIN-LAW!", fn_nm);
+  if (x->type == LAW) return;
+  if (x->type == PIN) {
+    return ck_law(fn_nm, x->i);
+  }
+  crash(s);
 }
 
 static inline void ck_app(char * fn_nm, Value * x) {
@@ -119,13 +126,12 @@ static inline void ck_ind(char * fn_nm, Value * x) {
   if (x->type != IND) crash(s);
 }
 
-// TODO put deref inside of these accessors?
-
 static inline Type TY(Value * x) {
   return x->type;
 }
 
 static inline Value * IT(Value * x) {
+  x = deref(x);
   #ifdef CHECK_TAGS
   ck_pin("IT", x);
   #endif
@@ -133,27 +139,34 @@ static inline Value * IT(Value * x) {
 };
 
 static inline Nat NM(Value * x) {
+  x = deref(x);
   #ifdef CHECK_TAGS
   ck_law("NM", x);
   #endif
+  if (x->type == PIN) return NM(x->i);
   return x->l.n;
 }
 
 static inline Nat AR(Value * x) {
+  x = deref(x);
   #ifdef CHECK_TAGS
   ck_law("AR", x);
   #endif
+  if (x->type == PIN) return AR(x->i);
   return x->l.a;
 }
 
 static inline Value * BD(Value * x) {
+  x = deref(x);
   #ifdef CHECK_TAGS
   ck_law("BD", x);
   #endif
+  if (x->type == PIN) return BD(x->i);
   return x->l.b;
 }
 
 static inline Value * HD(Value * x) {
+  x = deref(x);
   #ifdef CHECK_TAGS
   ck_app("HD", x);
   #endif
@@ -161,6 +174,7 @@ static inline Value * HD(Value * x) {
 };
 
 static inline Value * TL(Value * x) {
+  x = deref(x);
   #ifdef CHECK_TAGS
   ck_app("TL", x);
   #endif
@@ -168,6 +182,7 @@ static inline Value * TL(Value * x) {
 };
 
 static inline Nat NT(Value * x) {
+  x = deref(x);
   #ifdef CHECK_TAGS
   ck_nat("NT", x);
   #endif
@@ -1335,7 +1350,7 @@ void unwind(u64 depth) {
         }
         case LAW: {
           pop(); // pop law
-          return law_step(y, depth);
+          return law_step(x, depth);
         }
         case HOL: {
           crash("unwind: <loop>");
