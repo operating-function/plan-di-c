@@ -31,6 +31,15 @@ bool member_list(void *ptr, Node *head) {
   return false;
 }
 
+int length_list(Node *head) {
+  int len = 0;
+  while (head != NULL) {
+    head = head->next;
+    len++;
+  }
+  return len;
+}
+
 void free_list(Node *head, bool free_contents) {
   Node *tmp;
 
