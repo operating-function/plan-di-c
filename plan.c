@@ -1228,14 +1228,14 @@ u64 do_prim(Nat prim, u64 depth) {
   //
   if (prim.type == BIG) return 0;
   switch (prim.direct) {
-    case 0: {
+    case 0: { // mk_pin
       u64 arity = 1;
       if (depth < arity) return 0;
       push(0); force();
       mk_pin();
       return arity;
     }
-    case 1: {
+    case 1: { // mk_law
       u64 arity = 3;
       if (depth < arity) return 0;
       push(0); force(); // n
@@ -1244,14 +1244,14 @@ u64 do_prim(Nat prim, u64 depth) {
       mk_law();
       return arity;
     }
-    case 2: {
+    case 2: { // incr
       u64 arity = 1;
       if (depth < arity) return 0;
       eval();
       incr();
       return arity;
     }
-    case 3: {
+    case 3: { // nat_case
       u64 arity = 3;
       if (depth < arity) return 0;
       push(0); force(); // x
@@ -1259,7 +1259,7 @@ u64 do_prim(Nat prim, u64 depth) {
       eval();
       return arity;
     }
-    case 4: {
+    case 4: { // plan_case
       u64 arity = 5;
       if (depth < arity) return 0;
       eval(); // x
