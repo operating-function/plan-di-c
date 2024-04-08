@@ -838,11 +838,21 @@ void print_heap(FILE *f, Node *input, Node *seen) {
 }
 
 void print_stack(FILE *f, Node *input) {
-  // TODO print stack
-  // - print stack top
-  // - follow the `dotIndexedList "stack" (length stack)` approach of p-g-m-hs.
-  // - draw arrows between each `stack<N>` node and their correspoding address
-  //   (this should connect up w/ the heap rendering from above).
+  // print "stack topper"
+  // => stack [label="<ss> stack|<s0>|<s1>|<s2>", color=blue, height=2.5];
+  fprintf(f, "stack [label=\"<ss> stack");
+  for (int i = 0; i < length_list(input); i++)
+    fprintf(f, "|<s%d>", i);
+  fprintf(f, "\", color=blue, height=2.5];");
+
+  // print edges between stack topper Values
+  int i = 0;
+  while (input != NULL) {
+    Value * v = (Value *)input->ptr;
+    fprintf(f, "stack:s%d -> N%p", i, v);
+    input = input->next;
+    i++;
+  }
 }
 
 Node * stack_to_list() {
@@ -853,6 +863,9 @@ Node * stack_to_list() {
   return l;
 }
 
+// I think this *should* work. one issue is that eval_law does not use the
+// stack for its values. I believe this makes it "not GC safe" and is smth
+// we'll want to change.
 void write_dot(char *label) {
   char fp[20] = {0};
   sprintf(fp, "%s/%05d.dot", dot_file_path, dot_count);
@@ -863,9 +876,6 @@ void write_dot(char *label) {
   Node * stack_input = NULL;
   print_heap(f, stack_to_list(), NULL);
   print_stack(f, stack_to_list());
-  // I think this *should* work. one issue is that eval_law does not use the
-  // stack for its values. I believe this makes it "not GC safe" and is smth
-  // we'll want to change.
   fprintf(f, "}\n");
   fclose(f);
 }
