@@ -1253,7 +1253,7 @@ u64 do_prim(Nat prim, u64 depth) {
     case 3: { // nat_case
       u64 arity = 3;
       if (depth < arity) return 0;
-      push(0); force(); // x
+      eval(); // x
       nat_case();
       eval();
       return arity;
@@ -1292,7 +1292,9 @@ void unwind(u64 depth) {
         case NAT: {
           pop(); // pop primop
           setup_call(depth);
-          flip_stack(depth);
+          flip_stack(depth); // TODO we should only flip_stack(prim_arity), not
+                             // depth. "outer" applications should stay where
+                             // they are.
           // run primop.
           u64 prim_arity = do_prim(NT(y), depth);
           if (prim_arity == 0) {
@@ -1369,6 +1371,7 @@ void force_whnf() {
   }
 }
 
+// TODO something is weird w/ force
 void force() {
   write_dot("force");
   //
