@@ -14,6 +14,8 @@
 #include <inttypes.h>
 #include <unistd.h>
 
+#include "linked_list.h"
+
 ////////////////////////////////////////////////////////////////////////////////
 //  Typedefs
 
@@ -73,47 +75,6 @@ typedef struct Value {
 
 Value **stack;
 u64 sp;
-
-////////////////////////////////////////////////////////////////////////////////
-//  DOT printing
-
-int dot_count = 0;
-char * dot_file_path = "./dot";
-
-void write_dot(char *label) {
-  char fp[20] = {0};
-  sprintf(fp, "%s/%05d.dot", dot_file_path, dot_count);
-  dot_count++;
-  FILE * f = fopen(fp, "w+");
-  fprintf(f, "digraph {\nbgcolor=\"#665c54\"\n");
-  fprintf(f, "label = \"%s\";\n", label);
-  // TODO print heap
-  // - start with each stack address
-  // - push them to a list
-  // - carry another list of "seen" (initially empty)
-  // - while input list is non-null, take the addr in its head:
-  //   - if it's been seen, then pop the head and recur
-  //   - if it's not been seen, then print its address and switch on its
-  //     `.type`, printing the value appropriately (see p-g-m-hs's
-  //     renderHeapNode).
-  //   - pop current address from the input list.
-  //   - cons any newly discovered addresses (see p-g-m-hs's liveAddrs:explore)
-  //     onto the input list.
-  //   - add current address to the seen list.
-  //   - recur. (this will do depth-first traversal. seems fine).
-  //
-  // TODO print stack
-  // - print stack top
-  // - follow the `dotIndexedList "stack" (length stack)` approach of p-g-m-hs.
-  // - draw arrows between each `stack<N>` node and their correspoding address
-  //   (this should connect up w/ the heap rendering from above).
-  //
-  // I think this *should* work. one issue is that eval_law does not use the
-  // stack for its values. I believe this makes it "not GC safe" and is smth
-  // we'll want to change.
-  fprintf(f, "}\n");
-  fclose(f);
-}
 
 ////////////////////////////////////////////////////////////////////////////////
 //  Crash
@@ -773,7 +734,7 @@ u64 *load_seed_file (const char* filename, u64 *sizeOut) {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-//  Interpreter
+//  Interpreter stack fns
 
 Value * deref(Value * x) {
   while (TY(x) == IND) {
@@ -801,6 +762,63 @@ Value * get(u64 idx) {
 Value * get_deref(u64 idx) {
   return deref(get(idx));
 }
+
+////////////////////////////////////////////////////////////////////////////////
+//  DOT printing
+
+int dot_count = 0;
+char * dot_file_path = "./dot";
+
+void print_heap(FILE *f, Node *input, Node *seen) {
+  // TODO print heap
+  // - start with each stack address
+  // - push them to a list
+  // - carry another list of "seen" (initially empty)
+  // - while input list is non-null, take the addr in its head:
+  //   - if it's been seen, then pop the head and recur
+  //   - if it's not been seen, then print its address and switch on its
+  //     `.type`, printing the value appropriately (see p-g-m-hs's
+  //     renderHeapNode).
+  //   - pop current address from the input list.
+  //   - cons any newly discovered addresses (see p-g-m-hs's liveAddrs:explore)
+  //     onto the input list.
+  //   - add current address to the seen list.
+  //   - recur. (this will do depth-first traversal. seems fine).
+  //
+}
+
+Node * stack_to_list() {
+  Node * l = NULL;
+  for (u64 i = 0; i < sp-1; i++) {
+    l = cons(get(i), l);
+  }
+  return l;
+}
+
+void write_dot(char *label) {
+  char fp[20] = {0};
+  sprintf(fp, "%s/%05d.dot", dot_file_path, dot_count);
+  dot_count++;
+  FILE * f = fopen(fp, "w+");
+  fprintf(f, "digraph {\nbgcolor=\"#665c54\"\n");
+  fprintf(f, "label = \"%s\";\n", label);
+  Node * stack_input = NULL;
+  print_heap(f, stack_to_list(), NULL);
+  // TODO print stack
+  // - print stack top
+  // - follow the `dotIndexedList "stack" (length stack)` approach of p-g-m-hs.
+  // - draw arrows between each `stack<N>` node and their correspoding address
+  //   (this should connect up w/ the heap rendering from above).
+  //
+  // I think this *should* work. one issue is that eval_law does not use the
+  // stack for its values. I believe this makes it "not GC safe" and is smth
+  // we'll want to change.
+  fprintf(f, "}\n");
+  fclose(f);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+//  Interpreter
 
 void update(u64 idx) {
   Value *head = get_deref(0);
