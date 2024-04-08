@@ -1016,11 +1016,10 @@ void nat_case() {
     if (GT(x_, d_Nat(0))) {
       Value * dec_x = a_Big(Dec(x_));
       Value * ap    = a_App(p, dec_x);
-      push_val(ap);
+      return push_val(ap);
     }
-  } else {
-    push_val(z);
   }
+  return push_val(z);
 }
 
 void plan_case() {
