@@ -783,21 +783,58 @@ int dot_count = 0;
 char * dot_file_path = "./dot";
 
 void print_heap(FILE *f, Node *input, Node *seen) {
-  // TODO print heap
-  // - start with each stack address
-  // - push them to a list
-  // - carry another list of "seen" (initially empty)
-  // - while input list is non-null, take the addr in its head:
-  //   - if it's been seen, then pop the head and recur
-  //   - if it's not been seen, then print its address and switch on its
-  //     `.type`, printing the value appropriately (see p-g-m-hs's
-  //     renderHeapNode).
-  //   - pop current address from the input list.
-  //   - cons any newly discovered addresses (see p-g-m-hs's liveAddrs:explore)
-  //     onto the input list.
-  //   - add current address to the seen list.
-  //   - recur. (this will do depth-first traversal. seems fine).
+  // empty input - done
+  if (null_list(input)) return;
+  Value * v = (Value *)input->ptr;
+  input = input->next;
   //
+  // if seen, recur on tail of input
+  if (member_list((void *)v, seen)) {
+    return print_heap(f, input, seen);
+  }
+  //
+  // non-seen Value. print it, add `v` to `seen`, add any discovered addresses
+  // to `input`.
+  switch (TY(v)) {
+    case PIN: {
+      fprintf(f, "N%p [label=pin];\n", v);
+      fprintf(f, "N%p -> N%p [arrowhead=box];\n", v, IT(v));
+      input = cons((void *)IT(v), input);
+      break;
+    }
+    case LAW: {
+      char * nm_s = print_nat(NM(v));
+      char * ar_s = print_nat(AR(v));
+      fprintf(f, "N%p [label=law_%s_%s];\n", v, nm_s, ar_s);
+      fprintf(f, "N%p -> N%p [label=code];\n", v, BD(v));
+      input = cons((void *)BD(v), input);
+      break;
+    }
+    case APP: {
+      fprintf(f, "N%p [label=\"@\"]", v);
+      fprintf(f, "N%p -> N%p [arrowhead=crow];\n", v, HD(v));
+      fprintf(f, "N%p -> N%p [arrowhead=tee];\n",  v, TL(v));
+      input = cons((void *)HD(v), input);
+      input = cons((void *)TL(v), input);
+      break;
+    }
+    case NAT: {
+      fprintf(f, "N%p [label=%s];\n", v, print_nat(NT(v)));
+      break;
+    }
+    case IND: {
+      fprintf(f, "N%p [label=ind];\n", v);
+      fprintf(f, "N%p -> N%p [arrowhead=dot];\n", v, IN(v));
+      input = cons((void *)IN(v), input);
+      break;
+    }
+    case HOL: {
+      fprintf(f, "N%p [label=hole];\n", v);
+      break;
+    }
+  }
+  seen = cons((void *)v, seen);
+  return print_heap(f, input, seen);
 }
 
 Node * stack_to_list() {
