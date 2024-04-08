@@ -815,7 +815,7 @@ void print_heap(FILE *f, Node *input, Node *seen) {
     case APP: {
       fprintf(f, "N%p [label=\"@\"]", v);
       fprintf(f, "N%p -> N%p [arrowhead=crow];\n", v, HD(v));
-      fprintf(f, "N%p -> N%p [arrowhead=tee];\n",  v, TL(v));
+      fprintf(f, "N%p -> N%p [arrowhead=vee];\n",  v, TL(v));
       input = cons((void *)HD(v), input);
       input = cons((void *)TL(v), input);
       break;
