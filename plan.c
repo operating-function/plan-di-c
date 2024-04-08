@@ -1002,8 +1002,8 @@ void mk_law() {
 void incr() {
   write_dot("incr");
   Value * x = pop_deref();
-  Nat n = NT(x);
-  push_val(a_Big(Inc(n)));
+  Nat n = (TY(x) == NAT) ? Inc(NT(x)) : d_Nat(1);
+  push_val(a_Big(n));
 }
 
 void nat_case() {
