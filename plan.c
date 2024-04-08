@@ -1059,7 +1059,7 @@ void setup_call(u64 depth) {
   // setup the call by pulling the TLs out of all apps which we have
   // unwound.
   for (u64 i = 0; i < depth; i++) {
-    *get(i) = *TL(get(i));
+    stack[(sp-1)-i] = TL(stack[(sp-1)-i]);
   }
 }
 
@@ -1068,11 +1068,11 @@ void flip_stack(u64 depth) {
   sprintf(lab, "flip_stack %lu", depth);
   write_dot(lab, "");
   //
-  Value tmp;
+  Value * tmp;
   for (u64 i = 0; i < depth/2; i++) {
-    tmp = *get(i);
-    *get(i)       = *get(depth-i);
-    *get(depth-i) = tmp;
+    tmp                     = stack[(sp-1)-i];
+    stack[(sp-1)-i]         = stack[(sp-1)-(depth-i)];
+    stack[(sp-1)-(depth-i)] = tmp;
   }
 }
 
