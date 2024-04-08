@@ -884,6 +884,10 @@ void write_dot(char *label) {
 //  Interpreter
 
 void update(u64 idx) {
+  char lab[20];
+  sprintf(lab, "update %lu", idx);
+  write_dot(lab);
+  //
   Value *head = get_deref(0);
   Value *v    = get_deref(idx);
   if (head != v) {
@@ -895,22 +899,33 @@ void update(u64 idx) {
 }
 
 void push_val(Value *x) {
+  char lab[20];
+  sprintf(lab, "push_val %p", x);
+  write_dot(lab);
   // TODO bounds check
   stack[sp] = x;
   sp++;
 }
 
 void push(u64 idx) {
+  char lab[20];
+  sprintf(lab, "push %lu", idx);
+  write_dot(lab);
+  //
   push_val(get_deref(idx));
 }
 
 void clone() {
+  write_dot("clone");
+  //
   push_val(get_deref(0));
 }
 
 // before: stack = [n1, n2,     rest..]
 // after:  stack = [app(n2,n1), rest..]
 void mk_app() {
+  write_dot("mk_app");
+  //
   Value * n1 = pop();
   Value * n2 = pop();
   Value * ap = a_App(n2, n1);
@@ -920,6 +935,8 @@ void mk_app() {
 // before: stack = [n1, n2,     rest..]
 // after:  stack = [app(n1,n2), rest..]
 void mk_app_rev() {
+  write_dot("mk_app_rev");
+  //
   Value * n1 = pop();
   Value * n2 = pop();
   Value * ap = a_App(n1, n2);
@@ -927,18 +944,27 @@ void mk_app_rev() {
 }
 
 void alloc(u64 count) {
+  char lab[20];
+  sprintf(lab, "alloc %lu", count);
+  write_dot(lab);
+  //
   for (u64 i = 0; i < count; i++) {
     push_val(a_Hol());
   }
 }
 
 void slide(u64 count) {
+  char lab[20];
+  sprintf(lab, "slide %lu", count);
+  write_dot(lab);
+  //
   Value * top = get_deref(0);
   sp -= count;
   stack[sp-1] = top;
 }
 
 void mk_pin() {
+  write_dot("mk_pin");
   Value * top = pop_deref();
   if (TY(top) == HOL) crash("mk_pin: hol");
   Value * p = a_Pin(top);
@@ -946,6 +972,7 @@ void mk_pin() {
 }
 
 void mk_law() {
+  write_dot("mk_law");
   Value * b = pop_deref();
   Value * a = pop_deref();
   Value * n = pop_deref();
@@ -955,12 +982,14 @@ void mk_law() {
 }
 
 void incr() {
+  write_dot("incr");
   Value * x = pop_deref();
   Nat n = NT(x);
   push_val(a_Big(Inc(n)));
 }
 
 void nat_case() {
+  write_dot("nat_case");
   Value * x = pop_deref();
   Value * p = pop_deref();
   Value * z = pop_deref();
@@ -977,6 +1006,7 @@ void nat_case() {
 }
 
 void plan_case() {
+  write_dot("plan_case");
   Value * x = pop_deref();
   Value * n = pop_deref();
   Value * a = pop_deref();
@@ -1012,6 +1042,10 @@ void plan_case() {
 }
 
 void setup_call(u64 depth) {
+  char lab[20];
+  sprintf(lab, "setup_call %lu", depth);
+  write_dot(lab);
+  //
   // setup the call by pulling the TLs out of all apps which we have
   // unwound.
   for (u64 i = 0; i < depth; i++) {
@@ -1020,6 +1054,10 @@ void setup_call(u64 depth) {
 }
 
 void flip_stack(u64 depth) {
+  char lab[20];
+  sprintf(lab, "flip_stack %lu", depth);
+  write_dot(lab);
+  //
   Value tmp;
   for (u64 i = 0; i < depth/2; i++) {
     tmp = *get(i);
@@ -1031,6 +1069,10 @@ void flip_stack(u64 depth) {
 void eval();
 
 void handle_oversaturated_application(u64 count) {
+  char lab[50];
+  sprintf(lab, "handle_oversaturated_application %lu", count);
+  write_dot(lab);
+  //
   // if our application is oversaturated, `depth` will exceed the arity. in this
   // case, we want to re-assemble the apps, and eval the result.
   for (u64 i = 0; i < count; i++) {
@@ -1041,6 +1083,10 @@ void handle_oversaturated_application(u64 count) {
 }
 
 void backout(u64 depth) {
+  char lab[20];
+  sprintf(lab, "backout %lu", depth);
+  write_dot(lab);
+  //
   // pop stack of unwound apps.
   for (u64 i = 0; i < depth; i++) {
     pop();
@@ -1060,6 +1106,10 @@ u64 nat_to_u64(Nat x) {
 // stack invariant: kal leaves 1 entry on the bottom of the stack: the
 // evaluation of `x`.
 void kal(u64 n, Value * x) {
+  char lab[40];
+  sprintf(lab, "kal %lu %p", n, x);
+  write_dot(lab);
+  //
   alloc(1);
   //
   Value * x_ = deref(x);
@@ -1096,6 +1146,10 @@ void kal(u64 n, Value * x) {
 }
 
 void eval_law(u64 n, Value * x) {
+  char lab[40];
+  sprintf(lab, "eval_law %lu %p", n, x);
+  write_dot(lab);
+  //
   Value * x_ = deref(x);
   if (TY(x_) == APP) {
     Value * car = deref(HD(x_));
@@ -1114,6 +1168,10 @@ void eval_law(u64 n, Value * x) {
 }
 
 void law_step(Value * self, u64 depth) {
+  char lab[40];
+  sprintf(lab, "law_step %p %lu", self, depth);
+  write_dot(lab);
+  //
   if (GT(AR(self), d_Nat(depth))) {
     // unsaturated application
     backout(depth);
@@ -1139,6 +1197,10 @@ void force();
 // if depth is less than arity, our primop is not fully saturated. we return 0
 // in this case as well.
 u64 do_prim(Nat prim, u64 depth) {
+  char lab[40];
+  sprintf(lab, "do_prim %s %lu", print_nat(prim), depth);
+  write_dot(lab);
+  //
   if (prim.type == BIG) return 0;
   switch (prim.direct) {
     case 0: {
@@ -1187,6 +1249,10 @@ u64 do_prim(Nat prim, u64 depth) {
 }
 
 void unwind(u64 depth) {
+  char lab[20];
+  sprintf(lab, "unwind %lu", depth);
+  write_dot(lab);
+  //
   Value * x = get_deref(0);
   switch (TY(x)) {
     case APP: {
@@ -1253,6 +1319,7 @@ void unwind(u64 depth) {
 
 void eval() {
   write_dot("eval");
+  //
   Value * x = get_deref(0);
   switch (TY(x)) {
     case APP: {
@@ -1271,6 +1338,8 @@ void eval() {
 }
 
 void force_whnf() {
+  write_dot("force_whnf");
+  //
   Value *top = pop_deref(0);
   if (TY(top) == APP) {
     push_val(TL(top));
@@ -1281,6 +1350,8 @@ void force_whnf() {
 }
 
 void force() {
+  write_dot("force");
+  //
   Value * top = get_deref(0);
   if (TY(top) == APP) {
     clone();
