@@ -1134,13 +1134,12 @@ void kal(u64 n, Value * x) {
   write_dot_extra(lab, extra, x);
   //
   alloc(1);
-  n++;
   //
   Value * x_ = deref(x);
   if (TY(x_) == NAT) {
     Nat x_nat = NT(x_);
     if (LTE(x_nat, d_Nat(n))) {
-      push(n - nat_to_u64(x_nat));
+      push((n+1) - nat_to_u64(x_nat));
       return update(1);
     }
   }
@@ -1152,8 +1151,8 @@ void kal(u64 n, Value * x) {
         // ((0 f) y)
         Value * f = deref(TL(car));
         Value * y = deref(TL(x_));
-        kal(n,   f);
-        kal(n+1, y);
+        kal(n+1, f);
+        kal(n+2, y);
         mk_app();
         eval();
         return update(1);
