@@ -784,22 +784,18 @@ Value * deref(Value * x) {
 
 Value * pop() {
   if (sp == 0) crash("pop: empty stack");
-  Value * ret = stack[sp];
   sp--;
-  return ret;
+  return stack[sp];
 }
 
 // TODO when to use this vs pop?
 Value * pop_deref() {
-  if (sp == 0) crash("pop: empty stack");
-  Value * ret = stack[sp];
-  sp--;
-  return deref(ret);
+  return deref(pop());
 }
 
 Value * get(u64 idx) {
-  if (idx > sp) crash("get: indexed off stack");
-  return stack[sp-idx];
+  if (idx >= sp) crash("get: indexed off stack");
+  return stack[(sp-1)-idx];
 }
 
 Value * get_deref(u64 idx) {
@@ -817,12 +813,10 @@ void update(u64 idx) {
   pop();
 }
 
-// TODO we could increment after pushing, and use `sp-1` for get/pop, in order
-// to not waste the 0th index of the stack?
 void push_val(Value *x) {
   // TODO bounds check
-  sp++;
   stack[sp] = x;
+  sp++;
 }
 
 void push(u64 idx) {
@@ -860,7 +854,7 @@ void alloc(u64 count) {
 void slide(u64 count) {
   Value * top = get_deref(0);
   sp -= count;
-  stack[sp] = top;
+  stack[sp-1] = top;
 }
 
 void mk_pin() {
@@ -940,16 +934,16 @@ void setup_call(u64 depth) {
   // setup the call by pulling the TLs out of all apps which we have
   // unwound.
   for (u64 i = 0; i < depth; i++) {
-    stack[sp-i] = TL(stack[sp-i]);
+    *get(i) = *TL(get(i));
   }
 }
 
 void flip_stack(u64 depth) {
-  Value * tmp;
+  Value tmp;
   for (u64 i = 0; i < depth/2; i++) {
-    tmp = stack[sp-i];
-    stack[sp-i] = stack[sp-(depth-i)];
-    stack[sp-(depth-i)] = tmp;
+    tmp = *get(i);
+    *get(i)       = *get(depth-i);
+    *get(depth-i) = tmp;
   }
 }
 
