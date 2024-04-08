@@ -75,6 +75,21 @@ Value **stack;
 u64 sp;
 
 ////////////////////////////////////////////////////////////////////////////////
+//  DOT printing
+
+int dot_count = 0;
+char * dot_file_path = "./dot";
+
+void write_dot() {
+  char fp[20] = {0};
+  sprintf(fp, "%s/%05d.dot", dot_file_path, dot_count);
+  dot_count++;
+  FILE * f = fopen(fp, "w+");
+  fprintf(f, "digraph {\nbgcolor=\"#665c54\"\n}\n");
+  fclose(f);
+}
+
+////////////////////////////////////////////////////////////////////////////////
 //  Crash
 
 void crash(char * s) {
@@ -1136,6 +1151,7 @@ void unwind(u64 depth) {
 }
 
 void eval() {
+  write_dot();
   Value * x = get_deref(0);
   switch (TY(x)) {
     case APP: {

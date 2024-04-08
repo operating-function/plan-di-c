@@ -5,3 +5,6 @@ plan_debug
 
 .direnv/
 result*
+
+# dot
+dot/
