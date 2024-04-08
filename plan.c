@@ -979,6 +979,9 @@ void slide(u64 count) {
   Value * top = get_deref(0);
   sp -= count;
   stack[sp-1] = top;
+  //
+  sprintf(lab, "post slide %lu", count);
+  write_dot(lab);
 }
 
 void mk_pin() {
@@ -1131,11 +1134,12 @@ void kal(u64 n, Value * x) {
   write_dot_extra(lab, extra, x);
   //
   alloc(1);
+  n++;
   //
   Value * x_ = deref(x);
   if (TY(x_) == NAT) {
     Nat x_nat = NT(x_);
-    if (LT(x_nat, d_Nat(n))) {
+    if (LTE(x_nat, d_Nat(n))) {
       push(n - nat_to_u64(x_nat));
       return update(1);
     }
@@ -1167,7 +1171,7 @@ void kal(u64 n, Value * x) {
 
 void eval_law(u64 n, Value * x) {
   char lab[40];
-  sprintf(lab, "eval_law %lu %p", n, x);
+  sprintf(lab, "eval_law %lu", n);
   char extra[20];
   sprintf(extra, "i -> N%p", x);
   write_dot_extra(lab, extra, x);
@@ -1181,12 +1185,14 @@ void eval_law(u64 n, Value * x) {
         // ((1 v) k)
         Value * v = deref(TL(car));
         Value * k = deref(TL(x_));
+        // TODO I think `n+1` is wrong?
         kal(n+1, v);
         return eval_law(n+1, k);
       }
     }
   }
   kal(n, x);
+  return slide(n+1);
 }
 
 void law_step(Value * self, u64 depth) {
@@ -1200,7 +1206,6 @@ void law_step(Value * self, u64 depth) {
     // unsaturated application
     backout(depth);
   } else {
-    pop();
     setup_call(depth);
     push_val(self);
     flip_stack(depth+1);
