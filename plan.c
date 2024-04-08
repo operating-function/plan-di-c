@@ -80,12 +80,38 @@ u64 sp;
 int dot_count = 0;
 char * dot_file_path = "./dot";
 
-void write_dot() {
+void write_dot(char *label) {
   char fp[20] = {0};
   sprintf(fp, "%s/%05d.dot", dot_file_path, dot_count);
   dot_count++;
   FILE * f = fopen(fp, "w+");
-  fprintf(f, "digraph {\nbgcolor=\"#665c54\"\n}\n");
+  fprintf(f, "digraph {\nbgcolor=\"#665c54\"\n");
+  fprintf(f, "label = \"%s\";\n", label);
+  // TODO print heap
+  // - start with each stack address
+  // - push them to a list
+  // - carry another list of "seen" (initially empty)
+  // - while input list is non-null, take the addr in its head:
+  //   - if it's been seen, then pop the head and recur
+  //   - if it's not been seen, then print its address and switch on its
+  //     `.type`, printing the value appropriately (see p-g-m-hs's
+  //     renderHeapNode).
+  //   - pop current address from the input list.
+  //   - cons any newly discovered addresses (see p-g-m-hs's liveAddrs:explore)
+  //     onto the input list.
+  //   - add current address to the seen list.
+  //   - recur. (this will do depth-first traversal. seems fine).
+  //
+  // TODO print stack
+  // - print stack top
+  // - follow the `dotIndexedList "stack" (length stack)` approach of p-g-m-hs.
+  // - draw arrows between each `stack<N>` node and their correspoding address
+  //   (this should connect up w/ the heap rendering from above).
+  //
+  // I think this *should* work. one issue is that eval_law does not use the
+  // stack for its values. I believe this makes it "not GC safe" and is smth
+  // we'll want to change.
+  fprintf(f, "}\n");
   fclose(f);
 }
 
@@ -1151,7 +1177,7 @@ void unwind(u64 depth) {
 }
 
 void eval() {
-  write_dot();
+  write_dot("eval");
   Value * x = get_deref(0);
   switch (TY(x)) {
     case APP: {
