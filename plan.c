@@ -1076,11 +1076,13 @@ void flip_stack(u64 depth) {
   sprintf(lab, "flip_stack %lu", depth);
   write_dot(lab);
   //
+  if (depth == 0) return;
   Value * tmp;
+  u64 d_1 = depth-1;
   for (u64 i = 0; i < depth/2; i++) {
-    tmp                     = stack[(sp-1)-i];
-    stack[(sp-1)-i]         = stack[(sp-1)-(depth-i)];
-    stack[(sp-1)-(depth-i)] = tmp;
+    tmp                   = stack[(sp-1)-i];
+    stack[(sp-1)-i]       = stack[(sp-1)-(d_1-i)];
+    stack[(sp-1)-(d_1-i)] = tmp;
   }
 }
 
@@ -1222,7 +1224,7 @@ void force();
 // in this case as well.
 u64 do_prim(Nat prim, u64 depth) {
   char lab[40];
-  sprintf(lab, "do_prim %s %lu", print_nat(prim), depth);
+  sprintf(lab, "do_prim: %s, depth: %lu", print_nat(prim), depth);
   write_dot(lab);
   //
   if (prim.type == BIG) return 0;
@@ -1230,8 +1232,7 @@ u64 do_prim(Nat prim, u64 depth) {
     case 0: {
       u64 arity = 1;
       if (depth < arity) return 0;
-      push(0);
-      force();
+      push(0); force();
       mk_pin();
       return arity;
     }
@@ -1254,7 +1255,7 @@ u64 do_prim(Nat prim, u64 depth) {
     case 3: {
       u64 arity = 3;
       if (depth < arity) return 0;
-      push(2); force(); // x
+      push(0); force(); // x
       nat_case();
       eval();
       return arity;
@@ -1262,7 +1263,7 @@ u64 do_prim(Nat prim, u64 depth) {
     case 4: {
       u64 arity = 5;
       if (depth < arity) return 0;
-      push(4); force(); // x
+      push(0); force(); // x
       plan_case();
       eval();
       return arity;
@@ -1291,7 +1292,7 @@ void unwind(u64 depth) {
       Value * y = deref(x->p);
       switch (y->type) {
         case NAT: {
-          pop(); // pop our primop
+          pop(); // pop primop
           setup_call(depth);
           flip_stack(depth);
           // run primop.
