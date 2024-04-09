@@ -131,6 +131,10 @@ static inline Type TY(Value * x) {
   return x->type;
 }
 
+static inline bool IS_NAT(Value * x) {
+  return (TY(x) == NAT);
+}
+
 static inline Value * IT(Value * x) {
   x = deref(x);
   #ifdef CHECK_TAGS
@@ -442,6 +446,18 @@ bool EQ(Nat a, Nat b) {
     return true;
   }
   return false;
+}
+
+bool EQZ(Nat a) {
+  return (EQ(a, d_Nat(0)));
+}
+
+bool EQ1(Nat a) {
+  return (EQ(a, d_Nat(1)));
+}
+
+bool EQ2(Nat a) {
+  return (EQ(a, d_Nat(2)));
 }
 
 bool NEQ(Nat a, Nat b) {
@@ -1022,7 +1038,7 @@ void mk_law() {
 void incr() {
   write_dot("incr");
   Value * x = pop_deref();
-  Nat n = (TY(x) == NAT) ? Inc(NT(x)) : d_Nat(1);
+  Nat n = (IS_NAT(x)) ? Inc(NT(x)) : d_Nat(1);
   push_val(a_Big(n));
 }
 
@@ -1031,7 +1047,7 @@ void nat_case() {
   Value * x = pop_deref();
   Value * p = pop_deref();
   Value * z = pop_deref();
-  if (TY(x) == NAT) {
+  if (IS_NAT(x)) {
     Nat x_ = NT(x);
     if (GT(x_, d_Nat(0))) {
       Value * dec_x = a_Big(Dec(x_));
@@ -1153,7 +1169,7 @@ void kal(u64 n, Value * x) {
   write_dot_extra(lab, extra, x);
   //
   Value * x_ = deref(x);
-  if (TY(x_) == NAT) {
+  if (IS_NAT(x_)) {
     Nat x_nat = NT(x_);
     if (LTE(x_nat, d_Nat(n))) {
       return push(n - nat_to_u64(x_nat));
@@ -1163,7 +1179,7 @@ void kal(u64 n, Value * x) {
     Value * car = deref(HD(x_));
     if (TY(car) == APP) {
       Value * caar = deref(HD(car));
-      if ((TY(caar) == NAT) && EQ(d_Nat(0), NT(caar))) {
+      if ((IS_NAT(caar)) && EQZ(NT(caar))) {
         // ((0 f) y)
         Value * f = deref(TL(car));
         Value * y = deref(TL(x_));
@@ -1172,7 +1188,7 @@ void kal(u64 n, Value * x) {
         mk_app();
         return eval();
       }
-    } else if ((TY(car) == NAT) && EQ(NT(car), d_Nat(2))) {
+    } else if ((IS_NAT(car)) && EQ2(NT(car))) {
       // (2 y)
       Value * y = deref(TL(x_));
       return push_val(y);
@@ -1191,7 +1207,7 @@ Node * get_let_spine(Value * x) {
     Value * car = deref(HD(x_));
     if (TY(car) == APP) {
       Value * caar = deref(HD(car));
-      if ((TY(caar) == NAT) && EQ(d_Nat(1), NT(caar))) {
+      if ((IS_NAT(caar)) && EQ1(NT(caar))) {
         // ((1 v) k)
         Value * v = deref(TL(car));
         Value * k = TL(x_);
