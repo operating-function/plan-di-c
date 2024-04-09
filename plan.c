@@ -1138,6 +1138,8 @@ u64 nat_to_u64(Nat x) {
   return x.direct;
 }
 
+// TODO takes a Value * arg (GC unsafe)
+//
 // stack invariant: kal leaves 1 entry on the bottom of the stack: the
 // evaluation of `x`.
 //
@@ -1200,6 +1202,7 @@ Node * get_let_spine(Value * x) {
   return cons((void *)x_, NULL);
 }
 
+// TODO takes a Value * arg (GC unsafe)
 void eval_law(u64 n, Value * x) {
   char lab[40];
   sprintf(lab, "eval_law %lu", n);
@@ -1228,6 +1231,7 @@ void eval_law(u64 n, Value * x) {
   }
 }
 
+// TODO takes a Value * arg (GC unsafe)
 void law_step(Value * self, u64 depth) {
   char lab[40];
   sprintf(lab, "law_step %lu", depth);
