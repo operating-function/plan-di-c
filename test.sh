@@ -85,15 +85,6 @@ echo "let bindings"
 check "9" "(($MkLaw 0 1 1) 9)"
 check "9" "(($MkLaw 0 1 (1 1 2)) 9)"
 
-echo "refer to later binder from an earlier one"
-check "7" "($MkLaw 0 1 (1 3 (1 7 2)) 9)"
-
-echo "more complex example"
-check "(1 (0 2))" "($MkLaw 0 1 (1 (0 (2 0) 3) (1 (2 2) (0 1 2))) 1)"
-
-echo "trivial cycles are okay if not used"
-check "7" "($MkLaw 0 1 (1 7 (1 3 2)) 9)"
-
 echo "plan case"
 check "(7 (4 5 6) 7)" "($PlanCase 7 7 7 7 (4 5 6 7))"
 
@@ -130,6 +121,15 @@ check "(0 9999 10000 10001 10003 10004)" "($Map ($Add 9999) (0 0 1 2 4 5))"
 
 echo "infinite values"
 check "1" "($AppHead $Inf1s)"
+
+echo "refer to later binder from an earlier one"
+check "7" "($MkLaw 0 1 (1 3 (1 7 2)) 9)"
+
+echo "more complex example"
+check "(1 (0 2))" "($MkLaw 0 1 (1 (0 (2 0) 3) (1 (2 2) (0 1 2))) 1)"
+
+echo "trivial cycles are okay if not used"
+check "7" "($MkLaw 0 1 (1 7 (1 3 2)) 9)"
 
 # TODO
 # echo "moderate-length symbols"
