@@ -1296,10 +1296,16 @@ void eval_law(u64 n) {
   Value * x = pop_deref();
   Node * nodes = get_let_spine(x);
   int len = length_list(nodes);
+  free(nodes); // GC could invalidate nodes, so we'll recompute after allocating
+  //
   if (len == 0) crash("eval_law: empty get_let_spine");
   u64 m = len - 1; // sub 1 b/c the final body is the last element
-  alloc(m);
-  // TODO GC: nodes might be invalidated b/c GC could run during `alloc`
+  stack_grow(m);
+  push_val(x);
+  stack_fill_holes(1, m);
+  // re-get let-spine, as things could have moved during GC
+  x = pop_deref();
+  nodes = get_let_spine(x);
   Node * go = nodes;
   for (u64 i = 0; i < m; i++) {
     push_val((Value *)go->ptr);
