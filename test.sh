@@ -117,8 +117,8 @@ check "7" "($Times $Inc 3 4)"
 check "10" "($Add 4 6)"
 check "%d" "($Times $Inc 41 59)"
 echo Mul
-echo TODO FIXME "44" "($Mul 4 11)"
-echo TODO FIXME "49" "($Mul 7 7)"
+check "44" "($Mul 4 11)"
+check "49" "($Mul 7 7)"
 
 echo "cnst/ignore"
 check "11" "($Cnst 11 7)"
