@@ -1135,13 +1135,11 @@ u64 nat_to_u64(Nat x) {
   return x.direct;
 }
 
-// TODO I think all calls to alloc need to have all relevant values on the
-// stack, so that GC can find them?
-
-// stack invariant:
-// kal has expects a hole alloc-ed for it already. kal leaves 1 entry on the
-// bottom of the stack: the evaluation of `x`. kal does not update the hole,
-// but expects external code to handle that.
+// stack invariant: kal leaves 1 entry on the bottom of the stack: the
+// evaluation of `x`.
+//
+// kal expects `n` to be the right value for any var-refs in `x` to be at the
+// correct depth when they are subtracted from `n`.
 void kal(u64 n, Value * x) {
   char lab[40];
   sprintf(lab, "kal %lu", n);
