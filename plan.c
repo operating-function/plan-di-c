@@ -1199,8 +1199,7 @@ void eval_law(u64 n, Value * x) {
         // ((1 v) k)
         Value * v = deref(TL(car));
         Value * k = deref(TL(x_));
-        // TODO I think `n+1` is wrong?
-        kal(n+1, v);
+        kal(n, v);
         return eval_law(n+1, k);
       }
     }
