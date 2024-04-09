@@ -1,5 +1,9 @@
 all: plan plan_with_tracing
 
+.PHONY: clean
+clean:
+	rm *.o
+
 .PHONY: test
 test: plan
 	bash ./test.sh
