@@ -891,7 +891,6 @@ void write_dot_extra(char *label, char *extra, Value * v) {
   fprintf(f, "node [shape=record,width=.1,height=.1];\n");
   fprintf(f, "nodesep=.10;\n");
   fprintf(f, "rankdir=LR;\n");
-  Node * stack_input = NULL;
   fprintf(f, "\n// stack\n");
   print_stack(f, stack_to_list());
   fprintf(f, "\n// heap\n");
