@@ -1237,7 +1237,10 @@ void law_step(Value * self, u64 depth) {
   //
   if (GT(AR(self), d_Nat(depth))) {
     // unsaturated application. this is a little weird, but works?
-    if (depth <= 1) return;
+    if (depth <= 1) {
+      write_dot("unsaturated / 0-backout");
+      return;
+    }
     backout(depth-1);
   } else {
     setup_call(depth);
