@@ -1304,10 +1304,7 @@ void eval_law(u64 n) {
     push_val(deref(TL(x)));     // => [b allocs ...]
     push_val(deref(TL(HD(x)))); // => [v b allocs ...]
     kal(n+m+1);                 // => [vres b allocs ...]
-    b = get_deref(1);
-    slide(1);                   // => [vres allocs ...]
-    update(m-i);                // => [allocs ...]
-    push_val(b);                // => [b allocs ...]
+    update((m+1)-i);            // => [b allocs ...]
   }
                                 // => [b allocs ...]
   kal(n+m);                     // => [bres allocs ...]
