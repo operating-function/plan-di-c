@@ -1320,14 +1320,12 @@ void eval_law(u64 n) {
   return slide(n+m);
 }
 
-// TODO takes a Value * arg (GC unsafe)
-void law_step(Value * self, u64 depth) {
+void law_step(u64 depth) {
   char lab[40];
   sprintf(lab, "law_step %lu", depth);
-  char extra[50];
-  sprintf(extra, "i[color=red];\ni -> %s", p_ptr(self));
-  write_dot_extra(lab, extra, self);
+  write_dot(lab);
   //
+  Value * self = pop_deref();
   if (GT(AR(self), d_Nat(depth))) {
     // unsaturated application. this is a little weird, but works?
     if (depth <= 1) {
@@ -1426,8 +1424,7 @@ void unwind(u64 depth) {
       return unwind(depth+1);
     }
     case LAW: {
-      pop();
-      return law_step(x, depth);
+      return law_step(depth);
     }
     case PIN: {
       Value * y = deref(x->p);
@@ -1466,8 +1463,7 @@ void unwind(u64 depth) {
           return unwind(depth);
         }
         case LAW: {
-          pop(); // pop law
-          return law_step(x, depth);
+          return law_step(depth);
         }
         case HOL: {
           crash("unwind: <loop>");
