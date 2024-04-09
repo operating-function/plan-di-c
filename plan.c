@@ -1236,8 +1236,9 @@ void law_step(Value * self, u64 depth) {
   write_dot_extra(lab, extra, self);
   //
   if (GT(AR(self), d_Nat(depth))) {
-    // unsaturated application
-    backout(depth);
+    // unsaturated application. this is a little weird, but works?
+    if (depth <= 1) return;
+    backout(depth-1);
   } else {
     setup_call(depth);
     push_val(self);
