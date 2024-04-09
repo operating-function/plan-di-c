@@ -59,7 +59,7 @@ check() {
   if [[ $EXIT_CODE -eq 0 ]] ; then
     echo "PASSED"
   else
-    FAILED=1
+    FAILED=$((FAILED+1))
     echo "FAILED"
   fi
 }
@@ -149,5 +149,11 @@ check "1" "($AppHead $Inf1s)"
 # else
 #   echo "large symbol PASSED";
 # fi
-#
-# exit $FAILED;
+if [[ "$FAILED" -eq 0 ]]; then
+  echo "all tests passed!"
+elif [[ "$FAILED" -eq 1 ]]; then
+  echo "1 test failed"
+else
+  echo "$FAILED tests failed"
+fi
+exit $FAILED;
