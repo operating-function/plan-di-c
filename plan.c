@@ -972,8 +972,8 @@ void clone() {
   push_val(get_deref(0));
 }
 
-// before: stack = [n1, n2,     rest..]
-// after:  stack = [app(n2,n1), rest..]
+// before: stack = [n1 n2   rest..]
+// after:  stack = [(n2 n1) rest..]
 void mk_app() {
   write_dot("mk_app");
   //
@@ -983,8 +983,8 @@ void mk_app() {
   push_val(ap);
 }
 
-// before: stack = [n1, n2,     rest..]
-// after:  stack = [app(n1,n2), rest..]
+// before: stack = [n1 n2   rest..]
+// after:  stack = [(n1 n2) rest..]
 void mk_app_rev() {
   write_dot("mk_app_rev");
   //
