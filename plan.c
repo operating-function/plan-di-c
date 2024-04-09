@@ -1326,6 +1326,8 @@ void eval_law(u64 n) {
   Node * go = nodes;
   for (u64 i = 0; i < m; i++) {
     push_val((Value *)go->ptr);
+    // TODO `kal` will here invalidate `nodes`. we need to use a stack-based
+    // method for walking thru the let-binds.
     kal(n+m);
     update(m-i);
     go = go->next;
