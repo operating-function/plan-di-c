@@ -1138,8 +1138,10 @@ u64 nat_to_u64(Nat x) {
 // TODO I think all calls to alloc need to have all relevant values on the
 // stack, so that GC can find them?
 
-// stack invariant: kal leaves 1 entry on the bottom of the stack: the
-// evaluation of `x`.
+// stack invariant:
+// kal has expects a hole alloc-ed for it already. kal leaves 1 entry on the
+// bottom of the stack: the evaluation of `x`. kal does not update the hole,
+// but expects external code to handle that.
 void kal(u64 n, Value * x) {
   char lab[40];
   sprintf(lab, "kal %lu", n);
@@ -1147,14 +1149,11 @@ void kal(u64 n, Value * x) {
   sprintf(extra, "i -> N%p", x);
   write_dot_extra(lab, extra, x);
   //
-  alloc(1);
-  //
   Value * x_ = deref(x);
   if (TY(x_) == NAT) {
     Nat x_nat = NT(x_);
     if (LTE(x_nat, d_Nat(n))) {
-      push((n+1) - nat_to_u64(x_nat));
-      return update(1);
+      return push(n - nat_to_u64(x_nat));
     }
   }
   if (TY(x_) == APP) {
@@ -1165,21 +1164,18 @@ void kal(u64 n, Value * x) {
         // ((0 f) y)
         Value * f = deref(TL(car));
         Value * y = deref(TL(x_));
-        kal(n+1, f);
-        kal(n+2, y);
+        kal(n,   f);
+        kal(n+1, y);
         mk_app();
-        eval();
-        return update(1);
+        return eval();
       }
     } else if ((TY(car) == NAT) && EQ(NT(car), d_Nat(2))) {
       // (2 y)
       Value * y = deref(TL(x_));
-      push_val(y);
-      return update(1);
+      return push_val(y);
     }
   }
   push_val(x_);
-  return update(1);
 }
 
 // this list will never be empty. it is either a singleton - indicating no lets
@@ -1222,7 +1218,9 @@ void eval_law(u64 n, Value * x) {
       update(m-i);
       go = go->next;
     }
-    return kal(n+m, (Value *)go->ptr);
+    kal(n+m, (Value *)go->ptr);
+    free_list(nodes, false);
+    return;
   } else {
     kal(n, x);
     return slide(n+1);
