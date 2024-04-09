@@ -1288,27 +1288,6 @@ loop:
   return count;
 }
 
-// this list will never be empty. it is either a singleton - indicating no lets
-// and just a body. or multiple elements, where the first is the first/outermost
-// let.
-Node * get_let_spine(Value * x) {
-  Node * ls = NULL;
-  Value * x_ = deref(x);
-  if (TY(x_) == APP) {
-    Value * car = deref(HD(x_));
-    if (TY(car) == APP) {
-      Value * caar = deref(HD(car));
-      if ((IS_NAT(caar)) && EQ1(NT(caar))) {
-        // ((1 v) k)
-        Value * v = deref(TL(car));
-        Value * k = TL(x_);
-        return cons((void *)v, get_let_spine(k));
-      }
-    }
-  }
-  return cons((void *)x_, NULL);
-}
-
 void eval_law(u64 n) {
   char lab[40];
   sprintf(lab, "eval_law %lu", n);
@@ -1321,21 +1300,21 @@ void eval_law(u64 n) {
   push_val(x);
   stack_fill_holes(1, m);
   //
-  x = pop_deref();
-  Node * nodes = get_let_spine(x);
-  Node * go = nodes;
+  Value * b;
   for (u64 i = 0; i < m; i++) {
-    push_val((Value *)go->ptr);
-    // TODO `kal` will here invalidate `nodes`. we need to use a stack-based
-    // method for walking thru the let-binds.
-    kal(n+m);
-    update(m-i);
-    go = go->next;
+                                // => [((1 v) b) allocs ...]
+    x = pop_deref();            // => [allocs ...]
+    push_val(deref(TL(x)));     // => [b allocs ...]
+    push_val(deref(TL(HD(x)))); // => [v b allocs ...]
+    kal(n+m+1);                 // => [vres b allocs ...]
+    b = get_deref(1);
+    slide(1);                   // => [vres allocs ...]
+    update(m-i);                // => [allocs ...]
+    push_val(b);                // => [b allocs ...]
   }
-  push_val((Value *)go->ptr);
-  kal(n+m);
+                                // => [b allocs ...]
+  kal(n+m);                     // => [bres allocs ...]
   eval(); // TODO why is this needed?
-  free_list(nodes, false);
   return slide(n+m);
 }
 
