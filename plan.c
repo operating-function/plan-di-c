@@ -964,9 +964,6 @@ void write_dot_extra(char *label, char *extra, Value * v) {
   fclose(f);
 }
 
-// I think this *should* work. one issue is that eval_law does not use the
-// stack for its values. I believe this makes it "not GC safe" and is smth
-// we'll want to change.
 void write_dot(char *label) {
   write_dot_extra(label, "", NULL);
 }
