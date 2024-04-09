@@ -1233,31 +1233,30 @@ Node * get_let_spine(Value * x) {
   return cons((void *)x_, NULL);
 }
 
-// TODO takes a Value * arg (GC unsafe)
-void eval_law(u64 n, Value * x) {
+void eval_law(u64 n) {
   char lab[40];
   sprintf(lab, "eval_law %lu", n);
-  char extra[50];
-  sprintf(extra, "i[color=red];\ni -> N%p", x);
-  write_dot_extra(lab, extra, x);
+  write_dot(lab);
   //
+  Value * x = pop_deref();
   Node * nodes = get_let_spine(x);
   int len = length_list(nodes);
   if (len == 0) crash("eval_law: empty get_let_spine");
   u64 m = len - 1; // sub 1 b/c the final body is the last element
   alloc(m);
+  // TODO GC: nodes might be invalidated b/c GC could run during `alloc`
   Node * go = nodes;
   for (u64 i = 0; i < m; i++) {
     push_val((Value *)go->ptr);
-    kal(n+m+1);
+    kal(n+m);
     update(m-i);
     go = go->next;
   }
   push_val((Value *)go->ptr);
-  kal(n+m+1);
+  kal(n+m);
   eval(); // TODO why is this needed?
   free_list(nodes, false);
-  return slide(n+m+1);
+  return slide(n+m);
 }
 
 // TODO takes a Value * arg (GC unsafe)
@@ -1280,7 +1279,8 @@ void law_step(Value * self, u64 depth) {
     push_val(self);
     flip_stack(depth+1);
     u64 ar = nat_to_u64(AR(self));
-    eval_law(ar, BD(self));
+    push_val(BD(self));
+    eval_law(ar+1);
     if (ar < depth) {
       // oversaturated application
       handle_oversaturated_application(depth - ar);
