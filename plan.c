@@ -1182,16 +1182,12 @@ void kal(u64 n, Value * x) {
   return update(1);
 }
 
-void eval_law(u64 n, Value * x) {
-  char lab[40];
-  sprintf(lab, "eval_law %lu", n);
-  char extra[20];
-  sprintf(extra, "i -> N%p", x);
-  write_dot_extra(lab, extra, x);
-  //
+// this list will never be empty. it is either a singleton - indicating no lets
+// and just a body. or multiple elements, where the first is the first/outermost
+// let.
+Node * get_let_spine(Value * x) {
+  Node * ls = NULL;
   Value * x_ = deref(x);
-  // TODO need to handle the "multi-let" case, where we have a spine of
-  // `(1 v0 (1 v1 ...))` and we want to let-rec them in parallel.
   if (TY(x_) == APP) {
     Value * car = deref(HD(x_));
     if (TY(car) == APP) {
@@ -1199,14 +1195,38 @@ void eval_law(u64 n, Value * x) {
       if ((TY(caar) == NAT) && EQ(d_Nat(1), NT(caar))) {
         // ((1 v) k)
         Value * v = deref(TL(car));
-        Value * k = deref(TL(x_));
-        kal(n, v);
-        return eval_law(n+1, k);
+        Value * k = TL(x_);
+        return cons((void *)v, get_let_spine(k));
       }
     }
   }
-  kal(n, x);
-  return slide(n+1);
+  return cons((void *)x_, NULL);
+}
+
+void eval_law(u64 n, Value * x) {
+  char lab[40];
+  sprintf(lab, "eval_law %lu", n);
+  char extra[20];
+  sprintf(extra, "i -> N%p", x);
+  write_dot_extra(lab, extra, x);
+  //
+  Node * nodes = get_let_spine(x);
+  int len = length_list(nodes);
+  if (len == 0) crash("eval_law: empty get_let_spine");
+  if (len > 1) {
+    u64 m = len - 1; // sub 1 b/c the final body is the last element
+    alloc(m);
+    Node * go = nodes;
+    for (u64 i = 0; i < len-1; i++) {
+      kal(n+m, (Value *)go->ptr);
+      update(m-i);
+      go = go->next;
+    }
+    return kal(n+m, (Value *)go->ptr);
+  } else {
+    kal(n, x);
+    return slide(n+1);
+  }
 }
 
 void law_step(Value * self, u64 depth) {

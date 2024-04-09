@@ -31,8 +31,8 @@ bool member_list(void *ptr, Node *head) {
   return false;
 }
 
-int length_list(Node *head) {
-  int len = 0;
+u64 length_list(Node *head) {
+  u64 len = 0;
   while (head != NULL) {
     head = head->next;
     len++;

@@ -23,7 +23,7 @@ int main() {
   printf("member_list 1:  %s\n", member_list((void *) 1,  test)?"true":"false");
   printf("member_list 11: %s\n", member_list((void *) 11, test)?"true":"false");
 
-  printf("len test: %d\n", length_list(test));
+  printf("len test: %lu\n", length_list(test));
 
   printf("printing test:\n");
   print_u64_list(test);

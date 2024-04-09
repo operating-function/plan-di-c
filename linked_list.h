@@ -1,4 +1,7 @@
 #include <stdbool.h>
+#include <inttypes.h>
+
+typedef uint64_t u64;
 
 typedef struct Node {
   void *ptr;
@@ -13,6 +16,6 @@ bool null_list(Node *head);
 
 bool member_list(void *ptr, Node *head);
 
-int length_list(Node *head);
+u64 length_list(Node *head);
 
 void free_list(Node *head, bool free_contents);
