@@ -994,6 +994,15 @@ void mk_app_rev() {
   push_val(ap);
 }
 
+// before: stack = [n1 n2   rest..]
+// after:  stack = [n2 n1   rest..]
+void swap() {
+  Value * n1 = pop();
+  Value * n2 = pop();
+  push_val(n1);
+  push_val(n2);
+}
+
 void alloc(u64 count) {
   char lab[20];
   sprintf(lab, "alloc %lu", count);
@@ -1154,47 +1163,53 @@ u64 nat_to_u64(Nat x) {
   return x.direct;
 }
 
-// TODO takes a Value * arg (GC unsafe)
-//
-// stack invariant: kal leaves 1 entry on the bottom of the stack: the
-// evaluation of `x`.
+// stack invariant: kal receives its arg `x` at the bottom of the stack. it
+// replaces `x` w/ the evaluation of `x`.
 //
 // kal expects `n` to be the right value for any var-refs in `x` to be at the
-// correct depth when they are subtracted from `n`.
-void kal(u64 n, Value * x) {
+// correct depth when they are subtracted from `n`. `n` must take `x` into
+// account.
+void kal(u64 n) {
   char lab[40];
   sprintf(lab, "kal %lu", n);
-  char extra[50];
-  sprintf(extra, "i[color=red];\ni -> N%p", x);
-  write_dot_extra(lab, extra, x);
+  write_dot(lab);
   //
-  Value * x_ = deref(x);
-  if (IS_NAT(x_)) {
-    Nat x_nat = NT(x_);
+  Value * x = get_deref(0);
+  if (IS_NAT(x)) {
+    Nat x_nat = NT(x);
     if (LTE(x_nat, d_Nat(n))) {
-      return push(n - nat_to_u64(x_nat));
+      push(n - nat_to_u64(x_nat));
+      goto end;
     }
+    goto raw_const;
   }
-  if (TY(x_) == APP) {
-    Value * car = deref(HD(x_));
+  if (TY(x) == APP) {
+    Value * car = deref(HD(x));
     if (TY(car) == APP) {
       Value * caar = deref(HD(car));
       if ((IS_NAT(caar)) && EQZ(NT(caar))) {
-        // ((0 f) y)
+        // x: ((0 f) y)
         Value * f = deref(TL(car));
-        Value * y = deref(TL(x_));
-        kal(n,   f);
-        kal(n+1, y);
-        mk_app();
-        return eval();
+        Value * y = deref(TL(x)); // => [(f y) ...]
+        push_val(y);              // => [y (f y) ...]
+        push_val(f);              // => [f y (f y) ...]
+        kal(n+2);                 // => [fres y (f y) ..]
+        swap();                   // => [y fres (f y) ..]
+        kal(n+2);                 // => [yres fres (f y) ...]
+        mk_app();                 // => [(fres yres) (f y) ...]
+        eval();                   // => [app_res (f y) ...]
+        goto end;
       }
     } else if ((IS_NAT(car)) && EQ2(NT(car))) {
       // (2 y)
-      Value * y = deref(TL(x_));
-      return push_val(y);
+      push_val(deref(TL(x)));
+      goto end;
     }
   }
-  push_val(x_);
+raw_const:
+  push_val(x);
+end:
+  return slide(1);
 }
 
 // this list will never be empty. it is either a singleton - indicating no lets
@@ -1233,11 +1248,13 @@ void eval_law(u64 n, Value * x) {
   alloc(m);
   Node * go = nodes;
   for (u64 i = 0; i < m; i++) {
-    kal(n+m, (Value *)go->ptr);
+    push_val((Value *)go->ptr);
+    kal(n+m+1);
     update(m-i);
     go = go->next;
   }
-  kal(n+m, (Value *)go->ptr);
+  push_val((Value *)go->ptr);
+  kal(n+m+1);
   eval(); // TODO why is this needed?
   free_list(nodes, false);
   return slide(n+m+1);
