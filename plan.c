@@ -1191,6 +1191,8 @@ void eval_law(u64 n, Value * x) {
   write_dot_extra(lab, extra, x);
   //
   Value * x_ = deref(x);
+  // TODO need to handle the "multi-let" case, where we have a spine of
+  // `(1 v0 (1 v1 ...))` and we want to let-rec them in parallel.
   if (TY(x_) == APP) {
     Value * car = deref(HD(x_));
     if (TY(car) == APP) {
