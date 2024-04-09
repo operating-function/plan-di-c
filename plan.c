@@ -73,6 +73,7 @@ typedef struct Value {
 ////////////////////////////////////////////////////////////////////////////////
 //  Globals
 
+#define STACK_SIZE 4096
 Value **stack;
 u64 sp;
 
@@ -782,7 +783,6 @@ Value * pop() {
   return stack[sp];
 }
 
-// TODO when to use this vs pop?
 Value * pop_deref() {
   return deref(pop());
 }
@@ -937,7 +937,7 @@ void push_val(Value *x) {
   char extra[20];
   sprintf(extra, "i -> N%p", x);
   write_dot_extra("push_val", extra, x);
-  // TODO bounds check
+  if ((sp+1) > STACK_SIZE) crash("push_val: stack overflow");
   stack[sp] = x;
   sp++;
 }
@@ -1421,7 +1421,6 @@ void force_whnf() {
   }
 }
 
-// TODO something is weird w/ force
 void force() {
   write_dot("force");
   //
@@ -1443,7 +1442,7 @@ Value * run(Value * v) {
   trace_print("RUN[%s]\n", print_value(v));
   trace_print("  ->\n", print_value(v));
   //
-  stack = malloc(4096*sizeof(Value *));
+  stack = malloc(STACK_SIZE*sizeof(Value *));
   sp = 0;
   //
   push_val(v);
