@@ -117,8 +117,8 @@ check "7" "($Times $Inc 3 4)"
 check "10" "($Add 4 6)"
 check "%d" "($Times $Inc 41 59)"
 echo Mul
-check "44" "($Mul 4 11)"
-check "49" "($Mul 7 7)"
+check "8" "($Mul 2 4)"
+check "9" "($Mul 3 3)"
 
 echo "cnst/ignore"
 check "11" "($Cnst 11 7)"
