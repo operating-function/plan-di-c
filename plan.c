@@ -803,9 +803,13 @@ Value * pop_deref() {
   return deref(pop());
 }
 
-Value * get(u64 idx) {
+Value ** get_ptr(u64 idx) {
   if (idx >= sp) crash("get: indexed off stack");
-  return stack[(sp-1)-idx];
+  return &stack[(sp-1)-idx];
+}
+
+Value * get(u64 idx) {
+  return *get_ptr(idx);
 }
 
 Value * get_deref(u64 idx) {
@@ -818,14 +822,24 @@ Value * get_deref(u64 idx) {
 int dot_count = 0;
 char * dot_file_path = "./dot";
 
+char * p_ptr(Value * x) {
+  char * buf = malloc(20*sizeof(char));
+  if (x == NULL) {
+    sprintf(buf, "N_null");
+  } else {
+    sprintf(buf, "N_%p", x);
+  }
+  return buf;
+}
+
 void print_heap(FILE *f, Node *input, Node *seen) {
   // empty input - done
   if (null_list(input)) return;
   Value * v = (Value *)input->ptr;
   input = input->next;
   //
-  // if seen, recur on tail of input
-  if (member_list((void *)v, seen)) {
+  // if NULL or seen, recur on tail of input
+  if ((v == NULL) || (member_list((void *)v, seen))) {
     return print_heap(f, input, seen);
   }
   //
@@ -833,39 +847,61 @@ void print_heap(FILE *f, Node *input, Node *seen) {
   // to `input`.
   switch (TY(v)) {
     case PIN: {
-      fprintf(f, "N%p [label=pin];\n", v);
-      fprintf(f, "N%p -> N%p [arrowhead=box];\n", v, IT(v));
+      char * v_p = p_ptr(v);
+      char * i_p = p_ptr(IT(v));
+      fprintf(f, "%s [label=pin];\n", v_p);
+      fprintf(f, "%s -> %s [arrowhead=box];\n", v_p, i_p);
+      free(v_p);
+      free(i_p);
       input = cons((void *)IT(v), input);
       break;
     }
     case LAW: {
       char * nm_s = print_nat(NM(v));
       char * ar_s = print_nat(AR(v));
-      fprintf(f, "N%p [label=\"law nm:%s ar:%s\"];\n", v, nm_s, ar_s);
-      fprintf(f, "N%p -> N%p [label=bd];\n", v, BD(v));
+      char * v_p = p_ptr(v);
+      char * b_p = p_ptr(BD(v));
+      fprintf(f, "%s [label=\"law nm:%s ar:%s\"];\n", v_p, nm_s, ar_s);
+      fprintf(f, "%s -> %s [label=bd];\n", v_p, b_p);
+      free(v_p);
+      free(b_p);
       input = cons((void *)BD(v), input);
       break;
     }
     case APP: {
-      fprintf(f, "N%p [label=\"@\"]", v);
-      fprintf(f, "N%p -> N%p [arrowhead=crow];\n", v, HD(v));
-      fprintf(f, "N%p -> N%p [arrowhead=vee];\n",  v, TL(v));
+      char * v_p = p_ptr(v);
+      char * h_p = p_ptr(HD(v));
+      char * t_p = p_ptr(TL(v));
+      fprintf(f, "%s [label=\"@\"]", v_p);
+      fprintf(f, "%s -> %s [arrowhead=crow];\n", v_p, h_p);
+      fprintf(f, "%s -> %s [arrowhead=vee];\n",  v_p, t_p);
+      free(v_p);
+      free(h_p);
+      free(t_p);
       input = cons((void *)HD(v), input);
       input = cons((void *)TL(v), input);
       break;
     }
     case NAT: {
-      fprintf(f, "N%p [label=%s];\n", v, print_nat(NT(v)));
+      char * v_p = p_ptr(v);
+      fprintf(f, "%s [label=%s];\n", v_p, print_nat(NT(v)));
+      free(v_p);
       break;
     }
     case IND: {
-      fprintf(f, "N%p [label=ind];\n", v);
-      fprintf(f, "N%p -> N%p [arrowhead=dot];\n", v, IN(v));
+      char * v_p = p_ptr(v);
+      char * i_p = p_ptr(IN(v));
+      fprintf(f, "%s [label=ind];\n", v_p);
+      fprintf(f, "%s -> %s [arrowhead=dot];\n", v_p, i_p);
+      free(v_p);
+      free(i_p);
       input = cons((void *)IN(v), input);
       break;
     }
     case HOL: {
-      fprintf(f, "N%p [label=hole];\n", v);
+      char * v_p = p_ptr(v);
+      fprintf(f, "%s [label=hole];\n", v_p);
+      free(v_p);
       break;
     }
   }
@@ -885,7 +921,9 @@ void print_stack(FILE *f, Node *input) {
   int i = 0;
   while (input != NULL) {
     Value * v = (Value *)input->ptr;
-    fprintf(f, "stack:s%d -> N%p;\n", i, v);
+    char * v_p = p_ptr(v);
+    fprintf(f, "stack:s%d -> %s;\n", i, v_p);
+    free(v_p);
     input = input->next;
     i++;
   }
@@ -951,7 +989,7 @@ void update(u64 idx) {
 
 void push_val(Value *x) {
   char extra[50];
-  sprintf(extra, "i[color=red];\ni -> N%p", x);
+  sprintf(extra, "i[color=red];\ni -> %s", p_ptr(x));
   write_dot_extra("push_val", extra, x);
   if ((sp+1) > STACK_SIZE) crash("push_val: stack overflow");
   stack[sp] = x;
@@ -1003,14 +1041,31 @@ void swap() {
   push_val(n2);
 }
 
+void stack_grow(u64 count) {
+  char lab[20];
+  sprintf(lab, "stack_grow %lu", count);
+  write_dot(lab);
+  for (u64 i = 0; i < count; i++) {
+    push_val(NULL);
+  }
+}
+
+void stack_fill_holes(u64 offset, u64 count) {
+  char lab[40];
+  sprintf(lab, "stack_fill_holes offset:%lu count:%lu", offset, count);
+  write_dot(lab);
+  for (u64 i = 0; i < count; i++) {
+    *(get_ptr(i+offset)) = a_Hol();
+  }
+}
+
 void alloc(u64 count) {
   char lab[20];
   sprintf(lab, "alloc %lu", count);
   write_dot(lab);
   //
-  for (u64 i = 0; i < count; i++) {
-    push_val(a_Hol());
-  }
+  stack_grow(count);
+  stack_fill_holes(0, count);
 }
 
 void slide(u64 count) {
@@ -1264,7 +1319,7 @@ void law_step(Value * self, u64 depth) {
   char lab[40];
   sprintf(lab, "law_step %lu", depth);
   char extra[50];
-  sprintf(extra, "i[color=red];\ni -> N%p", self);
+  sprintf(extra, "i[color=red];\ni -> %s", p_ptr(self));
   write_dot_extra(lab, extra, self);
   //
   if (GT(AR(self), d_Nat(depth))) {
