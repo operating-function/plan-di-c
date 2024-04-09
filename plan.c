@@ -1238,6 +1238,7 @@ void eval_law(u64 n, Value * x) {
     go = go->next;
   }
   kal(n+m, (Value *)go->ptr);
+  eval(); // TODO why is this needed?
   free_list(nodes, false);
   return slide(n+m+1);
 }
