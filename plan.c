@@ -135,6 +135,8 @@ static inline bool IS_NAT(Value * x) {
   return (TY(x) == NAT);
 }
 
+// TODO apply `deref` on all accessor return values?
+
 static inline Value * IT(Value * x) {
   x = deref(x);
   #ifdef CHECK_TAGS
@@ -1267,6 +1269,25 @@ end:
   return slide(1);
 }
 
+// 0 indicates no lets
+u64 length_let_spine(Value * x) {
+  u64 count = 0;
+loop:
+  if (TY(x) == APP) {
+    Value * car = deref(HD(x));
+    if (TY(car) == APP) {
+      Value * caar = deref(HD(car));
+      if ((IS_NAT(caar)) && EQ1(NT(caar))) {
+        // ((1 v) k)
+        count++;
+        x = deref(TL(x));
+        goto loop;
+      }
+    }
+  }
+  return count;
+}
+
 // this list will never be empty. it is either a singleton - indicating no lets
 // and just a body. or multiple elements, where the first is the first/outermost
 // let.
@@ -1294,18 +1315,14 @@ void eval_law(u64 n) {
   write_dot(lab);
   //
   Value * x = pop_deref();
-  Node * nodes = get_let_spine(x);
-  int len = length_list(nodes);
-  free(nodes); // GC could invalidate nodes, so we'll recompute after allocating
+  u64 m = length_let_spine(x);
   //
-  if (len == 0) crash("eval_law: empty get_let_spine");
-  u64 m = len - 1; // sub 1 b/c the final body is the last element
   stack_grow(m);
   push_val(x);
   stack_fill_holes(1, m);
-  // re-get let-spine, as things could have moved during GC
+  //
   x = pop_deref();
-  nodes = get_let_spine(x);
+  Node * nodes = get_let_spine(x);
   Node * go = nodes;
   for (u64 i = 0; i < m; i++) {
     push_val((Value *)go->ptr);
