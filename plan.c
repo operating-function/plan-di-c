@@ -279,6 +279,7 @@ void print_value_app(Value * v, char * buf, int recur) {
 void print_nat_internal(Nat, char *);
 
 void print_value_internal(Value * v, char * buf, int recur) {
+  v = deref(v);
   if (recur > 10) {
     sprintf(buf + strlen(buf), "‥");
     return;
@@ -309,6 +310,8 @@ void print_value_internal(Value * v, char * buf, int recur) {
     case HOL:
       sprintf(buf + strlen(buf), "<>");
       break;
+    case IND:
+      crash("print_value_internal: got IND");
   }
 }
 
