@@ -934,8 +934,8 @@ void update(u64 idx) {
 }
 
 void push_val(Value *x) {
-  char extra[20];
-  sprintf(extra, "i -> N%p", x);
+  char extra[50];
+  sprintf(extra, "i[color=red];\ni -> N%p", x);
   write_dot_extra("push_val", extra, x);
   if ((sp+1) > STACK_SIZE) crash("push_val: stack overflow");
   stack[sp] = x;
@@ -1146,8 +1146,8 @@ u64 nat_to_u64(Nat x) {
 void kal(u64 n, Value * x) {
   char lab[40];
   sprintf(lab, "kal %lu", n);
-  char extra[20];
-  sprintf(extra, "i -> N%p", x);
+  char extra[50];
+  sprintf(extra, "i[color=red];\ni -> N%p", x);
   write_dot_extra(lab, extra, x);
   //
   Value * x_ = deref(x);
@@ -1203,8 +1203,8 @@ Node * get_let_spine(Value * x) {
 void eval_law(u64 n, Value * x) {
   char lab[40];
   sprintf(lab, "eval_law %lu", n);
-  char extra[20];
-  sprintf(extra, "i -> N%p", x);
+  char extra[50];
+  sprintf(extra, "i[color=red];\ni -> N%p", x);
   write_dot_extra(lab, extra, x);
   //
   Node * nodes = get_let_spine(x);
@@ -1231,8 +1231,8 @@ void eval_law(u64 n, Value * x) {
 void law_step(Value * self, u64 depth) {
   char lab[40];
   sprintf(lab, "law_step %lu", depth);
-  char extra[20];
-  sprintf(extra, "i -> N%p", self);
+  char extra[50];
+  sprintf(extra, "i[color=red];\ni -> N%p", self);
   write_dot_extra(lab, extra, self);
   //
   if (GT(AR(self), d_Nat(depth))) {
