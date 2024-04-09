@@ -1211,14 +1211,14 @@ void eval_law(u64 n, Value * x) {
     u64 m = len - 1; // sub 1 b/c the final body is the last element
     alloc(m);
     Node * go = nodes;
-    for (u64 i = 0; i < len-1; i++) {
+    for (u64 i = 0; i < m; i++) {
       kal(n+m, (Value *)go->ptr);
       update(m-i);
       go = go->next;
     }
     kal(n+m, (Value *)go->ptr);
     free_list(nodes, false);
-    return;
+    return slide(n+m+1);
   } else {
     kal(n, x);
     return slide(n+1);
