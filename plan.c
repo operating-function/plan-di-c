@@ -603,6 +603,11 @@ Nat Dec(Nat n) {
   }
 }
 
+// TODO
+Nat Add(Nat a, Nat b) {
+  crash("Add: unimpl");
+}
+
 Nat Sub(Nat a, Nat b) {
   if ((a.type == SMALL) && (b.type == SMALL)) {
     if (a.direct < b.direct) crash("subtract underflow");
@@ -649,6 +654,42 @@ Nat Sub(Nat a, Nat b) {
   }
   return (Nat){ .type = BIG, .size = new_size, .buf = new_buf };
 }
+
+// TODO
+Nat Mul(Nat a, Nat b) {
+  crash("Mul: unimpl");
+}
+
+////////////////////////////////////////////////////////////////////////////////
+//  Jets
+
+typedef struct Jet {
+  char * name;
+  u64 arity;
+  Value * (*jet_exec)(Value **args);
+} Jet;
+
+Value * to_nat(Value * x) {
+  return (IS_NAT(x)) ? x : a_Nat(0);
+}
+
+Value * add_jet(Value **args) {
+  Nat x = NT(to_nat(args[0]));
+  Nat y = NT(to_nat(args[1]));
+  return a_Big(Add(x, y));
+}
+
+Value * mul_jet(Value **args) {
+  Nat x = NT(to_nat(args[0]));
+  Nat y = NT(to_nat(args[1]));
+  return a_Big(Mul(x, y));
+}
+
+#define NUM_JETS 2
+Jet jet_table[NUM_JETS] =
+  { (Jet) {.name = "_Add", .arity = 2, .jet_exec = add_jet }
+  , (Jet) {.name = "_Mul", .arity = 2, .jet_exec = mul_jet }
+  };
 
 ////////////////////////////////////////////////////////////////////////////////
 //  Seeds
