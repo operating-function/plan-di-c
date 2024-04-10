@@ -574,7 +574,7 @@ Nat Dec(Nat n) {
   switch(n.type) {
     case SMALL:
       if (n.direct == 0) {
-        crash("decrement underflow");
+        return d_Nat(0);
       }
       return (Nat){ .type = SMALL, .direct = (n.direct-1) };
     case BIG: {
@@ -610,10 +610,12 @@ Nat Add(Nat a, Nat b) {
 
 Nat Sub(Nat a, Nat b) {
   if ((a.type == SMALL) && (b.type == SMALL)) {
-    if (a.direct < b.direct) crash("subtract underflow");
+    if (a.direct < b.direct)
+      return d_Nat(0);
     return (Nat){ .type = SMALL, .direct = (a.direct - b.direct) };
   }
-  if ((a.type == SMALL) && (b.type == BIG)) crash("subtract underflow");
+  if ((a.type == SMALL) && (b.type == BIG))
+    return d_Nat(0);
 
   u64 new_size = a.size;
   u64 * new_buf = malloc(new_size * sizeof(u64));
@@ -624,7 +626,8 @@ Nat Sub(Nat a, Nat b) {
     *b_buf = b.direct;
     b = (Nat){ .type = BIG, .size = 1, .buf = b_buf };
   }
-  if (a.size < b.size) crash("subtract underflow");
+  if (a.size < b.size)
+    return d_Nat(0);
 
   for (int i=0; i<b.size; i++) {
     if (new_buf[i] < b.buf[i]) {
@@ -632,7 +635,7 @@ Nat Sub(Nat a, Nat b) {
       int c = i + 1;
       while (true) {
         if (c >= new_size) {
-          crash("subtract underflow");
+          return d_Nat(0);
         }
         if (new_buf[c] == 0) {
           new_buf[c] = UINT64_MAX;
@@ -679,15 +682,22 @@ Value * add_jet(Value **args) {
   return a_Big(Add(x, y));
 }
 
+Value * sub_jet(Value **args) {
+  Nat x = NT(to_nat(args[0]));
+  Nat y = NT(to_nat(args[1]));
+  return a_Big(Sub(x, y));
+}
+
 Value * mul_jet(Value **args) {
   Nat x = NT(to_nat(args[0]));
   Nat y = NT(to_nat(args[1]));
   return a_Big(Mul(x, y));
 }
 
-#define NUM_JETS 2
+#define NUM_JETS 3
 Jet jet_table[NUM_JETS] =
   { (Jet) {.name = "_Add", .arity = 2, .jet_exec = add_jet }
+  , (Jet) {.name = "_Sub", .arity = 2, .jet_exec = sub_jet }
   , (Jet) {.name = "_Mul", .arity = 2, .jet_exec = mul_jet }
   };
 
@@ -1723,13 +1733,19 @@ Value *read_exp_top() {
 }
 
 int main (void) {
-  bool isInteractive = isatty(fileno(stdin));
-  again:
-    if (isInteractive) printf(">> ");
-    Value *v = read_exp_top();
-    if (!v) return 0;
-    Value * res = run(v);
-    printf("%s\n", print_value(res));
-    goto again;
-    return 0;
+  Value * x = a_Nat(2);
+  Value * y = a_Nat(3);
+  Value * arr[2] = { x, y };
+  Value * res = jet_table[1].jet_exec(arr);
+  printf("%s\n", print_value(res));
+
+  // bool isInteractive = isatty(fileno(stdin));
+  // again:
+  //   if (isInteractive) printf(">> ");
+  //   Value *v = read_exp_top();
+  //   if (!v) return 0;
+  //   Value * res = run(v);
+  //   printf("%s\n", print_value(res));
+  //   goto again;
+  //   return 0;
 }
