@@ -1,4 +1,5 @@
-#!/bin/bash
+#! /usr/bin/env nix-shell
+#! nix-shell -i bash
 
 # Copyright (c):
 # * William Hart 2010, 2013. All rights reserved.
