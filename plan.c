@@ -262,17 +262,10 @@ void check_value(Value *v) {
 
 void print_value_internal(Value*, char*, int);
 
-char * print_value_t(Value * v) {
-  if (tracing) {
-    char * buf = malloc(4096*sizeof(char));
-    print_value_internal(v, buf, 0);
-    return buf;
-  }
-  return NULL;
-}
-
 char * print_value(Value * v) {
-  char * buf = malloc(4096*sizeof(char));
+  long sz = 4096*sizeof(char);
+  char * buf = malloc(sz);
+  memset(buf, 0, sz);
   print_value_internal(v, buf, 0);
   return buf;
 }
@@ -1526,9 +1519,6 @@ void force() {
 //  Runner
 
 Value * run(Value * v) {
-  trace_print("RUN[%s]\n", print_value(v));
-  trace_print("  ->\n", print_value(v));
-  //
   stack = malloc(STACK_SIZE*sizeof(Value *));
   sp = 0;
   //
@@ -1540,7 +1530,6 @@ Value * run(Value * v) {
   print_depth--;
   write_dot("main final");
   Value *res = pop_deref();
-  trace_print("%s\n", print_value(res));
   return res;
 }
 
