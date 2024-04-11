@@ -21,6 +21,7 @@
 ////////////////////////////////////////////////////////////////////////////////
 //  Typedefs
 
+typedef uint32_t u32;
 typedef uint64_t u64;
 
 typedef enum Type {
@@ -43,7 +44,7 @@ typedef struct Nat {
     u64 direct;
     struct {
       u64 size;
-      u64 *buf;
+      nn_t nat;
     };
   };
 } Nat;
@@ -325,11 +326,8 @@ void print_value_internal(Value * v, char * buf, int recur) {
 }
 
 char * print_nat(Nat n) {
-  // TODO this is presumably unsafe for large nats?
   char * buf = malloc(512*sizeof(char));
-  if (n.type == BIG) crash("print_nat: unimpl: BIG");
-  sprintf(buf, "%lu", n.direct);
-  // print_nat_internal(n, buf);
+  print_nat_internal(n, buf);
   return buf;
 }
 
@@ -362,23 +360,14 @@ void print_nat_internal(Nat n, char * buf) {
       }
       break;
     }
-    // add is_symbol case which attempts to print nat bytes
     case BIG: {
-      char *tmp = (char*)n.buf;
+      char *tmp = (char*)n.nat;
       if (is_symbol(tmp)) {
         // TODO this is unsafe b/c we don't know how big `buf` is.
         buf[strlen(buf)] = '%';
         strcpy(buf + strlen(buf), tmp);
       } else {
-        // TODO print this as an actual integer. this seems difficult, however
-        // there is prior art in Haskell:
-        // https://hackage.haskell.org/package/base-4.18.0.0/docs/src/GHC.Show.html#integerToString
-        sprintf(buf + strlen(buf), "[");
-        sprintf(buf + strlen(buf), "%" PRIu64, n.buf[0]);
-        for (int i=1; i<n.size; i++) {
-          sprintf(buf + strlen(buf), " %" PRIu64, n.buf[i]);
-        }
-        sprintf(buf + strlen(buf), "]");
+        nn_print(n.nat, n.size);
       }
       break;
     }
@@ -444,10 +433,8 @@ bool EQ(Nat a, Nat b) {
     return (a.direct == b.direct);
   if ((a.type == BIG) && b.type == BIG) {
     if (a.size != b.size) return false;
-    for (int i=0; i<a.size; i++) {
-      if (a.buf[i] != b.buf[i]) return false;
-    }
-    return true;
+    int res = nn_equal_m(a.nat, b.nat, a.size);
+    return (res == 1);
   }
   return false;
 }
@@ -483,11 +470,8 @@ bool LT(Nat a, Nat b) {
           return false;
         case BIG:
           if (a.size != b.size) return (a.size < b.size);
-          for (int i=(a.size-1); i>=0; i--) {
-            if (a.buf[i] == b.buf[i]) continue;
-            return (a.buf[i] < b.buf[i]);
-          }
-          return false;
+          int res = nn_cmp_m(a.nat, b.nat, a.size);
+          return (res < 0);
       }
   }
 }
@@ -507,11 +491,8 @@ bool GT(Nat a, Nat b) {
           return true;
         case BIG:
           if (a.size != b.size) return (a.size > b.size);
-          for (int i=(a.size-1); i>=0; i--) {
-            if (a.buf[i] == b.buf[i]) continue;
-            return (a.buf[i] > b.buf[i]);
-          }
-          return false;
+          int res = nn_cmp_m(a.nat, b.nat, a.size);
+          return (res > 0);
       }
   }
 }
@@ -534,75 +515,14 @@ static inline void *realloc_(void *ptr, size_t sz) {
   return res;
 }
 
-// TODO can we make an in-place mutative version of this, also?
+// TODO
 Nat Inc(Nat n) {
-  switch(n.type) {
-    case SMALL:
-      if (n.direct == UINT64_MAX) {
-        u64 * buf = malloc(2*sizeof(u64));
-        buf[0] = 0;
-        buf[1] = 1;
-        return (Nat){ .type = BIG, .size = 2, .buf = buf };
-      }
-      return (Nat){ .type = SMALL, .direct = (n.direct+1) };
-    case BIG: {
-      int i = 0;
-      u64  new_size = n.size;
-      u64  *new_buf = malloc(n.size * sizeof(u64));
-      new_buf = memcpy(new_buf, n.buf, n.size*sizeof(u64));
-      while (i < n.size) {
-        if (n.buf[i] == UINT64_MAX) {
-          new_buf[i] = 0;
-          i++;
-          continue;
-        } else {
-          new_buf[i] = n.buf[i] + 1;
-          i++;
-          break;
-        }
-      }
-      if (i == n.size) {
-        new_size++;
-        realloc_(new_buf, new_size * sizeof(u64));
-        new_buf[i] = 1;
-      }
-      return (Nat){ .type = BIG, .size = new_size, .buf = new_buf };
-    }
-  }
+  crash("Dec: unimpl");
 }
 
-// TODO can we make an in-place mutative version of this, also?
+// TODO
 Nat Dec(Nat n) {
-  switch(n.type) {
-    case SMALL:
-      if (n.direct == 0) {
-        return d_Nat(0);
-      }
-      return (Nat){ .type = SMALL, .direct = (n.direct-1) };
-    case BIG: {
-      int i = 0;
-      u64  new_size = n.size;
-      u64  *new_buf = malloc(n.size * sizeof(u64));
-      new_buf = memcpy(new_buf, n.buf, n.size*sizeof(u64));
-      while (i < n.size) {
-        if (n.buf[i] == 0) {
-          new_buf[i] = UINT64_MAX;
-          i++;
-          continue;
-        } else {
-          new_buf[i] = n.buf[i] - 1;
-          i++;
-          break;
-        }
-      }
-      if ((i == n.size) && (new_buf[i-1] == 0)){
-        new_size--;
-        realloc_(new_buf, new_size * sizeof(u64));
-        new_buf[i] = UINT64_MAX;
-      }
-      return (Nat){ .type = BIG, .size = new_size, .buf = new_buf };
-    }
-  }
+  crash("Dec: unimpl");
 }
 
 // TODO
@@ -610,54 +530,9 @@ Nat Add(Nat a, Nat b) {
   crash("Add: unimpl");
 }
 
+// TODO
 Nat Sub(Nat a, Nat b) {
-  if ((a.type == SMALL) && (b.type == SMALL)) {
-    if (a.direct < b.direct)
-      return d_Nat(0);
-    return (Nat){ .type = SMALL, .direct = (a.direct - b.direct) };
-  }
-  if ((a.type == SMALL) && (b.type == BIG))
-    return d_Nat(0);
-
-  u64 new_size = a.size;
-  u64 * new_buf = malloc(new_size * sizeof(u64));
-  new_buf = memcpy(new_buf, a.buf, new_size*sizeof(u64));
-
-  if ((a.type == BIG) && (b.type == SMALL)) {
-    u64 * b_buf = malloc(sizeof(u64));
-    *b_buf = b.direct;
-    b = (Nat){ .type = BIG, .size = 1, .buf = b_buf };
-  }
-  if (a.size < b.size)
-    return d_Nat(0);
-
-  for (int i=0; i<b.size; i++) {
-    if (new_buf[i] < b.buf[i]) {
-      new_buf[i] = UINT64_MAX - ((b.buf[i] - (new_buf[i] + 1)));
-      int c = i + 1;
-      while (true) {
-        if (c >= new_size) {
-          return d_Nat(0);
-        }
-        if (new_buf[c] == 0) {
-          new_buf[c] = UINT64_MAX;
-          c++;
-        } else {
-          new_buf[c] = new_buf[c] - 1;
-          c++;
-          break;
-        }
-      }
-      if ((c == new_size) && (new_buf[c-1] == 0)){
-        new_size--;
-        realloc_(new_buf, new_size * sizeof(u64));
-      }
-
-    } else {
-      new_buf[i] = new_buf[i] - b.buf[i];
-    }
-  }
-  return (Nat){ .type = BIG, .size = new_size, .buf = new_buf };
+  crash("Sub: unimpl");
 }
 
 // TODO
@@ -785,7 +660,7 @@ Value * seed_load(u64 *buf) {
 
     u64 * big_buf = calloc(wid, sizeof(u64));
     big_buf = memcpy(big_buf, buf+used, wid*sizeof(u64));
-    Nat big_nat = (Nat){.type=BIG, .size=wid, .buf = big_buf};
+    Nat big_nat = (Nat){.type=BIG, .size=wid, .nat = NULL};
 
     *next_ref++ = a_Big(big_nat);
     used += wid;
@@ -1660,11 +1535,12 @@ Value *read_sym() {
     int len = strlen(buf);
     if (!len)    crash("Empty symbol");
     if (len > 8) {
-      int u64_sz = sizeof(u64);
-      int u64_len = (len / u64_sz) + 1;
-      u64 * nat_buf = calloc(u64_sz, u64_len);
+      int u32_sz = sizeof(u32);
+      int u32_len = (len / u32_sz) + 1;
+      nn_t nat_buf = nn_init(u32_len);
+      // TODO is this little endian?
       strcpy((char*)nat_buf, buf);
-      Nat n = (Nat){.type=BIG, .size=u64_len, .buf = nat_buf};
+      Nat n = (Nat){.type=BIG, .size=u32_len, .nat = nat_buf};
       return a_Big(n);
     } else {
       u64 word = 0;
@@ -1735,19 +1611,19 @@ Value *read_exp_top() {
 }
 
 int main (void) {
-  Value * x = a_Nat(2);
-  Value * y = a_Nat(3);
-  Value * arr[2] = { x, y };
-  Value * res = jet_table[1].jet_exec(arr);
-  printf("%s\n", print_value(res));
+  // Value * x = a_Nat(2);
+  // Value * y = a_Nat(3);
+  // Value * arr[2] = { x, y };
+  // Value * res = jet_table[1].jet_exec(arr);
+  // printf("%s\n", print_value(res));
 
-  // bool isInteractive = isatty(fileno(stdin));
-  // again:
-  //   if (isInteractive) printf(">> ");
-  //   Value *v = read_exp_top();
-  //   if (!v) return 0;
-  //   Value * res = run(v);
-  //   printf("%s\n", print_value(res));
-  //   goto again;
-  //   return 0;
+  bool isInteractive = isatty(fileno(stdin));
+  again:
+    if (isInteractive) printf(">> ");
+    Value *v = read_exp_top();
+    if (!v) return 0;
+    Value * res = run(v);
+    printf("%s\n", print_value(res));
+    goto again;
+    return 0;
 }
