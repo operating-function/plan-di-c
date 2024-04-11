@@ -575,7 +575,15 @@ Nat Sub(Nat a, Nat b) {
         break;
       }
     }
-    if (shrunk_sz != new_size) {
+    if (shrunk_sz == 2) {
+      // shrink BIG to SMALL
+      u64 direct;
+      assert (shrunk_sz * sizeof(word_t) == 8);
+      memcpy((char *)direct, nat_buf, 8);
+      nn_clear(nat_buf);
+      return (Nat){ .type = SMALL, .direct = direct };
+    } else if (shrunk_sz != new_size) {
+      // realloc
       realloc_(nat_buf, new_size * sizeof(word_t));
     }
     return (Nat){ .type = BIG, .size = shrunk_sz, .nat = nat_buf };
