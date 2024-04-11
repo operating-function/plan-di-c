@@ -138,8 +138,9 @@ check "7" "($MkLaw 0 1 (1 7 (1 3 2)) 9)"
 echo "moderate-length symbols"
 check "%fooooooooooooooooooooooooooo" "%fooooooooooooooooooooooooooo"
 
-echo "incr large sym"
-check "%gooooooooooooooooooooooo" "($Inc ($PlanCase 0 0 $Ignore 0 (%fooooooooooooooooooooooo %f)))"
+echo "incr smol sym"
+check "%gooooooooooooooooooooooo" "($Inc ($PlanCase 0 0 $Cnst 0 (%fooooooooooooooooooooooo %f)))"
+check "%g" "($Inc ($PlanCase 0 0 $Ignore 0 (%fooooooooooooooooooooooo %f)))"
 
 # TODO
 # echo "large atoms"
