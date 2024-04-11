@@ -1549,7 +1549,7 @@ Value *read_sym() {
     //   - count the total # of chars
     //   - allocate `nat_buf` using the total # chars
     //   - copy each char buf into `nat_buf`, sequentially.
-    static char buf[BUF_LEN];
+    char buf[BUF_LEN] = {0};
     char c, *out=buf;
     int buf_chars = 0;
     while (issym(c = getchar())) {
