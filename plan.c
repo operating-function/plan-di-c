@@ -1563,7 +1563,7 @@ Value *read_sym() {
       int u32_sz = sizeof(u32);
       int u32_len = (len / u32_sz) + 1;
       nn_t nat_buf = nn_init(u32_len);
-      strcpy((char*)nat_buf, buf);
+      memcpy((char*)nat_buf, buf, len);
       Nat n = (Nat){.type=BIG, .size=u32_len, .nat = nat_buf};
       return a_Big(n);
     } else {
