@@ -540,9 +540,36 @@ Nat Inc(Nat n) {
   }
 }
 
-// TODO
 Nat Dec(Nat n) {
-  crash("Dec: unimpl");
+  switch(n.type) {
+    case SMALL:
+      if (n.direct == 0) {
+        return d_Nat(0);
+      }
+      return (Nat){ .type = SMALL, .direct = (n.direct-1) };
+    case BIG: {
+      len_t new_size = n.size;
+      nn_t nat_buf = nn_init(new_size);
+      word_t c = nn_sub1(nat_buf, n.nat, n.size, 1);
+      // borrow (nonzero c) should only be possible if we underflowed a single
+      // u32. our invariant is to convert to SMALL when we reach 2 u32, so we
+      // should never encounter this case.
+      assert (c == 0);
+      if ((nat_buf[n.size] == 0)) {
+        new_size--;
+        if (new_size == 2) {
+          // shrink BIG to SMALL
+          u64 direct;
+          assert (new_size * sizeof(word_t) == 8);
+          memcpy((char *)direct, nat_buf, 8);
+          nn_clear(nat_buf);
+          return (Nat){ .type = SMALL, .direct = direct };
+        }
+        realloc_(nat_buf, new_size * sizeof(word_t));
+      }
+      return (Nat){ .type = BIG, .size = new_size, .nat = nat_buf };
+    }
+  }
 }
 
 // TODO
