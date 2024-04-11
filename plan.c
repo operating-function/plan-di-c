@@ -862,6 +862,8 @@ void print_heap(FILE *f, Node *input, Node *seen) {
       fprintf(f, "%s -> %s [label=bd];\n", v_p, b_p);
       free(v_p);
       free(b_p);
+      free(nm_s);
+      free(ar_s);
       input = cons((void *)BD(v), input);
       break;
     }
@@ -881,8 +883,10 @@ void print_heap(FILE *f, Node *input, Node *seen) {
     }
     case NAT: {
       char * v_p = p_ptr(v);
-      fprintf(f, "%s [label=%s];\n", v_p, print_nat(NT(v)));
+      char * nt_s = print_nat(NT(v));
+      fprintf(f, "%s [label=\"%s\"];\n", v_p, nt_s);
       free(v_p);
+      free(nt_s);
       break;
     }
     case IND: {
@@ -946,13 +950,15 @@ void write_dot_extra(char *label, char *extra, Value * v) {
   fprintf(f, "nodesep=.10;\n");
   fprintf(f, "rankdir=LR;\n");
   fprintf(f, "\n// stack\n");
-  print_stack(f, stack_to_list());
+  Node * s_l = stack_to_list();
+  print_stack(f, s_l);
   fprintf(f, "\n// heap\n");
-  Node * heap_input = stack_to_list();
+  Node * heap_input = s_l;
   if (v != NULL) {
     heap_input = cons((void *)v, heap_input);
   }
   print_heap(f, heap_input, NULL);
+  free(s_l);
   fprintf(f, "\n// extra\n");
   fprintf(f, "%s\n", extra);
   fprintf(f, "}\n");
