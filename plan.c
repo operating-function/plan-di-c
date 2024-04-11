@@ -209,29 +209,6 @@ static inline Value * IN(Value * x) {
 ////////////////////////////////////////////////////////////////////////////////
 //  Printing
 
-static const bool tracing = false;
-
-int print_depth = 0;
-
-void trace_print(const char * format, ...) {
-  int d = print_depth*2;
-  if (tracing) {
-    for (int i=0; i<d; i++) putchar(' ');
-    va_list args;
-    va_start(args, format);
-    vprintf(format, args);
-    va_end(args);
-  }
-}
-
-#define VERBOSE_TRACING 0
-
-#if VERBOSE_TRACING
-#define trace_verbose(...) trace_print(__VA_ARGS__)
-#else
-#define trace_verbose(...) ;
-#endif
-
 void check_nat(Nat n) {
     return;
 }
@@ -1525,10 +1502,8 @@ Value * run(Value * v) {
   //
   push_val(v);
   clone();
-  //
-  print_depth++;
   force();
-  print_depth--;
+  //
   write_dot("main final");
   Value *res = pop_deref();
   return res;
