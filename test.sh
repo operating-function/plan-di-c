@@ -75,6 +75,9 @@ check "7" "(($MkLaw 1 2 2) 9 7)"
 check "3" "(($MkLaw 1 2 3) 9 7)"
 check "2" "($id ($id 2))"
 
+echo "check sym bug"
+check "(%fo %f)" "(%fo %f)"
+
 echo "pins"
 check "(<(0 1)> 2 3)" "(($MkPin (0 1)) 2 3)"
 check "{1 2 0}" "(($MkPin 1) 1 2 0)"
@@ -93,8 +96,7 @@ echo "symbols"
 check "%foo" "7303014"
 check "%goobar" "($Inc %foobar)"
 
-# TODO
-# check "%goobarfoobar" "(#2 %foobarfoobar)"
+check "%goobarfoobar" "(#2 %foobarfoobar)"
 
 echo "nat arith"
 check "3" "($ToNat 3)"
@@ -133,9 +135,11 @@ check "(1 (0 2))" "($MkLaw 0 1 (1 (0 (2 0) 3) (1 (2 2) (0 1 2))) 1)"
 echo "trivial cycles are okay if not used"
 check "7" "($MkLaw 0 1 (1 7 (1 3 2)) 9)"
 
-# TODO
-# echo "moderate-length symbols"
-# check "%fooooooooooooooooooooooooooo" "%fooooooooooooooooooooooooooo"
+echo "moderate-length symbols"
+check "%fooooooooooooooooooooooooooo" "%fooooooooooooooooooooooooooo"
+
+echo "incr large sym"
+check "%gooooooooooooooooooooooo" "($Inc ($PlanCase 0 0 $Ignore 0 (%fooooooooooooooooooooooo %f)))"
 
 # TODO
 # echo "large atoms"
