@@ -43,7 +43,7 @@ typedef struct Nat {
   union {
     u64 direct;
     struct {
-      u64 size;
+      len_t size;
       nn_t nat;
     };
   };
@@ -515,9 +515,29 @@ static inline void *realloc_(void *ptr, size_t sz) {
   return res;
 }
 
-// TODO
 Nat Inc(Nat n) {
-  crash("Inc: unimpl");
+  switch(n.type) {
+    case SMALL:
+      if (n.direct == UINT64_MAX) {
+        long sz = 3;
+        nn_t nat_buf = nn_init(sz);
+        nn_zero(nat_buf, sz);
+        nn_bit_set(nat_buf, 65);
+        return (Nat){ .type = BIG, .size = sz, .nat = nat_buf };
+      }
+      return (Nat){ .type = SMALL, .direct = (n.direct+1) };
+    case BIG: {
+      len_t new_size = n.size;
+      nn_t nat_buf = nn_init(new_size);
+      word_t c = nn_add1(nat_buf, n.nat, n.size, 1);
+      if (c > 0) {
+        new_size++;
+        realloc_(nat_buf, new_size * sizeof(word_t));
+        nat_buf[new_size-1] = c;
+      }
+      return (Nat){ .type = BIG, .size = new_size, .nat = nat_buf };
+    }
+  }
 }
 
 // TODO
