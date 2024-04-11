@@ -1,9 +1,3 @@
-// TODO
-//
-// - [ ] make an example evaluation which takes a while.
-//   - use that to test whether optimizations are effective.
-//
-
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -137,8 +131,6 @@ static inline Type TY(Value * x) {
 static inline bool IS_NAT(Value * x) {
   return (TY(x) == NAT);
 }
-
-// TODO apply `deref` on all accessor return values?
 
 static inline Value * IT(Value * x) {
   x = deref(x);
@@ -1564,7 +1556,6 @@ Value *read_sym() {
       int u32_sz = sizeof(u32);
       int u32_len = (len / u32_sz) + 1;
       nn_t nat_buf = nn_init(u32_len);
-      // TODO is this little endian?
       strcpy((char*)nat_buf, buf);
       Nat n = (Nat){.type=BIG, .size=u32_len, .nat = nat_buf};
       return a_Big(n);
