@@ -295,7 +295,7 @@ static inline bool issym (char c) {
   return (c == '_' || isalnum(c));
 }
 
-bool is_symbol (const char *str) {
+bool is_symbol(const char *str) {
   if (str[0] == 0) return false;
   if (str[1] == 0) return isalpha(str[0]);
   again: {
