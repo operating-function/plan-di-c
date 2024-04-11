@@ -351,7 +351,7 @@ void print_nat_internal(Nat n, char * buf) {
   switch (n.type) {
     case SMALL: {
       char tmp[9] = {0};
-      ((u64*)tmp)[0] = n.direct;
+      memcpy(tmp, (char *)&n.direct, 8);
       if (is_symbol(tmp)) {
         buf[strlen(buf)] = '%';
         strcpy(buf + strlen(buf), tmp);
@@ -367,7 +367,9 @@ void print_nat_internal(Nat n, char * buf) {
         buf[strlen(buf)] = '%';
         strcpy(buf + strlen(buf), tmp);
       } else {
-        nn_print(n.nat, n.size);
+        char * nat_str = nn_get_str(n.nat, n.size);
+        strcpy(buf + strlen(buf), nat_str);
+        free(nat_str);
       }
       break;
     }
