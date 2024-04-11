@@ -16,8 +16,14 @@
         };
       in
       {
-        devShells.plankShell = import ./shell.nix { inherit pkgs; };
+        devShells = rec {
+          plankShell = import ./shell.nix { inherit pkgs; };
+          default = plankShell;
+        };
 
-        packages.plank = import ./default.nix { inherit pkgs; };
+        packages = rec {
+          plank = import ./default.nix { inherit pkgs; };
+          default = plank;
+        };
       });
 }
