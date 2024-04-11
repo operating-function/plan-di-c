@@ -381,6 +381,12 @@ Value * a_Hol() {
 ////////////////////////////////////////////////////////////////////////////////
 //  Nat Operators
 
+void free_nat(Nat a) {
+  if (a.type == BIG) {
+    free(a.nat);
+  }
+}
+
 bool EQ(Nat a, Nat b) {
   if ((a.type == SMALL) && b.type == SMALL)
     return (a.direct == b.direct);
@@ -530,9 +536,50 @@ Nat Add(Nat a, Nat b) {
   crash("Add: unimpl");
 }
 
-// TODO
+// TODO test
 Nat Sub(Nat a, Nat b) {
-  crash("Sub: unimpl");
+  if ((a.type == SMALL) && (b.type == SMALL)) {
+    if (a.direct < b.direct)
+      return d_Nat(0);
+    return (Nat){ .type = SMALL, .direct = (a.direct - b.direct) };
+  }
+  if ((a.type == SMALL) && (b.type == BIG))
+    return d_Nat(0);
+
+  long new_size = a.size;
+  nn_t nat_buf = nn_init(new_size);
+
+  bool free_b;
+  if ((a.type == BIG) && (b.type == SMALL)) {
+    long sz = 2;
+    nn_t b_nat = nn_init(sz);
+    memcpy((char *)b_nat, (char *)&b.direct, 8);
+    b = (Nat){ .type = BIG, .size = sz, .nat = b_nat };
+    free_b = true;
+  }
+  if (a.size < b.size) {
+    if (free_b) free_nat(b);
+    return d_Nat(0);
+  }
+
+  word_t c = nn_sub_c(nat_buf, a.nat, a.size, b.nat, b.size, 0);
+  if (free_b) free_nat(b);
+  if (c > 0) {
+    return d_Nat(0);
+  } else {
+    long shrunk_sz = new_size;
+    for (long i = (new_size-1); i >= 0; i--) {
+      if (nat_buf[i] == 0) {
+        shrunk_sz--;
+      } else {
+        break;
+      }
+    }
+    if (shrunk_sz != new_size) {
+      realloc_(nat_buf, new_size * sizeof(word_t));
+    }
+    return (Nat){ .type = BIG, .size = shrunk_sz, .nat = nat_buf };
+  }
 }
 
 // TODO
