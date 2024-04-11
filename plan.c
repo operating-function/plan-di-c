@@ -354,6 +354,7 @@ void print_nat_internal(Nat n, char * buf) {
       break;
     }
     case BIG: {
+      // TODO tmp will not necessarily have a null terminator
       char *tmp = (char*)n.nat;
       if (is_symbol(tmp)) {
         // TODO this is unsafe b/c we don't know how big `buf` is.
