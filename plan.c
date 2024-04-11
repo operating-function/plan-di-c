@@ -1582,7 +1582,7 @@ Value *read_sym() {
       return a_Big(n);
     } else {
       u64 word = 0;
-      strcpy((char*)&word, buf);
+      memcpy((char*)&word, buf, len);
       return a_Nat(word);
     }
 }
