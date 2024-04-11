@@ -800,7 +800,7 @@ char * p_ptr(Value * x) {
   return buf;
 }
 
-void print_heap(FILE *f, Node *input, Node *seen) {
+void fprintf_heap(FILE *f, Node *input, Node *seen) {
   // empty input - done
   if (null_list(input)) return;
   Value * v = (Value *)input->ptr;
@@ -808,7 +808,7 @@ void print_heap(FILE *f, Node *input, Node *seen) {
   //
   // if NULL or seen, recur on tail of input
   if ((v == NULL) || (member_list((void *)v, seen))) {
-    return print_heap(f, input, seen);
+    return fprintf_heap(f, input, seen);
   }
   //
   // non-seen Value. print it, add `v` to `seen`, add any discovered addresses
@@ -878,10 +878,10 @@ void print_heap(FILE *f, Node *input, Node *seen) {
     }
   }
   seen = cons((void *)v, seen);
-  return print_heap(f, input, seen);
+  return fprintf_heap(f, input, seen);
 }
 
-void print_stack(FILE *f, Node *input) {
+void fprintf_stack(FILE *f, Node *input) {
   // print "stack topper"
   // => stack [label="<ss> stack|<s0>|<s1>|<s2>", color=blue, height=2.5];
   fprintf(f, "stack [label=\"<ss> stack");
@@ -922,13 +922,13 @@ void write_dot_extra(char *label, char *extra, Value * v) {
   fprintf(f, "rankdir=LR;\n");
   fprintf(f, "\n// stack\n");
   Node * s_l = stack_to_list();
-  print_stack(f, s_l);
+  fprintf_stack(f, s_l);
   fprintf(f, "\n// heap\n");
   Node * heap_input = s_l;
   if (v != NULL) {
     heap_input = cons((void *)v, heap_input);
   }
-  print_heap(f, heap_input, NULL);
+  fprintf_heap(f, heap_input, NULL);
   free(s_l);
   fprintf(f, "\n// extra\n");
   fprintf(f, "%s\n", extra);
