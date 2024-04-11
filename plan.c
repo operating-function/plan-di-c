@@ -517,7 +517,7 @@ static inline void *realloc_(void *ptr, size_t sz) {
 
 // TODO
 Nat Inc(Nat n) {
-  crash("Dec: unimpl");
+  crash("Inc: unimpl");
 }
 
 // TODO
@@ -538,6 +538,11 @@ Nat Sub(Nat a, Nat b) {
 // TODO
 Nat Mul(Nat a, Nat b) {
   crash("Mul: unimpl");
+}
+
+// TODO
+Nat Div(Nat a, Nat b) {
+  crash("Div: unimpl");
 }
 
 ////////////////////////////////////////////////////////////////////////////////
