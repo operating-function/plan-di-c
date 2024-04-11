@@ -237,68 +237,58 @@ void check_value(Value *v) {
   }
 }
 
-void print_value_internal(Value*, char*, int);
+void fprintf_value_internal(FILE *, Value *, int);
 
-char * print_value(Value * v) {
-  long sz = 4096*sizeof(char);
-  char * buf = malloc(sz);
-  memset(buf, 0, sz);
-  print_value_internal(v, buf, 0);
-  return buf;
+void fprintf_value(FILE *f , Value * v) {
+  fprintf_value_internal(f, v, 0);
 }
 
-void print_value_app(Value * v, char * buf, int recur) {
+void fprintf_value_app(FILE * f, Value * v, int recur) {
   if (TY(v) != APP) {
-    return  print_value_internal(v, buf, recur);
+    return fprintf_value_internal(f, v, recur);
   }
-  print_value_app(HD(v), buf, recur);
-  sprintf(buf + strlen(buf), " ");
-  print_value_internal(TL(v), buf, recur+1);
+  fprintf_value_app(f, HD(v), recur);
+  fprintf(f, " ");
+  fprintf_value_internal(f, TL(v), recur+1);
 }
 
-void print_nat_internal(Nat, char *);
+void fprintf_nat(FILE *, Nat);
 
-void print_value_internal(Value * v, char * buf, int recur) {
+void fprintf_value_internal(FILE * f, Value * v, int recur) {
   v = deref(v);
   if (recur > 10) {
-    sprintf(buf + strlen(buf), "‥");
+    fprintf(f, "‥");
     return;
   }
   switch (TY(v)) {
     case PIN:
-      sprintf(buf + strlen(buf), "<");
-      print_value_internal(IT(v), buf, recur+1);
-      sprintf(buf + strlen(buf), ">");
+      fprintf(f, "<");
+      fprintf_value_internal(f, IT(v), recur+1);
+      fprintf(f, ">");
       break;
     case LAW:
-      sprintf(buf + strlen(buf), "{");
-      print_nat_internal(NM(v), buf);
-      sprintf(buf + strlen(buf), " ");
-      print_nat_internal(AR(v), buf);
-      sprintf(buf + strlen(buf), " ");
-      print_value_internal(BD(v), buf, recur+1);
-      sprintf(buf + strlen(buf), "}");
+      fprintf(f, "{");
+      fprintf_nat(f, NM(v));
+      fprintf(f, " ");
+      fprintf_nat(f, AR(v));
+      fprintf(f, " ");
+      fprintf_value_internal(f, BD(v), recur+1);
+      fprintf(f, "}");
       break;
     case APP:
-      sprintf(buf + strlen(buf), "(");
-      print_value_app(v, buf, recur+1);
-      sprintf(buf + strlen(buf), ")");
+      fprintf(f, "(");
+      fprintf_value_app(f, v, recur+1);
+      fprintf(f, ")");
       break;
     case NAT:
-      print_nat_internal(NT(v), buf);
+      fprintf_nat(f, NT(v));
       break;
     case HOL:
-      sprintf(buf + strlen(buf), "<>");
+      fprintf(f, "<>");
       break;
     case IND:
-      crash("print_value_internal: got IND");
+      crash("fprintf_value_internal: got IND");
   }
-}
-
-char * print_nat(Nat n) {
-  char * buf = malloc(512*sizeof(char));
-  print_nat_internal(n, buf);
-  return buf;
 }
 
 static inline bool issym (char c) {
@@ -317,31 +307,29 @@ bool is_symbol (const char *str) {
   }
 }
 
-void print_nat_internal(Nat n, char * buf) {
+void fprintf_nat(FILE * f, Nat n) {
   switch (n.type) {
     case SMALL: {
       char tmp[9] = {0};
       memcpy(tmp, (char *)&n.direct, 8);
       if (is_symbol(tmp)) {
-        buf[strlen(buf)] = '%';
-        strcpy(buf + strlen(buf), tmp);
+        fprintf(f, "%%%s", tmp);
       } else {
-        sprintf(buf + strlen(buf), "%" PRIu64, n.direct);
+        fprintf(f, "%" PRIu64, n.direct);
       }
       break;
     }
     case BIG: {
-      // TODO tmp will not necessarily have a null terminator
-      char *tmp = (char*)n.nat;
-      if (is_symbol(tmp)) {
-        // TODO this is unsafe b/c we don't know how big `buf` is.
-        buf[strlen(buf)] = '%';
-        strcpy(buf + strlen(buf), tmp);
-      } else {
-        char * nat_str = nn_get_str(n.nat, n.size);
-        strcpy(buf + strlen(buf), nat_str);
+      long num_chars = n.size * 4;
+      // add 1 for null terminator
+      char * nat_str = calloc((num_chars+1), sizeof(char));
+      memcpy(nat_str, n.nat, num_chars);
+      if (!(is_symbol(nat_str))) {
         free(nat_str);
+        nat_str = nn_get_str(n.nat, n.size);
       }
+      fprintf(f, "%%%s", nat_str);
+      free(nat_str);
       break;
     }
   }
@@ -825,16 +813,16 @@ void fprintf_heap(FILE *f, Node *input, Node *seen) {
       break;
     }
     case LAW: {
-      char * nm_s = print_nat(NM(v));
-      char * ar_s = print_nat(AR(v));
       char * v_p = p_ptr(v);
       char * b_p = p_ptr(BD(v));
-      fprintf(f, "%s [label=\"law nm:%s ar:%s\"];\n", v_p, nm_s, ar_s);
+      fprintf(f, "%s [label=\"law nm:", v_p);
+      fprintf_nat(f, NM(v));
+      fprintf(f, " ar:");
+      fprintf_nat(f, AR(v));
+      fprintf(f, "\"];\n");
       fprintf(f, "%s -> %s [label=bd];\n", v_p, b_p);
       free(v_p);
       free(b_p);
-      free(nm_s);
-      free(ar_s);
       input = cons((void *)BD(v), input);
       break;
     }
@@ -854,10 +842,10 @@ void fprintf_heap(FILE *f, Node *input, Node *seen) {
     }
     case NAT: {
       char * v_p = p_ptr(v);
-      char * nt_s = print_nat(NT(v));
-      fprintf(f, "%s [label=\"%s\"];\n", v_p, nt_s);
+      fprintf(f, "%s [label=\"", v_p);
+      fprintf_nat(f, NT(v));
+      fprintf(f, "\"];\n");
       free(v_p);
-      free(nt_s);
       break;
     }
     case IND: {
@@ -1661,7 +1649,8 @@ int main (void) {
     Value *v = read_exp_top();
     if (!v) return 0;
     Value * res = run(v);
-    printf("%s\n", print_value(res));
+    fprintf_value(stdout, res);
+    printf("\n");
     goto again;
     return 0;
 }
