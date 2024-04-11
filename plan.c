@@ -576,11 +576,24 @@ Value * mul_jet(Value **args) {
   return a_Big(Mul(x, y));
 }
 
-#define NUM_JETS 3
+Value * div_jet(Value **args) {
+  Nat x = NT(to_nat(args[0]));
+  Nat y = NT(to_nat(args[1]));
+  return a_Big(Div(x, y));
+}
+
+Value * dec_jet(Value **args) {
+  Nat x = NT(to_nat(args[0]));
+  return a_Big(Dec(x));
+}
+
+#define NUM_JETS 5
 Jet jet_table[NUM_JETS] =
   { (Jet) {.name = "_Add", .arity = 2, .jet_exec = add_jet }
   , (Jet) {.name = "_Sub", .arity = 2, .jet_exec = sub_jet }
   , (Jet) {.name = "_Mul", .arity = 2, .jet_exec = mul_jet }
+  , (Jet) {.name = "_Div", .arity = 2, .jet_exec = div_jet }
+  , (Jet) {.name = "_Dec", .arity = 1, .jet_exec = dec_jet }
   };
 
 ////////////////////////////////////////////////////////////////////////////////
