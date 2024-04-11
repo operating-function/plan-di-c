@@ -782,9 +782,14 @@ char * p_ptr(Value * x) {
 
 void fprintf_heap(FILE *f, Node *input, Node *seen) {
   // empty input - done
-  if (null_list(input)) return;
+  if (null_list(input)) {
+    free_list(seen, false);
+    return;
+  }
+  Node * tmp = input;
   Value * v = (Value *)input->ptr;
   input = input->next;
+  free(tmp);
   //
   // if NULL or seen, recur on tail of input
   if ((v == NULL) || (member_list((void *)v, seen))) {
@@ -872,12 +877,14 @@ void fprintf_stack(FILE *f, Node *input) {
   // print edges between stack topper Values
   int i = 0;
   while (input != NULL) {
+    Node * tmp = input;
     Value * v = (Value *)input->ptr;
     char * v_p = p_ptr(v);
     fprintf(f, "stack:s%d -> %s;\n", i, v_p);
     free(v_p);
     input = input->next;
     i++;
+    free(tmp);
   }
 }
 
@@ -901,15 +908,13 @@ void write_dot_extra(char *label, char *extra, Value * v) {
   fprintf(f, "nodesep=.10;\n");
   fprintf(f, "rankdir=LR;\n");
   fprintf(f, "\n// stack\n");
-  Node * s_l = stack_to_list();
-  fprintf_stack(f, s_l);
+  fprintf_stack(f, stack_to_list());
   fprintf(f, "\n// heap\n");
-  Node * heap_input = s_l;
+  Node * heap_input = stack_to_list();
   if (v != NULL) {
     heap_input = cons((void *)v, heap_input);
   }
   fprintf_heap(f, heap_input, NULL);
-  free(s_l);
   fprintf(f, "\n// extra\n");
   fprintf(f, "%s\n", extra);
   fprintf(f, "}\n");
@@ -940,7 +945,9 @@ void update(u64 idx) {
 
 void push_val(Value *x) {
   char extra[50];
-  sprintf(extra, "i[color=red];\ni -> %s", p_ptr(x));
+  char * x_p = p_ptr(x);
+  sprintf(extra, "i[color=red];\ni -> %s", x_p);
+  free(x_p);
   write_dot_extra("push_val", extra, x);
   if ((sp+1) > STACK_SIZE) crash("push_val: stack overflow");
   stack[sp] = x;
