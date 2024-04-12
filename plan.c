@@ -648,10 +648,63 @@ Nat Sub(Nat a, Nat b) {
   }
 }
 
-// TODO
 Nat Mul(Nat a, Nat b) {
-  // probably use: nn_mul_classical
-  crash("Mul: unimpl");
+  // consider special-casing for u32-fitting SMALLs, and using
+  bool free_a;
+  bool free_b;
+  if ((a.type == SMALL) && (b.type == SMALL)) {
+    //printf("smol/smol\n");
+    u64 res;
+    if ((a.direct == 0) || (b.direct == 0)) {
+      //printf("0 res\n");
+      return d_Nat(0);
+    }
+    res = a.direct * b.direct;
+    if (res / a.direct == b.direct) {
+      // no overflow - return res
+      //printf("smol res\n");
+      return d_Nat(res);
+    }
+    // overflow
+    //printf("overflow\n");
+    a = u64_to_big(&a.direct);
+    b = u64_to_big(&b.direct);
+    free_a = true;
+    free_b = true;
+  }
+  if (a.type == SMALL) {
+    //printf("smol/bigge\n");
+    // TODO if a.direct <= UINT32_MAX, use `nn_mul1` to avoid creation of
+    // intermediate `a` BIG.
+    a = u64_to_big(&a.direct);
+    free_a = true;
+  }
+  if (b.type == SMALL) {
+    //printf("bigge/smol\n");
+    // use above SMALL/BIG logic
+    return Mul(b, a);
+  }
+  // a & b are both big here
+  long new_size = a.size + b.size; // TODO hande size overflow?
+  nn_t nat_buf = nn_init(new_size);
+  nn_mul_classical(nat_buf, a.nat, a.size, b.nat, b.size);
+  if (free_a) free_nat(a);
+  if (free_b) free_nat(b);
+  // shrink
+  long shrunk_sz = new_size;
+  for (long i = (new_size-1); i >= 0; i--) {
+    if (nat_buf[i] == 0) {
+      shrunk_sz--;
+    } else {
+      break;
+    }
+  }
+  if (shrunk_sz != new_size) {
+    //printf("shrinking from %lu to %lu\n", new_size, shrunk_sz);
+    // realloc
+    realloc_(nat_buf, new_size * sizeof(word_t));
+  }
+  return (Nat){ .type = BIG, .size = shrunk_sz, .nat = nat_buf };
 }
 
 // TODO
