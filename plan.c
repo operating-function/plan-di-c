@@ -317,11 +317,15 @@ void fprintf_nat(FILE * f, Nat n) {
       // add 1 for null terminator
       char * nat_str = calloc((num_chars+1), sizeof(char));
       memcpy(nat_str, n.nat, num_chars);
-      if (!(is_symbol(nat_str))) {
+      if (is_symbol(nat_str)) {
+        // symbolic, so we can print it as a string, with a leading `%`
+        fprintf(f, "%%%s", nat_str);
+      } else {
+        // non-symbolic, so we use bsdnt to print as decimal
         free(nat_str);
         nat_str = nn_get_str(n.nat, n.size);
+        fprintf(f, "%s", nat_str);
       }
-      fprintf(f, "%%%s", nat_str);
       free(nat_str);
       break;
     }
@@ -500,6 +504,15 @@ Nat Inc(Nat n) {
   }
 }
 
+// this should only be used internally, as our Nat invariant is that BIGs must
+// be greater than UINT64_MAX.
+Nat u64_to_big(u64 * x_ptr) {
+  long sz = 2;
+  nn_t x_nat = nn_init(sz);
+  memcpy((char *)x_nat, (char *)x_ptr, 8);
+  return (Nat){ .type = BIG, .size = sz, .nat = x_nat };
+}
+
 Nat Dec(Nat n) {
   switch(n.type) {
     case SMALL:
@@ -532,9 +545,56 @@ Nat Dec(Nat n) {
   }
 }
 
-// TODO
 Nat Add(Nat a, Nat b) {
-  crash("Add: unimpl");
+  bool free_a;
+  bool free_b;
+  if ((a.type == SMALL) && (b.type == SMALL)) {
+    //printf("smol/smol\n");
+    if ((UINT64_MAX - a.direct) < b.direct) {
+      //printf("overflow\n");
+      // overflow, so BIG-ify a & b
+      a = u64_to_big(&a.direct);
+      b = u64_to_big(&b.direct);
+      free_a = true;
+      free_b = true;
+    } else {
+      // no overflow - do addition
+      return (Nat){ .type = SMALL, .direct = (a.direct + b.direct) };
+    }
+  }
+  if (a.type == SMALL) {
+    //printf("smol/bigge\n");
+    a = u64_to_big(&a.direct);
+    free_a = true;
+  }
+  if (b.type == SMALL) {
+    //printf("bigge/smol\n");
+    b = u64_to_big(&b.direct);
+    free_b = true;
+  }
+  if (a.size < b.size) {
+    //printf("rev bigges\n");
+    Nat tmp = a;
+    a = b;
+    b = tmp;
+    bool free_tmp = free_a;
+    free_a = free_b;
+    free_b = free_tmp;
+  }
+  // both a & b are big here
+  long new_size = a.size;
+  nn_t nat_buf = nn_init(new_size);
+  word_t c = nn_add_c(nat_buf, a.nat, a.size, b.nat, b.size, 0);
+  if (c > 0) {
+    //printf("grow bigge nats\n");
+    // carry - grow nat
+    new_size++;
+    realloc_(nat_buf, new_size * sizeof(word_t));
+    nat_buf[new_size-1] = c;
+  }
+  if (free_a) free_nat(a);
+  if (free_b) free_nat(b);
+  return (Nat){ .type = BIG, .size = new_size, .nat = nat_buf };
 }
 
 // TODO test
@@ -552,10 +612,7 @@ Nat Sub(Nat a, Nat b) {
 
   bool free_b;
   if ((a.type == BIG) && (b.type == SMALL)) {
-    long sz = 2;
-    nn_t b_nat = nn_init(sz);
-    memcpy((char *)b_nat, (char *)&b.direct, 8);
-    b = (Nat){ .type = BIG, .size = sz, .nat = b_nat };
+    b = u64_to_big(&b.direct);
     free_b = true;
   }
   if (a.size < b.size) {
@@ -1691,11 +1748,12 @@ Value *read_exp_top() {
 }
 
 int main (void) {
-  // Value * x = a_Nat(2);
+  // Value * x = a_Nat(UINT64_MAX);
   // Value * y = a_Nat(3);
   // Value * arr[2] = { x, y };
-  // Value * res = jet_table[1].jet_exec(arr);
-  // printf("%s\n", print_value(res));
+  // Value * res = jet_table[0].jet_exec(arr);
+  // fprintf_value(stdout, res);
+  // printf("\n");
 
   struct stat st = {0};
   if (stat(dot_dir_path, &st) == -1) {
