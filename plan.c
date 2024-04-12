@@ -650,6 +650,7 @@ Nat Sub(Nat a, Nat b) {
 
 // TODO
 Nat Mul(Nat a, Nat b) {
+  // probably use: nn_mul_classical
   crash("Mul: unimpl");
 }
 
