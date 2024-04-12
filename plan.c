@@ -708,8 +708,19 @@ Nat Mul(Nat a, Nat b) {
 }
 
 // TODO
+Nat DivRem(Nat *rem, Nat a, Nat b) {
+  crash("DivRem: unimpl");
+}
+
 Nat Div(Nat a, Nat b) {
-  crash("Div: unimpl");
+  Nat rem;
+  return DivRem(&rem, a, b);
+}
+
+Nat Rem(Nat a, Nat b) {
+  Nat rem;
+  DivRem(&rem, a, b);
+  return rem;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
