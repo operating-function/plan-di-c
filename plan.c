@@ -5,6 +5,7 @@
 #include <ctype.h>
 #include <stdarg.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <inttypes.h>
 #include <unistd.h>
 
@@ -823,7 +824,7 @@ Value * get_deref(u64 idx) {
 //  DOT printing
 
 int dot_count = 0;
-char * dot_file_path = "./dot";
+char * dot_dir_path = "./dot";
 
 char * p_ptr(Value * x) {
   char * buf = malloc(20*sizeof(char));
@@ -954,7 +955,7 @@ Node * stack_to_list() {
 
 void write_dot_extra(char *label, char *extra, Value * v) {
   char fp[20] = {0};
-  sprintf(fp, "%s/%05d.dot", dot_file_path, dot_count);
+  sprintf(fp, "%s/%05d.dot", dot_dir_path, dot_count);
   dot_count++;
   FILE * f = fopen(fp, "w+");
   fprintf(f, "digraph {\nbgcolor=\"#665c54\"\n");
@@ -1696,6 +1697,10 @@ int main (void) {
   // Value * res = jet_table[1].jet_exec(arr);
   // printf("%s\n", print_value(res));
 
+  struct stat st = {0};
+  if (stat(dot_dir_path, &st) == -1) {
+    mkdir(dot_dir_path, 0700);
+  }
   bool isInteractive = isatty(fileno(stdin));
   again:
     if (isInteractive) printf(">> ");
