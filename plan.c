@@ -507,7 +507,7 @@ Nat Inc(Nat n) {
 // this should only be used internally, as our Nat invariant is that BIGs must
 // be greater than UINT64_MAX.
 Nat u64_to_big(u64 * x_ptr) {
-  long sz = 2;
+  long sz = 1;
   nn_t x_nat = nn_init(sz);
   memcpy((char *)x_nat, (char *)x_ptr, 8);
   return (Nat){ .type = BIG, .size = sz, .nat = x_nat };
@@ -525,12 +525,12 @@ Nat Dec(Nat n) {
       nn_t nat_buf = nn_init(new_size);
       word_t c = nn_sub1(nat_buf, n.nat, n.size, 1);
       // borrow (nonzero c) should only be possible if we underflowed a single
-      // u32. our invariant is to convert to SMALL when we reach 2 u32, so we
+      // u64. our invariant is to convert to SMALL when we reach 1 u64, so we
       // should never encounter this case.
       assert (c == 0);
       if ((nat_buf[n.size] == 0)) {
         new_size--;
-        if (new_size == 2) {
+        if (new_size == 1) {
           // shrink BIG to SMALL
           u64 direct;
           assert (new_size * sizeof(word_t) == 8);
@@ -633,7 +633,7 @@ Nat Sub(Nat a, Nat b) {
         break;
       }
     }
-    if (shrunk_sz == 2) {
+    if (shrunk_sz == 1) {
       // shrink BIG to SMALL
       u64 direct;
       assert (shrunk_sz * sizeof(word_t) == 8);
