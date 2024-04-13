@@ -513,6 +513,32 @@ Nat u64_to_big(u64 * x_ptr) {
   return (Nat){ .type = BIG, .size = sz, .nat = x_nat };
 }
 
+Nat resize_nat(Nat x) {
+  long new_size = x.size;
+  for (long i = (x.size-1); i >= 0; i--) {
+    if (x.nat[i] == 0) {
+      new_size--;
+    } else {
+      break;
+    }
+  }
+  if (new_size == 1) {
+    // shrink BIG to SMALL
+    //printf("shrinking from %lu BIG to SMALL\n", x.size);
+    u64 direct;
+    assert (new_size * sizeof(word_t) == 8);
+    memcpy((char *)direct, x.nat, 8);
+    nn_clear(x.nat);
+    x.type = SMALL;
+    x.direct = direct;
+  } else if (new_size != x.size) {
+    //printf("shrinking from %lu to %lu\n", orig_size, new_size);
+    // realloc
+    realloc_(x.nat, new_size * sizeof(word_t));
+  }
+  return x;
+}
+
 Nat Dec(Nat n) {
   switch(n.type) {
     case SMALL:
@@ -528,19 +554,8 @@ Nat Dec(Nat n) {
       // u64. our invariant is to convert to SMALL when we reach 1 u64, so we
       // should never encounter this case.
       assert (c == 0);
-      if ((nat_buf[n.size] == 0)) {
-        new_size--;
-        if (new_size == 1) {
-          // shrink BIG to SMALL
-          u64 direct;
-          assert (new_size * sizeof(word_t) == 8);
-          memcpy((char *)direct, nat_buf, 8);
-          nn_clear(nat_buf);
-          return (Nat){ .type = SMALL, .direct = direct };
-        }
-        realloc_(nat_buf, new_size * sizeof(word_t));
-      }
-      return (Nat){ .type = BIG, .size = new_size, .nat = nat_buf };
+      Nat n = { .type = BIG, .size = new_size, .nat = nat_buf };
+      return resize_nat(n);
     }
   }
 }
@@ -624,28 +639,9 @@ Nat Sub(Nat a, Nat b) {
   if (free_b) free_nat(b);
   if (c > 0) {
     return d_Nat(0);
-  } else {
-    long shrunk_sz = new_size;
-    for (long i = (new_size-1); i >= 0; i--) {
-      if (nat_buf[i] == 0) {
-        shrunk_sz--;
-      } else {
-        break;
-      }
-    }
-    if (shrunk_sz == 1) {
-      // shrink BIG to SMALL
-      u64 direct;
-      assert (shrunk_sz * sizeof(word_t) == 8);
-      memcpy((char *)direct, nat_buf, 8);
-      nn_clear(nat_buf);
-      return (Nat){ .type = SMALL, .direct = direct };
-    } else if (shrunk_sz != new_size) {
-      // realloc
-      realloc_(nat_buf, new_size * sizeof(word_t));
-    }
-    return (Nat){ .type = BIG, .size = shrunk_sz, .nat = nat_buf };
   }
+  Nat n = { .type = BIG, .size = new_size, .nat = nat_buf };
+  return resize_nat(n);
 }
 
 Nat Mul(Nat a, Nat b) {
@@ -690,22 +686,8 @@ Nat Mul(Nat a, Nat b) {
   nn_mul_classical(nat_buf, a.nat, a.size, b.nat, b.size);
   if (free_a) free_nat(a);
   if (free_b) free_nat(b);
-  // shrink
-  long orig_size = new_size;
-  for (long i = (orig_size-1); i >= 0; i--) {
-    word_t tmp = nat_buf[i];
-    if (tmp == 0) {
-      new_size--;
-    } else {
-      break;
-    }
-  }
-  if (new_size != orig_size) {
-    //printf("shrinking from %lu to %lu\n", orig_size, new_size);
-    // realloc
-    realloc_(nat_buf, new_size * sizeof(word_t));
-  }
-  return (Nat){ .type = BIG, .size = new_size, .nat = nat_buf };
+  Nat n = { .type = BIG, .size = new_size, .nat = nat_buf };
+  return resize_nat(n);
 }
 
 // TODO
