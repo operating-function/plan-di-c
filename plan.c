@@ -691,20 +691,21 @@ Nat Mul(Nat a, Nat b) {
   if (free_a) free_nat(a);
   if (free_b) free_nat(b);
   // shrink
-  long shrunk_sz = new_size;
-  for (long i = (new_size-1); i >= 0; i--) {
-    if (nat_buf[i] == 0) {
-      shrunk_sz--;
+  long orig_size = new_size;
+  for (long i = (orig_size-1); i >= 0; i--) {
+    word_t tmp = nat_buf[i];
+    if (tmp == 0) {
+      new_size--;
     } else {
       break;
     }
   }
-  if (shrunk_sz != new_size) {
-    //printf("shrinking from %lu to %lu\n", new_size, shrunk_sz);
+  if (new_size != orig_size) {
+    //printf("shrinking from %lu to %lu\n", orig_size, new_size);
     // realloc
     realloc_(nat_buf, new_size * sizeof(word_t));
   }
-  return (Nat){ .type = BIG, .size = shrunk_sz, .nat = nat_buf };
+  return (Nat){ .type = BIG, .size = new_size, .nat = nat_buf };
 }
 
 // TODO
