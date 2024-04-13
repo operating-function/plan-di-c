@@ -16,7 +16,6 @@
 ////////////////////////////////////////////////////////////////////////////////
 //  Typedefs
 
-typedef uint32_t u32;
 typedef uint64_t u64;
 
 typedef enum Type {
@@ -1755,11 +1754,12 @@ Value *read_sym() {
     int len = strlen(buf);
     if (!len)    crash("Empty symbol");
     if (len > 8) {
-      int u32_sz = sizeof(u32);
-      int u32_len = (len / u32_sz) + 1;
-      nn_t nat_buf = nn_init(u32_len);
+      int u64_len = (len / sizeof(u64));
+      // round up
+      if ((len % sizeof(u64)) > 0) u64_len++;
+      nn_t nat_buf = nn_init(u64_len);
       memcpy((char*)nat_buf, buf, len);
-      Nat n = (Nat){.type=BIG, .size=u32_len, .nat = nat_buf};
+      Nat n = (Nat){.type=BIG, .size=u64_len, .nat = nat_buf};
       return a_Big(n);
     } else {
       u64 word = 0;
