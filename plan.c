@@ -727,7 +727,7 @@ Nat Mul(Nat a, Nat b) {
 Nat DivRem(Nat *rem, Nat a, Nat b) {
   bool free_b;
   if ((a.type == SMALL) && (b.type == SMALL)) {
-    fprintf(stderr, "SMALL/SMALL\n");
+    //fprintf(stderr, "SMALL/SMALL\n");
     if (b.direct == 0) {
       *rem = a;
       return d_Nat(0);
@@ -738,20 +738,19 @@ Nat DivRem(Nat *rem, Nat a, Nat b) {
   }
   if (a.type == SMALL) {
     // b is BIG, and therefore is greater than a
-    fprintf(stderr, "SMALL/BIG\n");
+    //fprintf(stderr, "SMALL/BIG\n");
     *rem = clone_nat(a);
     return d_Nat(0);
   }
   if (b.type == SMALL) {
     // a is BIG, and therefore is greater than b
-    fprintf(stderr, "BIG/SMALL\n");
+    //fprintf(stderr, "BIG/SMALL\n");
     b = u64_to_big(&b.direct);
     free_b = true;
   }
   // a & b are both BIG here
-  fprintf(stderr, "BIG/BIG\n");
+  //fprintf(stderr, "BIG/BIG\n");
   if (a.size < b.size) {
-    fprintf(stderr, "BIG size diff\n");
     if (free_b) free_nat(b);
     *rem = clone_nat(a);
     return d_Nat(0);
@@ -772,9 +771,6 @@ Nat DivRem(Nat *rem, Nat a, Nat b) {
 Nat Div(Nat a, Nat b) {
   Nat rem;
   Nat ret = DivRem(&rem, a, b);
-  fprintf(stderr, "rem: ");
-  fprintf_nat(stderr, rem);
-  fprintf(stderr, "\n");
   free_nat(rem);
   return ret;
 }
