@@ -714,7 +714,9 @@ Nat DivRem(Nat *rem, Nat a, Nat b) {
 
 Nat Div(Nat a, Nat b) {
   Nat rem;
-  return DivRem(&rem, a, b);
+  Nat ret = DivRem(&rem, a, b);
+  free_nat(rem);
+  return ret;
 }
 
 Nat Rem(Nat a, Nat b) {
