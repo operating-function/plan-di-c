@@ -5,6 +5,7 @@
 #include <ctype.h>
 #include <stdarg.h>
 #include <string.h>
+#include <sys/param.h>
 #include <sys/stat.h>
 #include <inttypes.h>
 #include <unistd.h>
@@ -388,6 +389,24 @@ Value * a_Hol() {
 void free_nat(Nat a) {
   if (a.type == BIG) {
     free(a.nat);
+  }
+}
+
+int nat_char_width(Nat x) {
+  switch (x.type) {
+    case SMALL:
+      return (1 * sizeof(u64));
+    case BIG:
+      return (x.size * sizeof(word_t));
+  }
+}
+
+char * nat_chars(Nat * x) {
+  switch (x->type) {
+    case SMALL:
+      return (char *) &x->direct;
+    case BIG:
+      return (char *) x->nat;
   }
 }
 
@@ -1465,7 +1484,7 @@ void eval_law(u64 n) {
   return slide(n+m);
 }
 
-void law_step(u64 depth) {
+void law_step(u64 depth, bool should_jet) {
   char lab[40];
   sprintf(lab, "law_step %lu", depth);
   write_dot(lab);
@@ -1480,6 +1499,26 @@ void law_step(u64 depth) {
     backout(depth-1);
   } else {
     setup_call(depth);
+    if (should_jet) {
+      for (int i = 0; i < NUM_JETS; i++) {
+        Jet jet = jet_table[i];
+        Nat nm = NM(self);
+        int min_len = MIN(nat_char_width(nm), strlen(jet.name));
+        if (strncmp(jet.name, nat_chars(&nm), min_len) == 0) {
+          if (EQ(AR(self), d_Nat(jet.arity))) {
+            fprintf(stderr, "jet name + arity match: %s\n", jet.name);
+            Value **args = malloc(sizeof(Value*) * jet.arity);
+            for (int j = 0; j < jet.arity; j++) {
+              eval(); // TODO this is not GC safe, as early entries in `args`
+                      // could be invalidated as the later are eval-ed.
+              args[j] = pop_deref();
+            }
+            push_val(jet.jet_exec(args));
+            return;
+          }
+        }
+      }
+    }
     push_val(self);
     flip_stack(depth+1);
     u64 ar = nat_to_u64(AR(self));
@@ -1569,7 +1608,7 @@ void unwind(u64 depth) {
       return unwind(depth+1);
     }
     case LAW: {
-      return law_step(depth);
+      return law_step(depth, false);
     }
     case PIN: {
       Value * y = deref(x->p);
@@ -1608,7 +1647,7 @@ void unwind(u64 depth) {
           return unwind(depth);
         }
         case LAW: {
-          return law_step(depth);
+          return law_step(depth, true);
         }
         case HOL: {
           crash("unwind: <loop>");
