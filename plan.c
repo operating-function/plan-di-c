@@ -733,6 +733,10 @@ Nat DivRem(Nat *rem, Nat a, Nat b) {
   long new_size = (a.size - b.size) + 1;
   nn_t nat_buf = nn_init(new_size);
   nn_divrem(nat_buf, a.nat, a.size, b.nat, b.size);
+  //
+  a.size = b.size;       // TODO this seems broken
+  *rem = resize_nat(a);
+  //
   if (free_b) free_nat(b);
   Nat n = { .type = BIG, .size = new_size, .nat = nat_buf };
   return resize_nat(n);
