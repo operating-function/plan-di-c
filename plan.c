@@ -645,7 +645,6 @@ Nat Sub(Nat a, Nat b) {
 }
 
 Nat Mul(Nat a, Nat b) {
-  // consider special-casing for u32-fitting SMALLs, and using
   bool free_a;
   bool free_b;
   if ((a.type == SMALL) && (b.type == SMALL)) {
@@ -670,18 +669,19 @@ Nat Mul(Nat a, Nat b) {
   }
   if (a.type == SMALL) {
     //printf("smol/bigge\n");
-    // TODO if a.direct <= UINT32_MAX, use `nn_mul1` to avoid creation of
-    // intermediate `a` BIG.
-    a = u64_to_big(&a.direct);
-    free_a = true;
+    // use below BIG/SMALL logic
+    return Mul(b, a);
   }
   if (b.type == SMALL) {
     //printf("bigge/smol\n");
-    // use above SMALL/BIG logic
-    return Mul(b, a);
+    long new_size = 1 + a.size;
+    nn_t nat_buf = nn_init(new_size);
+    nn_mul1(nat_buf, a.nat, a.size, b.direct);
+    Nat n = { .type = BIG, .size = new_size, .nat = nat_buf };
+    return resize_nat(n);
   }
-  // a & b are both big here
-  long new_size = a.size + b.size; // TODO hande size overflow?
+  // a & b are both BIG here
+  long new_size = a.size + b.size; // TODO handle size overflow?
   nn_t nat_buf = nn_init(new_size);
   nn_mul_classical(nat_buf, a.nat, a.size, b.nat, b.size);
   if (free_a) free_nat(a);
