@@ -1516,6 +1516,33 @@ void eval_law(u64 n) {
 
 void force();
 
+// TODO more efficient match algo (we do linear scan of all jets)
+//
+// search the jet_table for a matching name & arity to what is in `self`. if
+// found, return the output of its jet_exec. if no match, return NULL.
+Value * jet_dispatch(Value * self) {
+  for (int i = 0; i < NUM_JETS; i++) {
+    Jet jet = jet_table[i];
+    Nat nm = NM(self);
+    int min_len = MIN(nat_char_width(nm), strlen(jet.name));
+    if (strncmp(jet.name, nat_chars(&nm), min_len) == 0) {
+      if (EQ(AR(self), d_Nat(jet.arity))) {
+        fprintf(stderr, "jet name + arity match: %s\n", jet.name);
+        Value **args = malloc(sizeof(Value*) * jet.arity);
+        for (int j = 0; j < jet.arity; j++) {
+          push(j);
+          force();
+        }
+        for (int j = 0; j < jet.arity; j++) {
+          args[j] = pop_deref();
+        }
+        return jet.jet_exec(args);
+      }
+    }
+  }
+  return NULL;
+}
+
 void law_step(u64 depth, bool should_jet) {
   char lab[40];
   sprintf(lab, "law_step %lu", depth);
@@ -1532,26 +1559,11 @@ void law_step(u64 depth, bool should_jet) {
   } else {
     setup_call(depth);
     if (should_jet) {
-      for (int i = 0; i < NUM_JETS; i++) {
-        Jet jet = jet_table[i];
-        Nat nm = NM(self);
-        int min_len = MIN(nat_char_width(nm), strlen(jet.name));
-        if (strncmp(jet.name, nat_chars(&nm), min_len) == 0) {
-          if (EQ(AR(self), d_Nat(jet.arity))) {
-            fprintf(stderr, "jet name + arity match: %s\n", jet.name);
-            Value **args = malloc(sizeof(Value*) * jet.arity);
-            for (int j = 0; j < jet.arity; j++) {
-              push(j);
-              force();
-            }
-            for (int j = 0; j < jet.arity; j++) {
-              args[j] = pop_deref();
-            }
-            push_val(jet.jet_exec(args));
-            return;
-          }
-        }
+      Value * res = jet_dispatch(self);
+      if (res != NULL) {
+        return push_val(res);
       }
+      // otherwise, no match - continue to non-jetted logic
     }
     push_val(self);
     flip_stack(depth+1);
