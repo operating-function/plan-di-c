@@ -1521,6 +1521,7 @@ void force();
 // search the jet_table for a matching name & arity to what is in `self`. if
 // found, return the output of its jet_exec. if no match, return NULL.
 Value * jet_dispatch(Value * self) {
+  write_dot("jet_dispatch: entry");
   for (int i = 0; i < NUM_JETS; i++) {
     Jet jet = jet_table[i];
     Nat nm = NM(self);
@@ -1529,12 +1530,26 @@ Value * jet_dispatch(Value * self) {
       if (EQ(AR(self), d_Nat(jet.arity))) {
         fprintf(stderr, "jet name + arity match: %s\n", jet.name);
         Value **args = malloc(sizeof(Value*) * jet.arity);
+        // dot
+        char * lab;
+        int ret;
+        ret = asprintf(&lab, "jet_dispatch: %s match pre-arg-eval+update", jet.name);
+        if (ret == -1) crash("asprintf: bad");
+        write_dot(lab);
+        free(lab);
+        //
         for (int j = 0; j < jet.arity; j++) {
           // eval+update each arg in-place.
           push(j);
           eval();
           update(j+1);
         }
+        // dot
+        ret = asprintf(&lab, "jet_dispatch: %s match post-arg-eval+update", jet.name);
+        if (ret == -1) crash("asprintf: bad");
+        write_dot(lab);
+        free(lab);
+        //
         for (int j = 0; j < jet.arity; j++) {
           args[j] = pop_deref();
         }
