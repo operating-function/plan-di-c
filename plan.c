@@ -410,6 +410,19 @@ char * nat_chars(Nat * x) {
   }
 }
 
+Nat clone_nat(Nat x) {
+  switch (x.type) {
+    case SMALL:
+      return x;
+    case BIG: {
+      long sz = x.size;
+      nn_t nat_buf = nn_init(sz);
+      nn_copy(nat_buf, x.nat, sz);
+      return (Nat) { .type = BIG, .size = sz, .nat = nat_buf };
+    }
+  }
+}
+
 bool EQ(Nat a, Nat b) {
   if ((a.type == SMALL) && b.type == SMALL)
     return (a.direct == b.direct);
@@ -711,6 +724,7 @@ Nat Mul(Nat a, Nat b) {
 Nat DivRem(Nat *rem, Nat a, Nat b) {
   bool free_b;
   if ((a.type == SMALL) && (b.type == SMALL)) {
+    fprintf(stderr, "SMALL/SMALL\n");
     if (b.direct == 0) {
       *rem = a;
       return d_Nat(0);
@@ -721,21 +735,31 @@ Nat DivRem(Nat *rem, Nat a, Nat b) {
   }
   if (a.type == SMALL) {
     // b is BIG, and therefore is greater than a
-    *rem = a;
+    fprintf(stderr, "SMALL/BIG\n");
+    *rem = clone_nat(a);
     return d_Nat(0);
   }
   if (b.type == SMALL) {
     // a is BIG, and therefore is greater than b
+    fprintf(stderr, "BIG/SMALL\n");
     b = u64_to_big(&b.direct);
     free_b = true;
   }
   // a & b are both BIG here
+  fprintf(stderr, "BIG/BIG\n");
+  if (a.size < b.size) {
+    fprintf(stderr, "BIG size diff\n");
+    if (free_b) free_nat(b);
+    *rem = clone_nat(a);
+    return d_Nat(0);
+  }
   long new_size = (a.size - b.size) + 1;
   nn_t nat_buf = nn_init(new_size);
-  nn_divrem(nat_buf, a.nat, a.size, b.nat, b.size);
+  Nat a_clone = clone_nat(a);
+  nn_divrem(nat_buf, a_clone.nat, a_clone.size, b.nat, b.size);
   //
-  a.size = b.size;       // TODO this seems broken
-  *rem = resize_nat(a);
+  a_clone.size = b.size;       // TODO this seems broken
+  *rem = resize_nat(a_clone);
   //
   if (free_b) free_nat(b);
   Nat n = { .type = BIG, .size = new_size, .nat = nat_buf };
@@ -745,6 +769,9 @@ Nat DivRem(Nat *rem, Nat a, Nat b) {
 Nat Div(Nat a, Nat b) {
   Nat rem;
   Nat ret = DivRem(&rem, a, b);
+  fprintf(stderr, "rem: ");
+  fprintf_nat(stderr, rem);
+  fprintf(stderr, "\n");
   free_nat(rem);
   return ret;
 }
