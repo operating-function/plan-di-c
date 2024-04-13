@@ -549,9 +549,9 @@ Nat Dec(Nat n) {
       len_t new_size = n.size;
       nn_t nat_buf = nn_init(new_size);
       word_t c = nn_sub1(nat_buf, n.nat, n.size, 1);
-      // borrow (nonzero c) should only be possible if we underflowed a single
-      // u64. our invariant is to convert to SMALL when we reach 1 u64, so we
-      // should never encounter this case.
+      // a positive borrow (nonzero `c`) should only be possible if we
+      // underflowed a single u64. our invariant is to convert to SMALL when we
+      // reach 1 u64, so we should never encounter this case.
       assert (c == 0);
       Nat n = { .type = BIG, .size = new_size, .nat = nat_buf };
       return resize_nat(n);
