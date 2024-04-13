@@ -545,6 +545,9 @@ Nat u64_to_big(u64 * x_ptr) {
 }
 
 Nat resize_nat(Nat x) {
+  // only resize BIGs
+  if (x.type == SMALL) return x;
+  //
   long new_size = x.size;
   for (long i = (x.size-1); i >= 0; i--) {
     if (x.nat[i] == 0) {
@@ -558,7 +561,7 @@ Nat resize_nat(Nat x) {
     //printf("shrinking from %lu BIG to SMALL\n", x.size);
     u64 direct;
     assert (new_size * sizeof(word_t) == 8);
-    memcpy((char *)direct, x.nat, 8);
+    memcpy((char *)&direct, x.nat, 8);
     nn_clear(x.nat);
     x.type = SMALL;
     x.direct = direct;
@@ -758,7 +761,7 @@ Nat DivRem(Nat *rem, Nat a, Nat b) {
   Nat a_clone = clone_nat(a);
   nn_divrem(nat_buf, a_clone.nat, a_clone.size, b.nat, b.size);
   //
-  a_clone.size = b.size;       // TODO this seems broken
+  a_clone.size = b.size;
   *rem = resize_nat(a_clone);
   //
   if (free_b) free_nat(b);
@@ -778,7 +781,7 @@ Nat Div(Nat a, Nat b) {
 
 Nat Rem(Nat a, Nat b) {
   Nat rem;
-  DivRem(&rem, a, b);
+  free_nat(DivRem(&rem, a, b));
   return rem;
 }
 
