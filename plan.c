@@ -1514,6 +1514,8 @@ void eval_law(u64 n) {
   return slide(n+m);
 }
 
+void force();
+
 void law_step(u64 depth, bool should_jet) {
   char lab[40];
   sprintf(lab, "law_step %lu", depth);
@@ -1539,8 +1541,10 @@ void law_step(u64 depth, bool should_jet) {
             fprintf(stderr, "jet name + arity match: %s\n", jet.name);
             Value **args = malloc(sizeof(Value*) * jet.arity);
             for (int j = 0; j < jet.arity; j++) {
-              eval(); // TODO this is not GC safe, as early entries in `args`
-                      // could be invalidated as the later are eval-ed.
+              push(j);
+              force();
+            }
+            for (int j = 0; j < jet.arity; j++) {
               args[j] = pop_deref();
             }
             push_val(jet.jet_exec(args));
@@ -1560,8 +1564,6 @@ void law_step(u64 depth, bool should_jet) {
     }
   }
 }
-
-void force();
 
 // 0 indicates an invalid primop.
 u64 prim_arity(u64 prim) {
