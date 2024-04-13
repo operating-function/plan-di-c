@@ -690,9 +690,34 @@ Nat Mul(Nat a, Nat b) {
   return resize_nat(n);
 }
 
-// TODO
 Nat DivRem(Nat *rem, Nat a, Nat b) {
-  crash("DivRem: unimpl");
+  bool free_b;
+  if ((a.type == SMALL) && (b.type == SMALL)) {
+    if (b.direct == 0) {
+      *rem = a;
+      return d_Nat(0);
+    }
+    rem->type = SMALL;
+    rem->direct = a.direct % b.direct;
+    return d_Nat(a.direct / b.direct);
+  }
+  if (a.type == SMALL) {
+    // b is BIG, and therefore is greater than a
+    *rem = a;
+    return d_Nat(0);
+  }
+  if (b.type == SMALL) {
+    // a is BIG, and therefore is greater than b
+    b = u64_to_big(&b.direct);
+    free_b = true;
+  }
+  // a & b are both BIG here
+  long new_size = (a.size - b.size) + 1;
+  nn_t nat_buf = nn_init(new_size);
+  nn_divrem(nat_buf, a.nat, a.size, b.nat, b.size);
+  if (free_b) free_nat(b);
+  Nat n = { .type = BIG, .size = new_size, .nat = nat_buf };
+  return resize_nat(n);
 }
 
 Nat Div(Nat a, Nat b) {
@@ -745,17 +770,24 @@ Value * div_jet(Value **args) {
   return a_Big(Div(x, y));
 }
 
+Value * rem_jet(Value **args) {
+  Nat x = NT(to_nat(args[0]));
+  Nat y = NT(to_nat(args[1]));
+  return a_Big(Rem(x, y));
+}
+
 Value * dec_jet(Value **args) {
   Nat x = NT(to_nat(args[0]));
   return a_Big(Dec(x));
 }
 
-#define NUM_JETS 5
+#define NUM_JETS 6
 Jet jet_table[NUM_JETS] =
   { (Jet) {.name = "_Add", .arity = 2, .jet_exec = add_jet }
   , (Jet) {.name = "_Sub", .arity = 2, .jet_exec = sub_jet }
   , (Jet) {.name = "_Mul", .arity = 2, .jet_exec = mul_jet }
   , (Jet) {.name = "_Div", .arity = 2, .jet_exec = div_jet }
+  , (Jet) {.name = "_Rem", .arity = 2, .jet_exec = rem_jet }
   , (Jet) {.name = "_Dec", .arity = 1, .jet_exec = dec_jet }
   };
 
