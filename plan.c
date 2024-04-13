@@ -1530,8 +1530,10 @@ Value * jet_dispatch(Value * self) {
         fprintf(stderr, "jet name + arity match: %s\n", jet.name);
         Value **args = malloc(sizeof(Value*) * jet.arity);
         for (int j = 0; j < jet.arity; j++) {
+          // eval+update each arg in-place.
           push(j);
-          force();
+          eval();
+          update(j+1);
         }
         for (int j = 0; j < jet.arity; j++) {
           args[j] = pop_deref();
