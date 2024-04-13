@@ -313,7 +313,7 @@ void fprintf_nat(FILE * f, Nat n) {
       break;
     }
     case BIG: {
-      long num_chars = n.size * 4;
+      long num_chars = n.size * sizeof(word_t);
       // add 1 for null terminator
       char * nat_str = calloc((num_chars+1), sizeof(char));
       memcpy(nat_str, n.nat, num_chars);
