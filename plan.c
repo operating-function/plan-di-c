@@ -1703,7 +1703,7 @@ void unwind(u64 depth) {
         // for the above APP case, which increments `depth`.
         case APP:
         case PIN: {
-          pop(); // pop outer pin
+          pop(); // pop outer
           push_val(y);
           return unwind(depth);
         }
