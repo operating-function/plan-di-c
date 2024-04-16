@@ -84,6 +84,20 @@ void crash(char * s) {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+//  Nat pointer tagging
+
+// 2^63 - high bit
+u64 ptr_nat_mask = 9223372036854775808u;
+
+bool is_ptr_nat(Value * x) {
+  return (((u64) x) & ptr_nat_mask) != 0;
+}
+
+static inline u64 get_ptr_nat(Value * x) {
+  return (u64) (((u64) x) & ~ptr_nat_mask);
+}
+
+////////////////////////////////////////////////////////////////////////////////
 //  Accessors
 
 #define CHECK_TAGS 1
@@ -335,23 +349,22 @@ void fprintf_nat(FILE * f, Nat n) {
 ////////////////////////////////////////////////////////////////////////////////
 //  Construction
 
-// TODO all of these need to change to mask `ptr_nat_mask` in before returning.
 // TODO we probably also want a `Value * ptr_Nat(u64 n)` fn which checks for
 // 63-bit range (`n < ptr_nat_mask`) and puts it into a ptr-nat. otherwise, call
 // `a_Nat`?
 
-Nat d_Nat(u64 n) {
+Nat d_Small(u64 n) {
   return (Nat){.type = SMALL, .direct = n};
 }
 
-Value * a_Nat(u64 n) {
+Value * a_Small(u64 n) {
   Value * res = (Value *)malloc(sizeof(Value));
   res->type = NAT;
-  res->n = d_Nat(n);
+  res->n = d_Small(n);
   return res;
 }
 
-Value * a_Big(Nat n) {
+Value * a_Nat(Nat n) {
   Value * res = (Value *)malloc(sizeof(Value));
   res->type = NAT;
   res->n = n;
@@ -397,13 +410,6 @@ void free_nat(Nat a) {
   }
 }
 
-// 2^63 - high bit
-u64 ptr_nat_mask = 9223372036854775808u;
-
-bool is_ptr_nat(Value * x) {
-  return (((u64) x) & ptr_nat_mask) == 0;
-}
-
 int nat_char_width(Nat x) {
   switch (x.type) {
     case SMALL:
@@ -447,15 +453,15 @@ bool EQ(Nat a, Nat b) {
 }
 
 bool EQZ(Nat a) {
-  return (EQ(a, d_Nat(0)));
+  return (EQ(a, d_Small(0)));
 }
 
 bool EQ1(Nat a) {
-  return (EQ(a, d_Nat(1)));
+  return (EQ(a, d_Small(1)));
 }
 
 bool EQ2(Nat a) {
-  return (EQ(a, d_Nat(2)));
+  return (EQ(a, d_Small(2)));
 }
 
 bool NEQ(Nat a, Nat b) {
@@ -589,7 +595,7 @@ Nat Dec(Nat n) {
   switch(n.type) {
     case SMALL:
       if (n.direct == 0) {
-        return d_Nat(0);
+        return d_Small(0);
       }
       return (Nat){ .type = SMALL, .direct = (n.direct-1) };
     case BIG: {
@@ -662,11 +668,11 @@ Nat Add(Nat a, Nat b) {
 Nat Sub(Nat a, Nat b) {
   if ((a.type == SMALL) && (b.type == SMALL)) {
     if (a.direct < b.direct)
-      return d_Nat(0);
+      return d_Small(0);
     return (Nat){ .type = SMALL, .direct = (a.direct - b.direct) };
   }
   if ((a.type == SMALL) && (b.type == BIG))
-    return d_Nat(0);
+    return d_Small(0);
 
   long new_size = a.size;
   nn_t nat_buf = nn_init(new_size);
@@ -678,13 +684,13 @@ Nat Sub(Nat a, Nat b) {
   }
   if (a.size < b.size) {
     if (free_b) free_nat(b);
-    return d_Nat(0);
+    return d_Small(0);
   }
 
   word_t c = nn_sub_c(nat_buf, a.nat, a.size, b.nat, b.size, 0);
   if (free_b) free_nat(b);
   if (c > 0) {
-    return d_Nat(0);
+    return d_Small(0);
   }
   Nat n = { .type = BIG, .size = new_size, .nat = nat_buf };
   return resize_nat(n);
@@ -698,13 +704,13 @@ Nat Mul(Nat a, Nat b) {
     u64 res;
     if ((a.direct == 0) || (b.direct == 0)) {
       //printf("0 res\n");
-      return d_Nat(0);
+      return d_Small(0);
     }
     res = a.direct * b.direct;
     if (res / a.direct == b.direct) {
       // no overflow - return res
       //printf("smol res\n");
-      return d_Nat(res);
+      return d_Small(res);
     }
     // overflow
     //printf("overflow\n");
@@ -742,17 +748,17 @@ Nat DivRem(Nat *rem, Nat a, Nat b) {
     //fprintf(stderr, "SMALL/SMALL\n");
     if (b.direct == 0) {
       *rem = a;
-      return d_Nat(0);
+      return d_Small(0);
     }
     rem->type = SMALL;
     rem->direct = a.direct % b.direct;
-    return d_Nat(a.direct / b.direct);
+    return d_Small(a.direct / b.direct);
   }
   if (a.type == SMALL) {
     // b is BIG, and therefore is greater than a
     //fprintf(stderr, "SMALL/BIG\n");
     *rem = clone_nat(a);
-    return d_Nat(0);
+    return d_Small(0);
   }
   if (b.type == SMALL) {
     // a is BIG, and therefore is greater than b
@@ -765,7 +771,7 @@ Nat DivRem(Nat *rem, Nat a, Nat b) {
   if (a.size < b.size) {
     if (free_b) free_nat(b);
     *rem = clone_nat(a);
-    return d_Nat(0);
+    return d_Small(0);
   }
   long new_size = (a.size - b.size) + 1;
   nn_t nat_buf = nn_init(new_size);
@@ -803,42 +809,42 @@ typedef struct Jet {
 } Jet;
 
 Value * to_nat(Value * x) {
-  return (IS_NAT(x)) ? x : a_Nat(0);
+  return (IS_NAT(x)) ? x : a_Small(0);
 }
 
 Value * add_jet(Value **args) {
   Nat x = NT(to_nat(args[0]));
   Nat y = NT(to_nat(args[1]));
-  return a_Big(Add(x, y));
+  return a_Nat(Add(x, y));
 }
 
 Value * sub_jet(Value **args) {
   Nat x = NT(to_nat(args[0]));
   Nat y = NT(to_nat(args[1]));
-  return a_Big(Sub(x, y));
+  return a_Nat(Sub(x, y));
 }
 
 Value * mul_jet(Value **args) {
   Nat x = NT(to_nat(args[0]));
   Nat y = NT(to_nat(args[1]));
-  return a_Big(Mul(x, y));
+  return a_Nat(Mul(x, y));
 }
 
 Value * div_jet(Value **args) {
   Nat x = NT(to_nat(args[0]));
   Nat y = NT(to_nat(args[1]));
-  return a_Big(Div(x, y));
+  return a_Nat(Div(x, y));
 }
 
 Value * rem_jet(Value **args) {
   Nat x = NT(to_nat(args[0]));
   Nat y = NT(to_nat(args[1]));
-  return a_Big(Rem(x, y));
+  return a_Nat(Rem(x, y));
 }
 
 Value * dec_jet(Value **args) {
   Nat x = NT(to_nat(args[0]));
-  return a_Big(Dec(x));
+  return a_Nat(Dec(x));
 }
 
 #define NUM_JETS 6
@@ -935,18 +941,18 @@ Value * seed_load(u64 *buf) {
     big_buf = memcpy(big_buf, buf+used, wid*sizeof(u64));
     Nat big_nat = (Nat){.type=BIG, .size=wid, .nat = NULL};
 
-    *next_ref++ = a_Big(big_nat);
+    *next_ref++ = a_Nat(big_nat);
     used += wid;
   }
 
   for (int i=0; i<n_words; i++) {
-    *next_ref++ = a_Nat(buf[used++]);
+    *next_ref++ = a_Small(buf[used++]);
   }
 
   {
     uint8_t *byte_buf = (void*) (buf + used);
     for (int i=0; i<n_bytes; i++) {
-      *next_ref++ = a_Nat(byte_buf[i]);
+      *next_ref++ = a_Small(byte_buf[i]);
     }
     used += (n_bytes / 8);
   }
@@ -1315,8 +1321,8 @@ void mk_law() {
 void incr() {
   write_dot("incr");
   Value * x = pop_deref();
-  Nat n = (IS_NAT(x)) ? Inc(NT(x)) : d_Nat(1);
-  push_val(a_Big(n));
+  Nat n = (IS_NAT(x)) ? Inc(NT(x)) : d_Small(1);
+  push_val(a_Nat(n));
 }
 
 void nat_case() {
@@ -1326,8 +1332,8 @@ void nat_case() {
   Value * z = pop_deref();
   if (IS_NAT(x)) {
     Nat x_ = NT(x);
-    if (GT(x_, d_Nat(0))) {
-      Value * dec_x = a_Big(Dec(x_));
+    if (GT(x_, d_Small(0))) {
+      Value * dec_x = a_Nat(Dec(x_));
       Value * ap    = a_App(p, dec_x);
       return push_val(ap);
     }
@@ -1349,8 +1355,8 @@ void plan_case() {
       return;
     }
     case LAW: {
-      Value * ap1 = a_App(l,   a_Big(NM(x)));
-      Value * ap2 = a_App(ap1, a_Big(AR(x)));
+      Value * ap1 = a_App(l,   a_Nat(NM(x)));
+      Value * ap2 = a_App(ap1, a_Nat(AR(x)));
       Value * ap3 = a_App(ap2, BD(x));
       push_val(ap3);
       return;
@@ -1445,7 +1451,7 @@ void kal(u64 n) {
   Value * x = get_deref(0);
   if (IS_NAT(x)) {
     Nat x_nat = NT(x);
-    if (LTE(x_nat, d_Nat(n))) {
+    if (LTE(x_nat, d_Small(n))) {
       push(n - nat_to_u64(x_nat));
       goto end;
     }
@@ -1539,7 +1545,7 @@ Value * jet_dispatch(Value * self) {
     Nat nm = NM(self);
     int min_len = MIN(nat_char_width(nm), strlen(jet.name));
     if (strncmp(jet.name, nat_chars(&nm), min_len) == 0) {
-      if (EQ(AR(self), d_Nat(jet.arity))) {
+      if (EQ(AR(self), d_Small(jet.arity))) {
         fprintf(stderr, "jet name + arity match: %s\n", jet.name);
         Value **args = malloc(sizeof(Value*) * jet.arity);
         // dot
@@ -1578,7 +1584,7 @@ void law_step(u64 depth, bool should_jet) {
   write_dot(lab);
   //
   Value * self = pop_deref();
-  if (GT(AR(self), d_Nat(depth))) {
+  if (GT(AR(self), d_Small(depth))) {
     // unsaturated application. this is a little weird, but works?
     if (depth <= 1) {
       write_dot("unsaturated / 0-backout");
@@ -1812,7 +1818,7 @@ Value *read_atom() {
     acc = acc*10 + (c - '0');
   }
   ungetc(c,stdin);
-  return a_Nat(acc);
+  return a_Small(acc);
 }
 
 void eat_spaces() {
@@ -1872,11 +1878,11 @@ Value *read_sym() {
       nn_t nat_buf = nn_init(u64_len);
       memcpy((char*)nat_buf, buf, len);
       Nat n = (Nat){.type=BIG, .size=u64_len, .nat = nat_buf};
-      return a_Big(n);
+      return a_Nat(n);
     } else {
       u64 word = 0;
       memcpy((char*)&word, buf, len);
-      return a_Nat(word);
+      return a_Small(word);
     }
 }
 
@@ -1942,8 +1948,8 @@ Value *read_exp_top() {
 }
 
 int main (void) {
-  // Value * x = a_Nat(UINT64_MAX);
-  // Value * y = a_Nat(3);
+  // Value * x = a_Small(UINT64_MAX);
+  // Value * y = a_Small(3);
   // Value * arr[2] = { x, y };
   // Value * res = jet_table[0].jet_exec(arr);
   // fprintf_value(stdout, res);
@@ -1959,8 +1965,6 @@ int main (void) {
     Value *v = read_exp_top();
     if (!v) return 0;
     Value * res = run(v);
-    // TODO this is wrong, b/c we did not mask a `1` into the high bit when
-    // we constructed this `Value *`
     printf("is_ptr_nat: %b\n", is_ptr_nat(res));
     fprintf_value(stdout, res);
     printf("\n");
