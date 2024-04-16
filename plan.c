@@ -335,6 +335,11 @@ void fprintf_nat(FILE * f, Nat n) {
 ////////////////////////////////////////////////////////////////////////////////
 //  Construction
 
+// TODO all of these need to change to mask `ptr_nat_mask` in before returning.
+// TODO we probably also want a `Value * ptr_Nat(u64 n)` fn which checks for
+// 63-bit range (`n < ptr_nat_mask`) and puts it into a ptr-nat. otherwise, call
+// `a_Nat`?
+
 Nat d_Nat(u64 n) {
   return (Nat){.type = SMALL, .direct = n};
 }
@@ -390,6 +395,13 @@ void free_nat(Nat a) {
   if (a.type == BIG) {
     free(a.nat);
   }
+}
+
+// 2^63 - high bit
+u64 ptr_nat_mask = 9223372036854775808u;
+
+bool is_ptr_nat(Value * x) {
+  return (((u64) x) & ptr_nat_mask) == 0;
 }
 
 int nat_char_width(Nat x) {
@@ -1947,6 +1959,9 @@ int main (void) {
     Value *v = read_exp_top();
     if (!v) return 0;
     Value * res = run(v);
+    // TODO this is wrong, b/c we did not mask a `1` into the high bit when
+    // we constructed this `Value *`
+    printf("is_ptr_nat: %b\n", is_ptr_nat(res));
     fprintf_value(stdout, res);
     printf("\n");
     goto again;
