@@ -84,7 +84,11 @@ void crash(char * s) {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-//  Nat pointer tagging
+//  Nat pointer tagging (ptr-nat)
+
+// if the high bit is set, then the remaining 63 bits should be interpreted as
+// a nat. this is simpler than having to modify all pointers to mask/unmask
+// their high bit.
 
 // 2^63 - high bit
 u64 ptr_nat_mask = 9223372036854775808u;
@@ -369,6 +373,16 @@ Value * a_Nat(Nat n) {
   res->type = NAT;
   res->n = n;
   return res;
+}
+
+Value * mk_Nat(Nat n) {
+  if ((n.type == SMALL) && (n.direct < ptr_nat_mask)) {
+    fprintf(stderr, "mk_Nat ptr-nat\n");
+    // fits in ptr 63 bits
+    u64 v = n.direct | ptr_nat_mask;
+    return (Value *) v;
+  }
+  return a_Nat(n);
 }
 
 Value * a_Pin(Value * v) {
@@ -1818,7 +1832,7 @@ Value *read_atom() {
     acc = acc*10 + (c - '0');
   }
   ungetc(c,stdin);
-  return a_Small(acc);
+  return mk_Nat(d_Small(acc));
 }
 
 void eat_spaces() {
@@ -1882,7 +1896,7 @@ Value *read_sym() {
     } else {
       u64 word = 0;
       memcpy((char*)&word, buf, len);
-      return a_Small(word);
+      return mk_Nat(d_Small(word));
     }
 }
 
@@ -1963,9 +1977,10 @@ int main (void) {
   again:
     if (isInteractive) printf(">> ");
     Value *v = read_exp_top();
+    printf("is_ptr_nat(v): %b\n", is_ptr_nat(v));
     if (!v) return 0;
+    // TODO this crashes b/c we don't know how to handle ptr-nats in run/interp
     Value * res = run(v);
-    printf("is_ptr_nat: %b\n", is_ptr_nat(res));
     fprintf_value(stdout, res);
     printf("\n");
     goto again;
