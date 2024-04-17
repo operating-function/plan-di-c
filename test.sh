@@ -113,10 +113,15 @@ check "10" "($Add 4 6)"
 check "%n" "($Add 44 66)"
 check "%d" "($Times $Inc 41 59)"
 check "7" "($Add 4 ($Add 1 2))"
-echo Mul
+echo "Mul ptr-nats"
 check "8" "($Mul 2 4)"
 check "9" "($Mul 3 3)"
 check "900" "($Mul 3 300)"
+echo "Mul heap SMALLs"
+check "85070591730234615893513767968506380290" "($Mul 9223372036854775809 9223372036854775810)"
+echo Mul BIGs
+check "4337243350382979986872112349518590392945420" "($Mul %foooooooo %baaaaaaar)"
+check "1475887433180421662838272732634687279056224492909545382656893899996011391342627596" "($Mul %foooooooooooooooo %baaaaaaaaaaaaaaar)"
 
 echo "cnst/ignore"
 check "11" "($Cnst 11 7)"
