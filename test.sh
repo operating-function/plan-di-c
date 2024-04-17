@@ -27,7 +27,7 @@ PlanCase="#4"
 id="($MkLaw 0 1 1)"
 Dec="($MkPin ($MkLaw %_Dec 1 (0 (0 ($NatCase (2 0)) $id) 1)))"
 ToNat="($NatCase 0 $Inc)"
-Times="($MkLaw 126879464510559 3 (0 (0 (0 (2 $NatCase) 2) (0 (0 0 1) (0 1 2))) 3))"
+Times="($MkLaw %_Times 3 (0 (0 (0 (2 $NatCase) 2) (0 (0 0 1) (0 1 2))) 3))"
 Add="($MkPin ($MkLaw %_Add 2 (0 (0 ($Times $Inc) (0 $ToNat 1)) 2)))"
 Mul="($MkPin ($MkLaw %_Mul 2 (0 (0 (0 $Times (0 $Add 1)) (2 0)) 2)))"
 
