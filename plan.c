@@ -829,42 +829,42 @@ typedef struct Jet {
   Value * (*jet_exec)(Value **args);
 } Jet;
 
-Value * to_nat(Value * x) {
-  return (IS_NAT(x)) ? x : a_Small(0);
+Nat to_nat(Value * x) {
+  return (IS_NAT(x)) ? NT(x) : d_Small(0);
 }
 
 Value * add_jet(Value **args) {
-  Nat x = NT(to_nat(args[0]));
-  Nat y = NT(to_nat(args[1]));
+  Nat x = to_nat(args[0]);
+  Nat y = to_nat(args[1]);
   return mk_Nat(Add(x, y));
 }
 
 Value * sub_jet(Value **args) {
-  Nat x = NT(to_nat(args[0]));
-  Nat y = NT(to_nat(args[1]));
+  Nat x = to_nat(args[0]);
+  Nat y = to_nat(args[1]);
   return mk_Nat(Sub(x, y));
 }
 
 Value * mul_jet(Value **args) {
-  Nat x = NT(to_nat(args[0]));
-  Nat y = NT(to_nat(args[1]));
+  Nat x = to_nat(args[0]);
+  Nat y = to_nat(args[1]);
   return mk_Nat(Mul(x, y));
 }
 
 Value * div_jet(Value **args) {
-  Nat x = NT(to_nat(args[0]));
-  Nat y = NT(to_nat(args[1]));
+  Nat x = to_nat(args[0]);
+  Nat y = to_nat(args[1]);
   return mk_Nat(Div(x, y));
 }
 
 Value * rem_jet(Value **args) {
-  Nat x = NT(to_nat(args[0]));
-  Nat y = NT(to_nat(args[1]));
+  Nat x = to_nat(args[0]);
+  Nat y = to_nat(args[1]);
   return mk_Nat(Rem(x, y));
 }
 
 Value * dec_jet(Value **args) {
-  Nat x = NT(to_nat(args[0]));
+  Nat x = to_nat(args[0]);
   return mk_Nat(Dec(x));
 }
 
