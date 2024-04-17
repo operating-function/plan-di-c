@@ -1840,13 +1840,20 @@ Value * run(Value * v) {
   return res;
 }
 
-Value *read_atom() {
+// when `is_sym == true`,  we are parsing symbols.
+// when `is_sym == false`, we are parsing digits.
+// this seems tidier than passing a function pointer, as issym & isdigit do not
+// have the same type (??).
+char * read_str_input(bool is_sym) {
   u64 len = 100;
   u64 idx = 0;
   char * str = malloc(len * sizeof(char));
   memset(str, 0, len);
   char c;
-  while (isdigit(c = getchar())) {
+  while (true) {
+    c = getchar();
+    if ((is_sym)  && (!issym(c)))   break;
+    if ((!is_sym) && (!isdigit(c))) break;
     if (idx >= len) {
       len *= 2;
       str = realloc_(str, len);
@@ -1856,6 +1863,11 @@ Value *read_atom() {
     idx++;
   }
   ungetc(c,stdin);
+  return str;
+}
+
+Value *read_atom() {
+  char * str = read_str_input(false);
   //
   // y : # of bits required to store
   // x : length of string of '9's
@@ -1904,39 +1916,23 @@ Value *read_app(Value *f) {
   }
 }
 
-#define BUF_LEN 1024
-
 Value *read_sym() {
-    // TODO handle larger sizes
-    // sketch:
-    //   - loop with buf, allocating new memory, until done.
-    //   - count the total # of chars
-    //   - allocate `nat_buf` using the total # chars
-    //   - copy each char buf into `nat_buf`, sequentially.
-    char buf[BUF_LEN] = {0};
-    char c, *out=buf;
-    int buf_chars = 0;
-    while (issym(c = getchar())) {
-      if (buf_chars++ >= BUF_LEN) crash("sym too big");
-      *out++ = c;
-    }
-    if (feof(stdin)) crash("Unexpected EOF\n");
-    ungetc(c, stdin);
-    int len = strlen(buf);
-    if (!len)    crash("Empty symbol");
-    if (len > 8) {
-      int u64_len = (len / sizeof(u64));
-      // round up
-      if ((len % sizeof(u64)) > 0) u64_len++;
-      nn_t nat_buf = nn_init(u64_len);
-      memcpy((char*)nat_buf, buf, len);
-      Nat n = (Nat){.type=BIG, .size=u64_len, .nat = nat_buf};
-      return a_Nat(n);
-    } else {
-      u64 word = 0;
-      memcpy((char*)&word, buf, len);
-      return ptr_Nat(word);
-    }
+  char * str = read_str_input(true);
+  int len = strlen(str);
+  if (!len)    crash("Empty symbol");
+  if (len > 8) {
+    int u64_len = (len / sizeof(u64));
+    // round up
+    if ((len % sizeof(u64)) > 0) u64_len++;
+    nn_t nat_buf = nn_init(u64_len);
+    memcpy((char*)nat_buf, str, len);
+    Nat n = (Nat){.type=BIG, .size=u64_len, .nat = nat_buf};
+    return a_Nat(n);
+  } else {
+    u64 word = 0;
+    memcpy((char*)&word, str, len);
+    return ptr_Nat(word);
+  }
 }
 
 Value *read_exp() {
