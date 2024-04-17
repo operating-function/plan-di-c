@@ -1593,7 +1593,7 @@ Value * jet_dispatch(Value * self) {
         //
         Value **args = malloc(sizeof(Value*) * jet.arity);
         for (int j = 0; j < jet.arity; j++) {
-          args[j] = pop_deref();
+          args[j] = get_deref(j);
         }
         return jet.jet_exec(args);
       }
@@ -1616,19 +1616,24 @@ void law_step(u64 depth, bool should_jet) {
     }
     backout(depth-1);
   } else {
+    u64 ar = nat_to_u64(AR(self));
     setup_call(depth);
     if (should_jet) {
+      // TODO need to confirm that a non-jet-match doesn't mess up the stack
+      // for the below `eval_law` logic.
       Value * res = jet_dispatch(self);
       if (res != NULL) {
-        return push_val(res);
+        push_val(res);
+        slide(ar);
+        goto oversat;
       }
       // otherwise, no match - continue to non-jetted logic
     }
     push_val(self);
     flip_stack(depth+1);
-    u64 ar = nat_to_u64(AR(self));
     push_val(BD(self));
     eval_law(ar+1);
+  oversat:
     if (ar < depth) {
       // oversaturated application
       handle_oversaturated_application(depth - ar);
