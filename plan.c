@@ -591,7 +591,11 @@ Nat resize_nat(Nat x) {
       break;
     }
   }
-  if (new_size == 1) {
+  if (new_size == 0) {
+    nn_clear(x.nat);
+    x.type = SMALL;
+    x.direct = 0;
+  } else if (new_size == 1) {
     // shrink BIG to SMALL
     //printf("shrinking from %lu BIG to SMALL\n", x.size);
     u64 direct;
