@@ -1571,7 +1571,6 @@ Value * jet_dispatch(Value * self) {
     if (strncmp(jet.name, nat_chars(&nm), min_len) == 0) {
       if (EQ(AR(self), d_Small(jet.arity))) {
         fprintf(stderr, "jet name + arity match: %s\n", jet.name);
-        Value **args = malloc(sizeof(Value*) * jet.arity);
         // dot
         char * lab;
         int ret;
@@ -1592,6 +1591,7 @@ Value * jet_dispatch(Value * self) {
         write_dot(lab);
         free(lab);
         //
+        Value **args = malloc(sizeof(Value*) * jet.arity);
         for (int j = 0; j < jet.arity; j++) {
           args[j] = pop_deref();
         }
