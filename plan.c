@@ -1670,9 +1670,9 @@ void do_prim(u64 prim) {
     }
     case 1: { // mk_law
       u64 arity = prim_arity(prim);
-      push(0); force(); // n
-      push(1); force(); // a
-      push(2); force(); // b
+      push(0); force();           // b
+      push(1); eval(); update(2); // a
+      push(2); eval(); update(3); // n
       return mk_law();
     }
     case 2: { // incr
