@@ -144,6 +144,7 @@ static inline void ck_ind(char * fn_nm, Value * x) {
 }
 
 static inline Type TY(Value * x) {
+  if (is_ptr_nat(x)) return NAT;
   return x->type;
 }
 
@@ -202,7 +203,10 @@ static inline Value * TL(Value * x) {
   return x->a.g;
 };
 
+Nat d_Small(u64);
+
 static inline Nat NT(Value * x) {
+  if (is_ptr_nat(x)) return d_Small(get_ptr_nat(x));
   x = deref(x);
   #ifdef CHECK_TAGS
   ck_nat("NT", x);
@@ -377,7 +381,6 @@ Value * a_Nat(Nat n) {
 
 Value * mk_Nat(Nat n) {
   if ((n.type == SMALL) && (n.direct < ptr_nat_mask)) {
-    fprintf(stderr, "mk_Nat ptr-nat\n");
     // fits in ptr 63 bits
     u64 v = n.direct | ptr_nat_mask;
     return (Value *) v;
@@ -829,36 +832,36 @@ Value * to_nat(Value * x) {
 Value * add_jet(Value **args) {
   Nat x = NT(to_nat(args[0]));
   Nat y = NT(to_nat(args[1]));
-  return a_Nat(Add(x, y));
+  return mk_Nat(Add(x, y));
 }
 
 Value * sub_jet(Value **args) {
   Nat x = NT(to_nat(args[0]));
   Nat y = NT(to_nat(args[1]));
-  return a_Nat(Sub(x, y));
+  return mk_Nat(Sub(x, y));
 }
 
 Value * mul_jet(Value **args) {
   Nat x = NT(to_nat(args[0]));
   Nat y = NT(to_nat(args[1]));
-  return a_Nat(Mul(x, y));
+  return mk_Nat(Mul(x, y));
 }
 
 Value * div_jet(Value **args) {
   Nat x = NT(to_nat(args[0]));
   Nat y = NT(to_nat(args[1]));
-  return a_Nat(Div(x, y));
+  return mk_Nat(Div(x, y));
 }
 
 Value * rem_jet(Value **args) {
   Nat x = NT(to_nat(args[0]));
   Nat y = NT(to_nat(args[1]));
-  return a_Nat(Rem(x, y));
+  return mk_Nat(Rem(x, y));
 }
 
 Value * dec_jet(Value **args) {
   Nat x = NT(to_nat(args[0]));
-  return a_Nat(Dec(x));
+  return mk_Nat(Dec(x));
 }
 
 #define NUM_JETS 6
@@ -1046,9 +1049,11 @@ int dot_count = 0;
 char * dot_dir_path = "./dot";
 
 char * p_ptr(Value * x) {
-  char * buf = malloc(20*sizeof(char));
+  char * buf = malloc(30*sizeof(char));
   if (x == NULL) {
     sprintf(buf, "N_null");
+  } else if (is_ptr_nat(x)) {
+    sprintf(buf, "ptr_nat_%lu", get_ptr_nat(x));
   } else {
     sprintf(buf, "N_%p", x);
   }
@@ -1115,6 +1120,7 @@ void fprintf_heap(FILE *f, Node *input, Node *seen) {
     case NAT: {
       char * v_p = p_ptr(v);
       fprintf(f, "%s [label=\"", v_p);
+      if (is_ptr_nat(v)) fprintf(f, "ptr_nat:");
       fprintf_nat(f, NT(v));
       fprintf(f, "\"];\n");
       free(v_p);
@@ -1336,7 +1342,7 @@ void incr() {
   write_dot("incr");
   Value * x = pop_deref();
   Nat n = (IS_NAT(x)) ? Inc(NT(x)) : d_Small(1);
-  push_val(a_Nat(n));
+  push_val(mk_Nat(n));
 }
 
 void nat_case() {
@@ -1347,7 +1353,7 @@ void nat_case() {
   if (IS_NAT(x)) {
     Nat x_ = NT(x);
     if (GT(x_, d_Small(0))) {
-      Value * dec_x = a_Nat(Dec(x_));
+      Value * dec_x = mk_Nat(Dec(x_));
       Value * ap    = a_App(p, dec_x);
       return push_val(ap);
     }
@@ -1705,7 +1711,7 @@ void unwind(u64 depth) {
     }
     case PIN: {
       Value * y = deref(x->p);
-      switch (y->type) {
+      switch (TY(y)) {
         case NAT: {
           pop(); // pop primop
           u64 prim_u64 = nat_to_u64(NT(y));
@@ -1977,7 +1983,6 @@ int main (void) {
   again:
     if (isInteractive) printf(">> ");
     Value *v = read_exp_top();
-    printf("is_ptr_nat(v): %b\n", is_ptr_nat(v));
     if (!v) return 0;
     // TODO this crashes b/c we don't know how to handle ptr-nats in run/interp
     Value * res = run(v);
