@@ -1565,8 +1565,10 @@ void force();
 // TODO more efficient match algo (we do linear scan of all jets)
 //
 // search the jet_table for a matching name & arity to what is in `self`. if
-// found, return the output of its jet_exec. if no match, return NULL.
-Value * jet_dispatch(Value * self) {
+// matched, we consume the arguments and leave the return value on the top of
+// the stack, returning true. if no match, leave the arguments as-is and return
+// false.
+bool jet_dispatch(Value * self, u64 ar) {
   write_dot("jet_dispatch: entry");
   for (int i = 0; i < NUM_JETS; i++) {
     Jet jet = jet_table[i];
@@ -1599,11 +1601,13 @@ Value * jet_dispatch(Value * self) {
         for (int j = 0; j < jet.arity; j++) {
           args[j] = get_deref(j);
         }
-        return jet.jet_exec(args);
+        push_val(jet.jet_exec(args));
+        slide(ar);
+        return true;
       }
     }
   }
-  return NULL;
+  return false;
 }
 
 void law_step(u64 depth, bool should_jet) {
@@ -1620,24 +1624,19 @@ void law_step(u64 depth, bool should_jet) {
     }
     backout(depth-1);
   } else {
-    u64 ar = nat_to_u64(AR(self));
     setup_call(depth);
-    if (should_jet) {
-      // TODO need to confirm that a non-jet-match doesn't mess up the stack
-      // for the below `eval_law` logic.
-      Value * res = jet_dispatch(self);
-      if (res != NULL) {
-        push_val(res);
-        slide(ar);
-        goto oversat;
-      }
-      // otherwise, no match - continue to non-jetted logic
+    u64 ar = nat_to_u64(AR(self));
+    if ((should_jet) && (jet_dispatch(self, ar))) {
+      // if we should jet, we call jet_dispatch. it tells us if it fired a jet,
+      // in which case the stack will no longer have arguments and will have the
+      // jet's return value at its top.
+    } else {
+      // if no match, perform regular law evaluation
+      push_val(self);
+      flip_stack(depth+1);
+      push_val(BD(self));
+      eval_law(ar+1);
     }
-    push_val(self);
-    flip_stack(depth+1);
-    push_val(BD(self));
-    eval_law(ar+1);
-  oversat:
     if (ar < depth) handle_oversaturated_application(depth - ar);
   }
 }
