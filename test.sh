@@ -150,9 +150,8 @@ echo "incr smol sym"
 check "%gooooooooooooooooooooooo" "($Inc ($PlanCase 0 0 $Cnst 0 (%fooooooooooooooooooooooo %f)))"
 check "%g" "($Inc ($PlanCase 0 0 $Ignore 0 (%fooooooooooooooooooooooo %f)))"
 
-# TODO
-# echo "large atoms"
-# check "%foooooooooooooooo" "37919465640883872069706873901102452928358"
+echo "large atoms"
+check "%foooooooooooooooo" "37919465640883872069706873901102452928358"
 
 # TODO
 # VAL=$(printf '%%%*s\n' "2000" | tr ' ' "a")
