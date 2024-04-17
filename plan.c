@@ -634,8 +634,8 @@ Nat Dec(Nat n) {
 }
 
 Nat Add(Nat a, Nat b) {
-  bool free_a;
-  bool free_b;
+  bool free_a = false;
+  bool free_b = false;
   if ((a.type == SMALL) && (b.type == SMALL)) {
     //printf("smol/smol\n");
     if ((UINT64_MAX - a.direct) < b.direct) {
@@ -698,7 +698,7 @@ Nat Sub(Nat a, Nat b) {
   long new_size = a.size;
   nn_t nat_buf = nn_init(new_size);
 
-  bool free_b;
+  bool free_b = false;
   if ((a.type == BIG) && (b.type == SMALL)) {
     b = u64_to_big(&b.direct);
     free_b = true;
@@ -718,8 +718,8 @@ Nat Sub(Nat a, Nat b) {
 }
 
 Nat Mul(Nat a, Nat b) {
-  bool free_a;
-  bool free_b;
+  bool free_a = false;
+  bool free_b = false;
   if ((a.type == SMALL) && (b.type == SMALL)) {
     //printf("smol/smol\n");
     u64 res;
@@ -764,7 +764,7 @@ Nat Mul(Nat a, Nat b) {
 }
 
 Nat DivRem(Nat *rem, Nat a, Nat b) {
-  bool free_b;
+  bool free_b = false;
   if ((a.type == SMALL) && (b.type == SMALL)) {
     //fprintf(stderr, "SMALL/SMALL\n");
     if (b.direct == 0) {
