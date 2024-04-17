@@ -753,13 +753,28 @@ Nat Mul(Nat a, Nat b) {
     Nat n = { .type = BIG, .size = new_size, .nat = nat_buf };
     return resize_nat(n);
   }
-  // a & b are both BIG here
+  //
+  fprintf(stderr, "Mul: a:");
+  fprintf_nat(stderr, a);
+  fprintf(stderr, "\n");
+  fprintf(stderr, "Mul: b:");
+  fprintf_nat(stderr, b);
+  fprintf(stderr, "\n");
+  //
+  assert(a.type == BIG); // a & b are both BIG here
+  assert(b.type == BIG);
   long new_size = a.size + b.size; // TODO handle size overflow?
   nn_t nat_buf = nn_init(new_size);
+  nn_zero(nat_buf, new_size);
   nn_mul_classical(nat_buf, a.nat, a.size, b.nat, b.size);
   if (free_a) free_nat(a);
   if (free_b) free_nat(b);
   Nat n = { .type = BIG, .size = new_size, .nat = nat_buf };
+  //
+  fprintf(stderr, "Mul: n:");
+  fprintf_nat(stderr, n);
+  fprintf(stderr, "\n");
+  //
   return resize_nat(n);
 }
 
@@ -1850,27 +1865,27 @@ Value *read_atom() {
     idx++;
   }
   ungetc(c,stdin);
-  fprintf(stderr, "strlen: %lu\n", strlen(str));
+  //fprintf(stderr, "strlen: %lu\n", strlen(str));
   // y : # of bits required to store
   // x : length of string of '9's
   // approx linreg:
   // y = 3.324 x + 0.4513
   long bit_len = ((34 * strlen(str)) / 10) + 1;
-  fprintf(stderr, "bit_len: %lu\n", bit_len);
+  //fprintf(stderr, "bit_len: %lu\n", bit_len);
   long word_bits = 8 * sizeof(word_t);
   long nat_len = bit_len / word_bits;
   // round up.
   if ((bit_len % word_bits) > 0) nat_len++;
-  fprintf(stderr, "nat_len: %lu\n", nat_len);
+  //fprintf(stderr, "nat_len: %lu\n", nat_len);
   nn_t nat_buf = nn_init(nat_len);
   nn_zero(nat_buf, nat_len);
   len_t actual_len;
   nn_set_str(nat_buf, &actual_len, str);
   Nat big = { .type = BIG, .size = nat_len, .nat = nat_buf };
-  fprintf(stderr, "str: %s\n", str);
-  fprintf(stderr, "nat:");
-  fprintf_nat(stderr, big);
-  fprintf(stderr, "\n");
+  //fprintf(stderr, "str: %s\n", str);
+  //fprintf(stderr, "nat:");
+  //fprintf_nat(stderr, big);
+  //fprintf(stderr, "\n");
   return mk_Nat(resize_nat(big));
 }
 
