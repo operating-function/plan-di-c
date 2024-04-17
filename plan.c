@@ -1634,10 +1634,7 @@ void law_step(u64 depth, bool should_jet) {
     push_val(BD(self));
     eval_law(ar+1);
   oversat:
-    if (ar < depth) {
-      // oversaturated application
-      handle_oversaturated_application(depth - ar);
-    }
+    if (ar < depth) handle_oversaturated_application(depth - ar);
   }
 }
 
