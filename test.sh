@@ -155,16 +155,16 @@ echo "large atoms"
 check "%foooooooooooooooo" "37919465640883872069706873901102452928358"
 check "75838931281767744139413747802204905856717" "($Add 37919465640883872069706873901102452928358 37919465640883872069706873901102452928359)"
 
-# TODO
-# VAL=$(printf '%%%*s\n' "2000" | tr ' ' "a")
-# diff <(echo "$VAL") <(echo "$VAL" | ./plan)
-# EXIT_CODE=$?
-# if [[ $EXIT_CODE -ne 0 ]] ; then
-#   echo "large symbol FAILED";
-#   FAILED=1;
-# else
-#   echo "large symbol PASSED";
-# fi
+VAL=$(printf '%%%*s\n' "2000" | tr ' ' "a")
+diff <(echo "$VAL") <(echo "$VAL" | ./plan)
+EXIT_CODE=$?
+if [[ $EXIT_CODE -ne 0 ]] ; then
+  echo "large symbol test FAILED";
+  FAILED=$((FAILED+1))
+else
+  echo "large symbol test PASSED";
+fi
+
 if [[ "$FAILED" -eq 0 ]]; then
   echo "all tests passed!"
 elif [[ "$FAILED" -eq 1 ]]; then
