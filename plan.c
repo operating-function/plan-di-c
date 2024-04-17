@@ -565,7 +565,7 @@ Nat Inc(Nat n) {
       word_t c = nn_add1(nat_buf, n.nat, n.size, 1);
       if (c > 0) {
         new_size++;
-        realloc_(nat_buf, new_size * sizeof(word_t));
+        nat_buf = realloc_(nat_buf, new_size * sizeof(word_t));
         nat_buf[new_size-1] = c;
       }
       return (Nat){ .type = BIG, .size = new_size, .nat = nat_buf };
@@ -610,7 +610,7 @@ Nat resize_nat(Nat x) {
   } else if (new_size != x.size) {
     //printf("shrinking from %lu to %lu\n", orig_size, new_size);
     // realloc
-    realloc_(x.nat, new_size * sizeof(word_t));
+    x.nat = realloc_(x.nat, new_size * sizeof(word_t));
   }
   return x;
 }
@@ -680,7 +680,7 @@ Nat Add(Nat a, Nat b) {
     //printf("grow bigge nats\n");
     // carry - grow nat
     new_size++;
-    realloc_(nat_buf, new_size * sizeof(word_t));
+    nat_buf = realloc_(nat_buf, new_size * sizeof(word_t));
     nat_buf[new_size-1] = c;
   }
   if (free_a) free_nat(a);
@@ -1849,7 +1849,7 @@ Value *read_atom() {
   while (isdigit(c = getchar())) {
     if (idx >= len) {
       len *= 2;
-      realloc_(str, len);
+      str = realloc_(str, len);
       memset(str+idx, 0, len-idx);
     }
     str[idx] = c;
