@@ -357,10 +357,6 @@ void fprintf_nat(FILE * f, Nat n) {
 ////////////////////////////////////////////////////////////////////////////////
 //  Construction
 
-// TODO we probably also want a `Value * ptr_Nat(u64 n)` fn which checks for
-// 63-bit range (`n < ptr_nat_mask`) and puts it into a ptr-nat. otherwise, call
-// `a_Nat`?
-
 Nat d_Small(u64 n) {
   return (Nat){.type = SMALL, .direct = n};
 }
@@ -379,11 +375,18 @@ Value * a_Nat(Nat n) {
   return res;
 }
 
-Value * mk_Nat(Nat n) {
-  if ((n.type == SMALL) && (n.direct < ptr_nat_mask)) {
+Value * ptr_Nat(u64 x) {
+  if (x < ptr_nat_mask) {
     // fits in ptr 63 bits
-    u64 v = n.direct | ptr_nat_mask;
-    return (Value *) v;
+    return (Value *) (x | ptr_nat_mask);
+  } else {
+    return a_Small(x);
+  }
+}
+
+Value * mk_Nat(Nat n) {
+  if (n.type == SMALL) {
+    return ptr_Nat(n.direct);
   }
   return a_Nat(n);
 }
@@ -1932,7 +1935,7 @@ Value *read_sym() {
     } else {
       u64 word = 0;
       memcpy((char*)&word, buf, len);
-      return mk_Nat(d_Small(word));
+      return ptr_Nat(word);
     }
 }
 
