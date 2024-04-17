@@ -1834,17 +1834,44 @@ Value * run(Value * v) {
   return res;
 }
 
-// TODO handle atoms bigger than U64_MAX - this will just overflow
 Value *read_atom() {
+  u64 len = 100;
+  u64 idx = 0;
+  char * str = malloc(len * sizeof(char));
+  memset(str, 0, len);
   char c;
-  u64 acc = 0;
   while (isdigit(c = getchar())) {
-    u64 tst = (UINT64_MAX - (c - '0')) / 10;
-    if (acc > tst) crash("read_atom(): overflow");
-    acc = acc*10 + (c - '0');
+    if (idx >= len) {
+      len *= 2;
+      realloc_(str, len);
+      memset(str+idx, 0, len-idx);
+    }
+    str[idx] = c;
+    idx++;
   }
   ungetc(c,stdin);
-  return mk_Nat(d_Small(acc));
+  fprintf(stderr, "strlen: %lu\n", strlen(str));
+  // y : # of bits required to store
+  // x : length of string of '9's
+  // approx linreg:
+  // y = 3.324 x + 0.4513
+  long bit_len = ((34 * strlen(str)) / 10) + 1;
+  fprintf(stderr, "bit_len: %lu\n", bit_len);
+  long word_bits = 8 * sizeof(word_t);
+  long nat_len = bit_len / word_bits;
+  // round up.
+  if ((bit_len % word_bits) > 0) nat_len++;
+  fprintf(stderr, "nat_len: %lu\n", nat_len);
+  nn_t nat_buf = nn_init(nat_len);
+  nn_zero(nat_buf, nat_len);
+  len_t actual_len;
+  nn_set_str(nat_buf, &actual_len, str);
+  Nat big = { .type = BIG, .size = nat_len, .nat = nat_buf };
+  fprintf(stderr, "str: %s\n", str);
+  fprintf(stderr, "nat:");
+  fprintf_nat(stderr, big);
+  fprintf(stderr, "\n");
+  return mk_Nat(resize_nat(big));
 }
 
 void eat_spaces() {
