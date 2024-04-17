@@ -2017,7 +2017,6 @@ int main (void) {
     if (isInteractive) printf(">> ");
     Value *v = read_exp_top();
     if (!v) return 0;
-    // TODO this crashes b/c we don't know how to handle ptr-nats in run/interp
     Value * res = run(v);
     fprintf_value(stdout, res);
     printf("\n");
