@@ -138,6 +138,9 @@ check "1" "($AppHead $Inf1s)"
 echo "refer to later binder from an earlier one"
 check "7" "($MkLaw 0 1 (1 3 (1 7 2)) 9)"
 
+echo "refer to earlier binder from a later one"
+check "7" "($MkLaw 0 1 (1 7 (1 2 3)) 9)"
+
 echo "more complex example"
 check "(1 (0 2))" "($MkLaw 0 1 (1 (0 (2 0) 3) (1 (2 2) (0 1 2))) 1)"
 
