@@ -833,54 +833,54 @@ Nat Rem(Nat a, Nat b) {
 typedef struct Jet {
   char * name;
   u64 arity;
-  Value * (*jet_exec)(Value **args);
+  Value * (*jet_exec)();
 } Jet;
 
 Nat to_nat(Value * x) {
   return (IS_NAT(x)) ? NT(x) : d_Small(0);
 }
 
-Value * add_jet(Value **args) {
-  Nat x = to_nat(args[0]);
-  Nat y = to_nat(args[1]);
+Value * get_deref();
+Value * add_jet() {
+  Nat x = to_nat(get_deref(0));
+  Nat y = to_nat(get_deref(1));
   return mk_Nat(Add(x, y));
 }
 
-Value * sub_jet(Value **args) {
-  Nat x = to_nat(args[0]);
-  Nat y = to_nat(args[1]);
+Value * sub_jet() {
+  Nat x = to_nat(get_deref(0));
+  Nat y = to_nat(get_deref(1));
   return mk_Nat(Sub(x, y));
 }
 
-Value * mul_jet(Value **args) {
-  Nat x = to_nat(args[0]);
-  Nat y = to_nat(args[1]);
+Value * mul_jet() {
+  Nat x = to_nat(get_deref(0));
+  Nat y = to_nat(get_deref(1));
   return mk_Nat(Mul(x, y));
 }
 
-Value * div_jet(Value **args) {
-  Nat x = to_nat(args[0]);
-  Nat y = to_nat(args[1]);
+Value * div_jet() {
+  Nat x = to_nat(get_deref(0));
+  Nat y = to_nat(get_deref(1));
   return mk_Nat(Div(x, y));
 }
 
-Value * rem_jet(Value **args) {
-  Nat x = to_nat(args[0]);
-  Nat y = to_nat(args[1]);
+Value * rem_jet() {
+  Nat x = to_nat(get_deref(0));
+  Nat y = to_nat(get_deref(1));
   return mk_Nat(Rem(x, y));
 }
 
-Value * dec_jet(Value **args) {
-  Nat x = to_nat(args[0]);
+Value * dec_jet() {
+  Nat x = to_nat(get_deref(0));
   return mk_Nat(Dec(x));
 }
 
 Value * pop_deref();
-Value * get_deref();
 void push_val(Value *);
 void clone();
 void force();
-Value * trace_jet(Value **args) {
+Value * trace_jet() {
   Value * msg = get_deref(0);
   push_val(msg);
   clone();
@@ -1616,11 +1616,7 @@ bool jet_dispatch(Value * self, u64 ar) {
         write_dot(lab);
         free(lab);
         //
-        Value **args = malloc(sizeof(Value*) * jet.arity);
-        for (int j = 0; j < jet.arity; j++) {
-          args[j] = get_deref(j);
-        }
-        push_val(jet.jet_exec(args));
+        push_val(jet.jet_exec());
         slide(ar);
         return true;
       }
