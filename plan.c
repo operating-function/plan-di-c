@@ -875,7 +875,22 @@ Value * dec_jet(Value **args) {
   return mk_Nat(Dec(x));
 }
 
-#define NUM_JETS 6
+Value * pop_deref();
+Value * get_deref();
+void push_val(Value *);
+void clone();
+void force();
+Value * trace_jet(Value **args) {
+  Value * msg = get_deref(0);
+  push_val(msg);
+  clone();
+  force();
+  fprintf_value(stdout, pop_deref(0));
+  printf("\n");
+  return get_deref(1);
+}
+
+#define NUM_JETS 7
 Jet jet_table[NUM_JETS] =
   { (Jet) {.name = "_Add", .arity = 2, .jet_exec = add_jet }
   , (Jet) {.name = "_Sub", .arity = 2, .jet_exec = sub_jet }
@@ -883,6 +898,7 @@ Jet jet_table[NUM_JETS] =
   , (Jet) {.name = "_Div", .arity = 2, .jet_exec = div_jet }
   , (Jet) {.name = "_Rem", .arity = 2, .jet_exec = rem_jet }
   , (Jet) {.name = "_Dec", .arity = 1, .jet_exec = dec_jet }
+  , (Jet) {.name = "_Trace", .arity = 2, .jet_exec = trace_jet }
   };
 
 ////////////////////////////////////////////////////////////////////////////////

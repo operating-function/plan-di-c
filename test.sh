@@ -34,6 +34,7 @@ Mul="($MkPin ($MkLaw %_Mul 2 (0 (0 (0 $Times (0 $Add 1)) (2 0)) 2)))"
 Cnst="($MkLaw 0 2 1)"
 Cnst3="($MkLaw 0 4 1)"
 Ignore="($MkLaw 0 2 2)"
+Trace="($MkPin ($MkLaw %_Trace 2 2))" # this is a wrong defn of _Trace, as it doesn't force the first arg
 
 MapApp="($MkLaw 0 4 (0 (0 (0 1 2) 3) (0 2 4)))"
 Map="($MkLaw 0 2 (0 (0 (0 (0 (0 $PlanCase (0 $Cnst 2))
@@ -54,7 +55,7 @@ FAILED=0
 
 check() {
   echo -n "TEST: $1 == [./plan] $2 ... "
-  diff <(echo $1) <(echo $2 | ./plan)
+  diff <(echo -e "$1") <(echo "$2" | ./plan)
   EXIT_CODE=$?
   if [[ $EXIT_CODE -eq 0 ]] ; then
     echo "PASSED"
@@ -128,6 +129,11 @@ echo "cnst/ignore"
 check "11" "($Cnst 11 7)"
 check "7"  "($Ignore 11 7)"
 check "13" "($Cnst3 13 1 4 7)"
+
+echo "Trace"
+check "0\n1" "($Trace 0 1)"
+check "2\n0" "($Trace ($Add 1 1) 0)"
+check "(0 1 2 3 4)\n1" "($Trace (0 1 2 3 4) 1)"
 
 echo "map"
 check "(0 9999 10000 10001 10003 10004)" "($Map ($Add 9999) (0 0 1 2 4 5))"
