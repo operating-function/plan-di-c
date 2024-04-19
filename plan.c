@@ -689,7 +689,6 @@ Nat Add(Nat a, Nat b) {
   return (Nat){ .type = BIG, .size = new_size, .nat = nat_buf };
 }
 
-// TODO test
 Nat Sub(Nat a, Nat b) {
   if ((a.type == SMALL) && (b.type == SMALL)) {
     if (a.direct < b.direct)
