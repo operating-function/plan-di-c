@@ -876,18 +876,18 @@ Value * dec_jet() {
   return mk_Nat(Dec(x));
 }
 
-Value * pop_deref();
-void push_val(Value *);
-void clone();
+void push(u64);
+Value * get_deref();
 void force();
+
 Value * trace_jet() {
-  Value * msg = get_deref(0);
-  push_val(msg);
-  clone();
+  push(0); // force msg
   force();
-  fprintf_value(stdout, pop_deref(0));
+  Value * msg = get_deref(0);
+  Value * val = get_deref(1);
+  fprintf_value(stdout, msg);
   printf("\n");
-  return get_deref(1);
+  return val;
 }
 
 #define NUM_JETS 7
