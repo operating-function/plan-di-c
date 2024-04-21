@@ -259,8 +259,27 @@ void check_value(Value *v) {
 
 void fprintf_value_internal(FILE *, Value *, int);
 
+void fprintf_nat(FILE *, Nat);
+
 void fprintf_value(FILE *f , Value * v) {
-  fprintf_value_internal(f, v, 0);
+  switch (TY(v)) {
+  case PIN:
+    fprintf(f, "<");
+    fprintf_value(f, IT(v));
+    fprintf(f, ">");
+    break;
+  case LAW:
+    fprintf(f, "{");
+    fprintf_nat(f, NM(v));
+    fprintf(f, " ");
+    fprintf_nat(f, AR(v));
+    fprintf(f, " ");
+    fprintf_value_internal(f, BD(v), 0);
+    fprintf(f, "}");
+    break;
+  default:
+    fprintf_value_internal(f, v, 0);
+  }
 }
 
 void fprintf_value_app(FILE * f, Value * v, int recur) {
@@ -271,8 +290,6 @@ void fprintf_value_app(FILE * f, Value * v, int recur) {
   fprintf(f, " ");
   fprintf_value_internal(f, TL(v), recur+1);
 }
-
-void fprintf_nat(FILE *, Nat);
 
 void fprintf_value_internal(FILE * f, Value * v, int recur) {
   v = deref(v);
@@ -289,10 +306,6 @@ void fprintf_value_internal(FILE * f, Value * v, int recur) {
     case LAW:
       fprintf(f, "{");
       fprintf_nat(f, NM(v));
-      fprintf(f, " ");
-      fprintf_nat(f, AR(v));
-      fprintf(f, " ");
-      fprintf_value_internal(f, BD(v), recur+1);
       fprintf(f, "}");
       break;
     case APP:
