@@ -206,6 +206,10 @@ static inline Value * TL(Value * x) {
 
 Nat d_Small(u64);
 
+static inline bool EQZ_(Value * x) {
+   return ((u64) x) == ptr_nat_mask;
+}
+
 static inline Nat NT(Value * x) {
   if (is_ptr_nat(x)) return d_Small(get_ptr_nat(x));
   x = deref(x);
@@ -1372,52 +1376,42 @@ void incr() {
   push_val(mk_Nat(n));
 }
 
-void nat_case() {
-  write_dot("nat_case");
-  Value * x = pop_deref();
-  Value * p = pop_deref();
+void prim_case() {
+  write_dot("prim_case");
+  Value * o = pop_deref();
+  Value * m = pop_deref();
   Value * z = pop_deref();
-  if (IS_NAT(x)) {
-    Nat x_ = NT(x);
-    if (GT(x_, d_Small(0))) {
-      Value * dec_x = mk_Nat(Dec(x_));
-      Value * ap    = a_App(p, dec_x);
-      return push_val(ap);
-    }
-  }
-  return push_val(z);
-}
-
-void plan_case() {
-  write_dot("plan_case");
-  Value * x = pop_deref();
-  Value * n = pop_deref();
   Value * a = pop_deref();
   Value * l = pop_deref();
   Value * p = pop_deref();
-  switch (TY(x)) {
+  switch (TY(o)) {
     case PIN: {
-      Value * ap = a_App(p, IT(x));
+      Value * ap = a_App(p, IT(o));
       push_val(ap);
       return;
     }
     case LAW: {
-      Value * ap1 = a_App(l,   a_Nat(NM(x)));
-      Value * ap2 = a_App(ap1, a_Nat(AR(x)));
-      Value * ap3 = a_App(ap2, BD(x));
+      Value * ap1 = a_App(l,   a_Nat(NM(o)));
+      Value * ap2 = a_App(ap1, a_Nat(AR(o)));
+      Value * ap3 = a_App(ap2, BD(o));
       push_val(ap3);
       return;
     }
     case APP: {
-      Value * ap1 = a_App(a,   HD(x));
-      Value * ap2 = a_App(ap1, TL(x));
+      Value * ap1 = a_App(a,   HD(o));
+      Value * ap2 = a_App(ap1, TL(o));
       push_val(ap2);
       return;
     }
     case NAT: {
-      Value * ap = a_App(n, x);
-      push_val(ap);
-      return;
+      if (EQZ_(o)) {
+        push_val(z);
+        return;
+      }
+      Nat o_ = NT(o);
+      Value * dec_o = mk_Nat(Dec(o_));
+      Value * ap    = a_App(m, dec_o);
+      return push_val(ap);
     }
     case HOL: crash("plan_case: HOL");
     case IND: crash("plan_case: IND: impossible");
@@ -1668,11 +1662,8 @@ u64 prim_arity(u64 prim) {
     case 2: { // incr
       return 1;
     }
-    case 3: { // nat_case
-      return 3;
-    }
-    case 4: { // plan_case
-      return 5;
+    case 3: { // case
+      return 6;
     }
     default:
       return 0;
@@ -1704,16 +1695,10 @@ void do_prim(u64 prim) {
       eval();
       return incr();
     }
-    case 3: { // nat_case
+    case 3: { // case
       u64 arity = prim_arity(prim);
       eval(); // x
-      nat_case();
-      return eval();
-    }
-    case 4: { // plan_case
-      u64 arity = prim_arity(prim);
-      eval(); // x
-      plan_case();
+      prim_case();
       return eval();
     }
   }
@@ -1967,6 +1952,7 @@ Value *read_exp() {
     }
     case '<': {
         char buf[1234] = {0};
+        printf("hi\n");
         for (int i=0; i<1234; i++) {
             buf[i] = getchar();
             if (feof(stdin)) {

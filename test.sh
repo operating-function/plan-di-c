@@ -21,8 +21,17 @@ try () {
 MkPin="#0"
 MkLaw="#1"
 Inc="#2"
-NatCase="#3"
-PlanCase="#4"
+Case="#3"
+
+Cnst="($MkPin ($MkLaw 0 2 1))"
+Cnst2="($MkPin ($MkLaw 0 3 1))"
+Cnst3="($MkPin ($MkLaw 0 4 1))"
+
+# NatCase z p x = Case (const z) (const3 z) (const2 z) z p x
+NatCase="($MkPin ($MkLaw %NatCase 3 (0 (0 (0 (0 (0 (0 $Case (0 $Cnst 1)) (0 $Cnst3 1)) (0 $Cnst2 1)) 1) 2) 3)))"
+
+# PlanCase p l a n x = Case p l a n (const n) x
+PlanCase="($MkPin ($MkLaw %PlanCase 5 (0 (0 (0 (0 (0 (0 $Case 1) 2) 3) 4) (0 $Cnst 4)) 5)))"
 
 id="($MkLaw 0 1 1)"
 Dec="($MkPin ($MkLaw %_Dec 1 (0 (0 ($NatCase (2 0)) $id) 1)))"
@@ -32,8 +41,6 @@ Add="($MkPin ($MkLaw %_Add 2 (0 (0 ($Times $Inc) (0 $ToNat 1)) 2)))"
 Mul="($MkPin ($MkLaw %_Mul 2 (0 (0 (0 $Times (0 $Add 1)) (2 0)) 2)))"
 Sub="($MkPin ($MkLaw %_Sub 2 (0 (0 ($Times $Dec) (0 $ToNat 1)) 2)))"
 
-Cnst="($MkLaw 0 2 1)"
-Cnst3="($MkLaw 0 4 1)"
 Ignore="($MkLaw 0 2 2)"
 Trace="($MkPin ($MkLaw %_Trace 2 2))" # this is a wrong defn of _Trace, as it doesn't force the first arg
 
@@ -41,7 +48,7 @@ MapApp="($MkLaw 0 4 (0 (0 (0 1 2) 3) (0 2 4)))"
 Map="($MkLaw 0 2 (0 (0 (0 (0 (0 $PlanCase (0 $Cnst 2))
                              (0 $Cnst3 2))
                           (0 (0 $MapApp 0) 1))
-                       (0 $Cnst 2))
+                       2)
                     2))"
 
 AppHead="($PlanCase 0 0 $Cnst 0)"
