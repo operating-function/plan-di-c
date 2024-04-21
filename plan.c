@@ -70,6 +70,20 @@ typedef struct Value {
 } Value;
 
 ////////////////////////////////////////////////////////////////////////////////
+//  Prototypes
+
+void force();
+Value * get();
+Value * get_deref();
+void update(u64 idx);
+void push(u64);
+void eval();
+Value ** get_ptr(u64 idx);
+
+Value * frag_load(Value **tab, u64 tabSz, int *, u64 *, u64 **);
+Value *read_exp();
+
+////////////////////////////////////////////////////////////////////////////////
 //  Globals
 
 #define STACK_SIZE 4096
@@ -853,12 +867,6 @@ typedef struct Jet {
   Value * (*jet_exec)();
 } Jet;
 
-Value * get();
-Value * get_deref();
-void update(u64 idx);
-void push(u64);
-void eval();
-Value ** get_ptr(u64 idx);
 void to_nat(int i) {
   push(i);
   eval();
@@ -913,8 +921,6 @@ Value * dec_jet() {
   return mk_Nat(Dec(x));
 }
 
-void force();
-
 Value * trace_jet() {
   push(0); // force msg
   force();
@@ -938,8 +944,6 @@ Jet jet_table[NUM_JETS] =
 
 ////////////////////////////////////////////////////////////////////////////////
 //  Seeds
-
-Value * frag_load(Value **tab, u64 tabSz, int *, u64 *, u64 **);
 
 Value * frag_load_cell(Value **tab, u64 tabSz, int *use, u64 *acc, u64 **mor) {
   Value *f = frag_load(tab, tabSz, use, acc, mor);
@@ -1481,8 +1485,6 @@ void flip_stack(u64 depth) {
   }
 }
 
-void eval();
-
 void handle_oversaturated_application(u64 count) {
   char lab[50];
   sprintf(lab, "handle_oversaturated_application %lu", count);
@@ -1608,8 +1610,6 @@ void eval_law(u64 n) {
   eval(); // TODO why is this needed?
   return slide(n+m);
 }
-
-void force();
 
 // TODO more efficient match algo (we do linear scan of all jets)
 //
@@ -1904,8 +1904,6 @@ void eat_spaces() {
   while (isspace(c = getchar()));
   ungetc(c, stdin);
 }
-
-Value *read_exp();
 
 Value *read_app(Value *f) {
   while (true) {
