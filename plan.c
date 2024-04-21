@@ -41,34 +41,40 @@ typedef struct BigNat {
 
 struct Value;
 
+typedef struct Value Value;
+
 typedef struct Law {
   Value *n; // Always a nat
   Value *a; // Always a nat
-  struct Value * b;
+  Value *b;
 } Law;
 
 typedef struct App {
-  struct Value * f;
-  struct Value * g;
+  Value * f;
+  Value * g;
 } App;
 
-typedef struct Value {
+struct Value {
   Type type;
   union {
-    struct Value * p; // PIN
-    Law l;            // LAW
-    App a;            // APP
-    BigNat n;         // NAT
-    struct Value * i; // IND
+    Value *p; // PIN
+    Law l;    // LAW
+    App a;    // APP
+    BigNat n; // NAT
+    Value *i; // IND
   };
-} Value;
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 //  Prototypes
 
+static inline Value *direct(u64);
+void BigPlusDirect(u64, u64);
+Value *pop();
 void force();
 Value * get();
 Value * get_deref();
+Value * pop_deref();
 void update(u64 idx);
 void push(u64);
 void push_val(Value*);
@@ -101,19 +107,16 @@ void crash(char * s) {
 // their high bit.
 
 // 2^63 - high bit
-u64 ptr_nat_mask = 9223372036854775808u;
-
-Value *direct_zero = (Value*) ptr_nat_mask;
-
-Value *direct_one = (Value*) (ptr_nat_mask + 1);
-
-Value *direct_two = (Value*) (ptr_nat_mask + 2);
+u64 ptr_nat_mask   =          9223372036854775808ull;
+Value *direct_zero = (Value*) 9223372036854775808ull;
+Value *direct_one  = (Value*) 9223372036854775809ull;
+Value *direct_two  = (Value*) 9223372036854775810ull;
 
 bool is_direct(Value * x) {
   return (((u64) x) & ptr_nat_mask) != 0;
 }
 
-static inline u64 get_ptr_nat(Value * x) {
+static inline u64 get_direct(Value * x) {
   return (u64) (((u64) x) & ~ptr_nat_mask);
 }
 
@@ -219,8 +222,6 @@ static inline Value * TL(Value * x) {
   return x->a.g;
 };
 
-Nat d_Small(u64);
-
 static inline BigNat BN(Value * x) {
   if (is_direct(x)) crash("BN: got direct");
   x = deref(x);
@@ -240,11 +241,14 @@ static inline Value * IN(Value * x) {
 ////////////////////////////////////////////////////////////////////////////////
 //  Printing
 
-void check_nat(Nat n) {
-    return;
+void check_nat(Value *n) {
+  // TODO validate bignat invariants
+  return;
 }
 
 void check_value(Value *v) {
+  if (is_direct(v)) return;
+
   switch (TY(v)) {
     case PIN:
       check_value(IT(v));
@@ -259,7 +263,7 @@ void check_value(Value *v) {
       check_value(TL(v));
       break;
     case NAT:
-      check_nat(BN(v));
+      check_nat(v);
       break;
     case HOL:
       break;
@@ -270,7 +274,7 @@ void check_value(Value *v) {
 
 void fprintf_value_internal(FILE *, Value *, int);
 
-void fprintf_nat(FILE *, Nat);
+void fprintf_nat(FILE *, Value *);
 
 void fprintf_value(FILE *f , Value * v) {
   switch (TY(v)) {
@@ -325,7 +329,7 @@ void fprintf_value_internal(FILE * f, Value * v, int recur) {
       fprintf(f, ")");
       break;
     case NAT:
-      fprintf_nat(f, BN(v));
+      fprintf_nat(f, v);
       break;
     case HOL:
       fprintf(f, "<>");
@@ -351,43 +355,44 @@ bool is_symbol(const char *str) {
   }
 }
 
-void fprintf_nat(FILE * f, Nat n) {
-  switch (n.type) {
-    case SMALL: {
-      char tmp[9] = {0};
-      memcpy(tmp, (char *)&n.direct, 8);
-      if (is_symbol(tmp)) {
-        fprintf(f, "%%%s", tmp);
-      } else {
-        fprintf(f, "%" PRIu64, n.direct);
-      }
-      break;
+void fprintf_nat(FILE * f, Value *v) {
+  assert(TY(v) == NAT);
+
+  if (is_direct(v)) {
+    u64 w = get_direct(v);
+    char tmp[9] = {0};
+    ((u64*) tmp)[0] = w;
+    if (is_symbol(tmp)) {
+      fprintf(f, "%%%s", tmp);
+    } else {
+      fprintf(f, "%" PRIu64, w);
     }
-    case BIG: {
-      long num_chars = n.big.size * sizeof(word_t);
-      // add 1 for null terminator
-      char * nat_str = calloc((num_chars+1), sizeof(char));
-      memcpy(nat_str, n.big.buf, num_chars);
-      if (is_symbol(nat_str)) {
-        // symbolic, so we can print it as a string, with a leading `%`
-        fprintf(f, "%%%s", nat_str);
-      } else {
-        // non-symbolic, so we use bsdnt to print as decimal
-        free(nat_str);
-        nat_str = nn_get_str(n.big.buf, n.big.size);
-        fprintf(f, "%s", nat_str);
-      }
-      free(nat_str);
-      break;
-    }
+    return;
   }
+
+  BigNat big = BN(v);
+
+  long num_chars = big.size * sizeof(word_t);
+  // add 1 for null terminator
+  char * nat_str = calloc((num_chars+1), sizeof(char));
+  memcpy(nat_str, big.buf, num_chars);
+  if (is_symbol(nat_str)) {
+    // symbolic, so we can print it as a string, with a leading `%`
+    fprintf(f, "%%%s", nat_str);
+  } else {
+    // non-symbolic, so we use bsdnt to print as decimal
+    free(nat_str);
+    nat_str = nn_get_str(big.buf, big.size);
+    fprintf(f, "%s", nat_str);
+  }
+  free(nat_str);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 //  Construction
 
 Value * a_Big(BigNat n) {
-  while (n.size && n.buf[size-1] == 0) n.size--;
+  while (n.size && n.buf[n.size - 1] == 0) n.size--;
 
   if (n.size == 0)
     return direct(0);
@@ -405,24 +410,17 @@ void push_big(BigNat n) {
   push_val(a_Big(n));
 }
 
-static inline Value * direct(u64 x) {
+static inline Value *direct(u64 x) {
   if (!(x >> 63)) return (Value *) (x | ptr_nat_mask);
-  return a_Big(u64_to_big(x);
+  nn_t x_nat = nn_init(1);
+  x_nat[0] = x;
+  return a_Big((BigNat){ .size = 1, .buf = x_nat });
 }
 
 Value * a_Pin(Value * v) {
   Value * res = (Value *)malloc(sizeof(Value));
   res->type = PIN;
   res->p = v;
-  return res;
-}
-
-Value * a_Law(Value *n, Value *a, Value *b) {
-  Value * res = (Value *)malloc(sizeof(Value));
-  res->type = LAW;
-  res->l.n = n;
-  res->l.a = a;
-  res->l.b = b;
   return res;
 }
 
@@ -443,11 +441,13 @@ Value * a_Hol() {
 ////////////////////////////////////////////////////////////////////////////////
 //  Nat Operators
 
+/*
 void free_nat(Nat a) {
   if (a.type == BIG) {
     free(a.big.buf);
   }
 }
+*/
 
 int nat_char_width(Value *x) {
   if (is_direct(x)) return (sizeof(u64));
@@ -457,23 +457,12 @@ int nat_char_width(Value *x) {
 int str_cmp_nat(char *jet_name, Value *nm, size_t min_len) {
   u64 x = get_direct(nm);
 
-  u64 *buf = NULL;
+  u64 *buf = (nm->type == NAT) ? BN(nm).buf : &x;
 
-  if (nm->type == NAT) buf = x->n.buf
-  else buf = &x;
-
-  return strncmp(jet_name, buf, min_len):
+  return strncmp(jet_name, (char *)buf, min_len);
 }
 
-char * nat_chars(Value *x) {
-  switch (x->type) {
-    case SMALL:
-      return (char *) &x->direct;
-    case NAT:
-      return (char *) x->big.buf;
-  }
-}
-
+/*
 Nat clone_nat(Nat x) {
   switch (x.type) {
     case SMALL:
@@ -486,12 +475,13 @@ Nat clone_nat(Nat x) {
     }
   }
 }
+*/
 
 int less=0, equals=1, greater=2;
 
 static inline int cmp_direct(u64 a, u64 b) {
-  if (ad == bd) return equals;
-  if (ad < bd) return less;
+  if (a == b) return equals;
+  if (a < b) return less;
   return greater;
 }
 
@@ -500,10 +490,10 @@ int big_cmp(BigNat a, BigNat b) {
     return (a.size < b.size) ? less : greater;
   }
 
-  int nnres = nn_cmp_m(a.big.buf, b.big.buf, a.big.size);
+  int nnres = nn_cmp_m(a.buf, b.buf, a.size);
 
   if (nnres < 0) return less;
-  if (nnres == 0) return equal;
+  if (nnres == 0) return equals;
   return greater;
 }
 
@@ -511,17 +501,17 @@ int cmp(Value *a, Value *b) {
 
   if (is_direct(a)) {
     if (!is_direct(b)) return less;
-    return cmp_direct(get_ptr_nat(a), get_ptr_nat(b));
+    return cmp_direct(get_direct(a), get_direct(b));
   }
 
   if (is_direct(b)) return greater;
 
-  if (a.type == NAT) {
-    if (b.type != NAT) return less;
-    return big_cmp(a.n, b.n);
+  if (a->type == NAT) {
+    if (b->type != NAT) return less;
+    return big_cmp(a->n, b->n);
   }
 
-  if (b.type == NAT) return greater;
+  if (b->type == NAT) return greater;
 
   crash("make cmp support recursion");
 }
@@ -554,11 +544,11 @@ static inline bool EQZ(Value* x) {
    return (x == direct_zero);
 }
 
-static inline bool EQ1(Value *a) {
+static inline bool EQ1(Value *x) {
   return (x == direct_one);
 }
 
-static inline bool EQ2(Value *a) {
+static inline bool EQ2(Value *x) {
   return (x == direct_two);
 }
 
@@ -571,111 +561,87 @@ static inline void *realloc_(void *ptr, size_t sz) {
   return res;
 }
 
-void bigInc(BigNat n) {
-  nn_t buf = nn_init(n.size + 1);
-  word_t carry = nn_add1(buf, n.buf, n.size, 1);
-  buf[n.size] = carry;
-  push_big({ .size = n.size + 1, .buf = buf });
-}
-
-// this should only be used internally, as our Nat invariant is that BIGs must
-// be greater than UINT64_MAX. (TODO: this is stale info)
-BigNat u64_to_big(u64 x) {
-  nn_t x_nat = nn_init(1);
-  x_nat[0] = x;
-  return (BigNat){ .size = sz, .buf = x_nat };
-}
-
-Nat resize_nat(Nat x) {
-  // only resize BIGs
-  if (x.type == SMALL) return x;
-  //
-  long new_size = x.big.size;
-  for (long i = (x.big.size-1); i >= 0; i--) {
-    if (x.big.buf[i] == 0) {
-      new_size--;
-    } else {
-      break;
-    }
-  }
-  if (new_size == 0) {
-    nn_clear(x.big.buf);
-    x.type = SMALL;
-    x.direct = 0;
-  } else if (new_size == 1) {
-    // shrink BIG to SMALL
-    //printf("shrinking from %lu BIG to SMALL\n", x.big.size);
-    u64 direct;
-    assert (new_size * sizeof(word_t) == 8);
-    memcpy((char *)&direct, x.big.buf, 8);
-    nn_clear(x.big.buf);
-    x.type = SMALL;
-    x.direct = direct;
-  } else if (new_size != x.big.size) {
-    //printf("shrinking from %lu to %lu\n", orig_size, new_size);
-    // realloc
-    x.big.buf = realloc_(x.big.buf, new_size * sizeof(word_t));
-  }
-  return x;
-}
-
-Value *Dec(Value *n) {
-  return Sub(n, direct_one);
-  if (is_direct(n)) {
-    u64 v = get_direct(n)
-    if (v == 0) return n;
-    return direct(v - 1);
-  }
-
-  len_t new_size = n.big.size;
-  nn_t nat_buf = nn_init(new_size);
-  word_t c = nn_sub1(nat_buf, n.big.buf, n.big.size, 1);
-  // a positive borrow (nonzero `c`) should only be possible if we
-  // underflowed a single u64. our invariant is to convert to SMALL when we
-  // reach 1 u64, so we should never encounter this case.
-  assert (c == 0);
-
-  return a_Big((BigNat){ .size = new_size, .buf = nat_buf });
-}
-
 BigNat bigify(u64 *x) {
   u64 sz = (*x == 0) ? 0 : 1;
   return (BigNat){ .size = sz, .buf = x };
 }
 
-void Add(Value *a, Value *b) {
-  Value *a = get(0);
-  Value *b = get(1);
-
-  aSmall = get_ptr_nat(a);
-  bSmall = get_ptr_nat(b);
-
-  if (is_direct(a) && is_direct(b)) {
-    u64 av = get_ptr_nat(a);
-    u64 bv = get_ptr_nat(b);
-    push_val(direct(av+bv));
-  }
-
-  BigNat aBig = is_direct(a) ? bigify(&aSmall) : BN(a);
-  BigNat bBig = is_direct(b) ? bigify(&bSmall) : BN(b);
-
-  if (a.size < b.size) {
-    addBigs(bBig, aBig);
-  } else {
-    addBigs(aBig, bBig);
-  }
+// invariant: a.size >= b.size
+// stack before: ..rest b a
+// stack after:  ..rest (a+b)
+void BigPlusBig(u64 aSize, u64 bSize) {
+  long new_size = aSize + bSize + 1;
+  nn_t buf = nn_init(new_size); // gc
+  BigNat a = BN(pop_deref());
+  BigNat b = BN(pop_deref());
+  word_t c = nn_add_c(buf, a.buf, a.size, b.buf, b.size, 0);
+  buf[new_size - 1] = c;
+  push_big((BigNat) { .size = new_size, .buf = buf });
 }
 
-// invariant: a.size >= b.size
-addBigs(BigNat *a, BigNat *b) {
-  long new_size = a.size + 1;
-  nn_t buf = nn_init(new_size);
-  word_t c = nn_add_c(buf, a.buf, a.size, b.buf, b.size, 0);
-  buf[a.size] = c;
-  push_big(BigNat { .size = new_size, .buf = buf });
+void BigPlusDirect(u64 direct, u64 bigSz) {
+  u64 newSz = bigSz + 1;
+  nn_t buf = nn_init(newSz); // gc
+  BigNat big = BN(pop());
+  word_t carry = nn_add1(buf, big.buf, bigSz, direct);
+  buf[bigSz] = carry;
+  push_big((BigNat) { .size = newSz, .buf = buf });
+}
+
+void Add() {
+  Value *a = pop();
+  Value *b = pop();
+
+  u64 aSmall = get_direct(a);
+  u64 bSmall = get_direct(b);
+
+  if (is_direct(a)) {
+    if (is_direct(b)) {
+      push_val(direct(aSmall + bSmall));
+      return;
+    }
+
+    push_val(b);
+    BigPlusDirect(aSmall, BN(b).size);
+    return;
+  }
+
+  if (is_direct(b)) {
+    push_val(a);
+    BigPlusDirect(bSmall, BN(a).size);
+    return;
+  }
+
+  push_val(b);
+  push_val(a);
+  BigPlusBig(BN(a).size, BN(b).size);
+}
+
+Value *Dec(Value *n) {
+  crash("TODO");
 }
 
 /*
+Value *Dec(Value *n) {
+  return Sub(n, direct_one);
+
+  // if (is_direct(n)) {
+  //   u64 v = get_direct(n)
+  //   if (v == 0) return n;
+  //   return direct(v - 1);
+  // }
+
+  // len_t new_size = n.big.size;
+  // nn_t nat_buf = nn_init(new_size);
+  // word_t c = nn_sub1(nat_buf, n.big.buf, n.big.size, 1);
+  // // a positive borrow (nonzero `c`) should only be possible if we
+  // // underflowed a single u64. our invariant is to convert to SMALL when we
+  // // reach 1 u64, so we should never encounter this case.
+  // assert (c == 0);
+
+  // return a_Big((BigNat){ .size = new_size, .buf = nat_buf });
+}
+
 Nat Sub(Nat a, Nat b) {
   if ((a.type == SMALL) && (b.type == SMALL)) {
     if (a.direct < b.direct)
@@ -821,7 +787,7 @@ Nat Rem(Nat a, Nat b) {
 typedef struct Jet {
   char * name;
   u64 arity;
-  Value * (*jet_exec)();
+  void (*jet_exec)();
 } Jet;
 
 void to_nat(int i) {
@@ -832,65 +798,37 @@ void to_nat(int i) {
   *get_ptr(i) = (IS_NAT(x)) ? x : direct(0);
 }
 
-Value * add_jet() {
-  to_nat(0);
-  to_nat(1);
-  Value *x = get(0);
-  Value *y = get(1);
-  return Add(x, y);
+// TODO
+void sub_jet() {
 }
 
-Value * sub_jet() {
-  to_nat(0);
-  to_nat(1);
-  Value *x = get(0);
-  Value *y = get(1);
-  Sub(x, y);
+// TODO
+void mul_jet() {
 }
 
-Value * mul_jet() {
-  to_nat(0);
-  to_nat(1);
-  Nat x = NT(get(0));
-  Nat y = NT(get(1));
-  return mk_Nat(Mul(x, y));
+// TODO
+void div_jet() {
 }
 
-Value * div_jet() {
-  to_nat(0);
-  to_nat(1);
-  Nat x = NT(get(0));
-  Nat y = NT(get(1));
-  return mk_Nat(Div(x, y));
+// TODO
+void rem_jet() {
 }
 
-Value * rem_jet() {
-  to_nat(0);
-  to_nat(1);
-  Nat x = NT(get(0));
-  Nat y = NT(get(1));
-  return mk_Nat(Rem(x, y));
+// TODO
+void dec_jet() {
 }
 
-Value * dec_jet() {
-  to_nat(0);
-  Nat x = NT(get(0));
-  return mk_Nat(Dec(x));
-}
-
-Value * trace_jet() {
+void trace_jet() {
   push(0); // force msg
   force();
-  Value * msg = get_deref(0);
-  Value * val = get_deref(1);
+  Value * msg = pop_deref();
   fprintf_value(stdout, msg);
   printf("\n");
-  return val;
 }
 
 #define NUM_JETS 7
 Jet jet_table[NUM_JETS] =
-  { (Jet) {.name = "Add", .arity = 2, .jet_exec = add_jet }
+  { (Jet) {.name = "Add", .arity = 2, .jet_exec = Add }
   , (Jet) {.name = "Sub", .arity = 2, .jet_exec = sub_jet }
   , (Jet) {.name = "Mul", .arity = 2, .jet_exec = mul_jet }
   , (Jet) {.name = "Div", .arity = 2, .jet_exec = div_jet }
@@ -1081,7 +1019,7 @@ char * p_ptr(Value * x) {
   if (x == NULL) {
     sprintf(buf, "N_null");
   } else if (is_direct(x)) {
-    sprintf(buf, "ptr_nat_%lu", get_ptr_nat(x));
+    sprintf(buf, "ptr_nat_%lu", get_direct(x));
   } else {
     sprintf(buf, "N_%p", x);
   }
@@ -1111,7 +1049,7 @@ void fprintf_heap(FILE *f, Node *input, Node *seen) {
       char * v_p = p_ptr(v);
       char * i_p = p_ptr(IT(v));
       if (is_direct(IT(v))) {
-        fprintf(f, "%s [label = \"\\<%lu\\>\"];\n", v_p, get_ptr_nat(IT(v)));
+        fprintf(f, "%s [label = \"\\<%lu\\>\"];\n", v_p, get_direct(IT(v)));
       } else {
         fprintf(f, "%s [label=pin];\n", v_p);
         fprintf(f, "%s -> %s [arrowhead=box];\n", v_p, i_p);
@@ -1141,8 +1079,8 @@ void fprintf_heap(FILE *f, Node *input, Node *seen) {
       char *h_p = p_ptr(h);
       char *t_p = p_ptr(t);
       char hbuf[256] = "", tbuf[256] = "";
-      if (is_direct(h)) { sprintf(hbuf, "%lu", get_ptr_nat(h)); }
-      if (is_direct(t)) { sprintf(tbuf, "%lu", get_ptr_nat(t)); }
+      if (is_direct(h)) { sprintf(hbuf, "%lu", get_direct(h)); }
+      if (is_direct(t)) { sprintf(tbuf, "%lu", get_direct(t)); }
       fprintf(f, "%s [label=\" <f> %s | <x> %s \"]", v_p, hbuf, tbuf);
       if (!is_direct(h)) {
         fprintf(f, "%s:f -> %s;\n", v_p, h_p);
@@ -1161,7 +1099,7 @@ void fprintf_heap(FILE *f, Node *input, Node *seen) {
       char * v_p = p_ptr(v);
       fprintf(f, "%s [label=\"", v_p);
       if (is_direct(v)) fprintf(f, "direct:");
-      fprintf_nat(f, BN(v));
+      fprintf_nat(f, v);
       fprintf(f, "\"];\n");
       free(v_p);
       break;
@@ -1194,7 +1132,7 @@ void fprintf_stack(FILE *f) {
   for (int i = 0; i < sp; i++) {
     char label[256] = "";
     if (is_direct(get(i))) {
-      sprintf(label, "%lu", get_ptr_nat(get(i)));
+      sprintf(label, "%lu", get_direct(get(i)));
     }
     fprintf(f, "| <s%d> %s ", i, label);
   }
@@ -1372,12 +1310,18 @@ void mk_pin() {
 
 void mk_law() {
   write_dot("mk_law");
+
+  Value * res = (Value *)malloc(sizeof(Value));
+
   to_nat(1); // a
   to_nat(2); // n
   Value * b = pop_deref();
   Value * a = pop_deref();
   Value * n = pop_deref();
-  push_val(a_Law(n, a, b));
+
+  Law l = { .n = n, .a = a, .b=b };
+  *res = (Value){ .type = LAW, .l = l };
+  push_val(res);
 }
 
 void incr() {
@@ -1394,7 +1338,8 @@ void incr() {
     return;
   }
 
-  bigInc(x->n);
+  push_val(x);
+  BigPlusDirect(1, BN(x).size);
 }
 
 void prim_case() {
@@ -1605,7 +1550,7 @@ bool jet_dispatch(Value * self, u64 ar) {
     if (str_cmp_nat(jet.name, nm, min_len) == 0) {
       if (EQ(AR(self), direct(jet.arity))) {
         fprintf(stderr, "jet name + arity match: %s\n", jet.name);
-        push_val(jet.jet_exec());
+        jet.jet_exec();
         slide(ar);
         return true;
       }
