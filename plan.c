@@ -1153,11 +1153,15 @@ void fprintf_heap(FILE *f, Node *input, Node *seen) {
     case PIN: {
       char * v_p = p_ptr(v);
       char * i_p = p_ptr(IT(v));
-      fprintf(f, "%s [label=pin];\n", v_p);
-      fprintf(f, "%s -> %s [arrowhead=box];\n", v_p, i_p);
+      if (is_ptr_nat(IT(v))) {
+        fprintf(f, "%s [label = \"\\<%lu\\>\"];\n", v_p, get_ptr_nat(IT(v)));
+      } else {
+        fprintf(f, "%s [label=pin];\n", v_p);
+        fprintf(f, "%s -> %s [arrowhead=box];\n", v_p, i_p);
+        input = cons((void *)IT(v), input);
+      }
       free(v_p);
       free(i_p);
-      input = cons((void *)IT(v), input);
       break;
     }
     case LAW: {
@@ -1176,16 +1180,24 @@ void fprintf_heap(FILE *f, Node *input, Node *seen) {
     }
     case APP: {
       char * v_p = p_ptr(v);
-      char * h_p = p_ptr(HD(v));
-      char * t_p = p_ptr(TL(v));
-      fprintf(f, "%s [label=\"@\"]", v_p);
-      fprintf(f, "%s -> %s [arrowhead=crow];\n", v_p, h_p);
-      fprintf(f, "%s -> %s [arrowhead=vee];\n",  v_p, t_p);
+      Value *h = HD(v), *t = TL(v);
+      char *h_p = p_ptr(h);
+      char *t_p = p_ptr(t);
+      char hbuf[256] = "", tbuf[256] = "";
+      if (is_ptr_nat(h)) { sprintf(hbuf, "%lu", get_ptr_nat(h)); }
+      if (is_ptr_nat(t)) { sprintf(tbuf, "%lu", get_ptr_nat(t)); }
+      fprintf(f, "%s [label=\" <f> %s | <x> %s \"]", v_p, hbuf, tbuf);
+      if (!is_ptr_nat(h)) {
+        fprintf(f, "%s:f -> %s;\n", v_p, h_p);
+        input = cons((void *)h, input);
+      }
+      if (!is_ptr_nat(t)) {
+        fprintf(f, "%s:x -> %s;\n", v_p, t_p);
+        input = cons((void *)t, input);
+      }
       free(v_p);
       free(h_p);
       free(t_p);
-      input = cons((void *)HD(v), input);
-      input = cons((void *)TL(v), input);
       break;
     }
     case NAT: {
@@ -1218,32 +1230,34 @@ void fprintf_heap(FILE *f, Node *input, Node *seen) {
   return fprintf_heap(f, input, seen);
 }
 
-void fprintf_stack(FILE *f, Node *input) {
+void fprintf_stack(FILE *f) {
   // print "stack topper"
   // => stack [label="<ss> stack|<s0>|<s1>|<s2>", color=blue, height=2.5];
   fprintf(f, "stack [label=\"<ss> stack");
-  for (int i = 0; i < length_list(input); i++)
-    fprintf(f, "|<s%d>", i);
+  for (int i = 0; i < sp; i++) {
+    char label[256] = "";
+    if (is_ptr_nat(get(i))) {
+      sprintf(label, "%lu", get_ptr_nat(get(i)));
+    }
+    fprintf(f, "| <s%d> %s ", i, label);
+  }
   fprintf(f, "\", color=blue, height=2.5];\n");
 
   // print edges between stack topper Values
-  int i = 0;
-  while (input != NULL) {
-    Node * tmp = input;
-    Value * v = (Value *)input->ptr;
+  for (int i = 0; i < sp; i++) {
+    Value * v = get(i);
+    if (is_ptr_nat(v)) continue;
     char * v_p = p_ptr(v);
     fprintf(f, "stack:s%d -> %s;\n", i, v_p);
     free(v_p);
-    input = input->next;
-    i++;
-    free(tmp);
   }
 }
 
-Node * stack_to_list() {
+Node * stack_to_list_heap_only() {
   Node * l = NULL;
   if (sp == 0) return l;
   for (u64 i = 0; i < sp; i++) {
+    if (is_ptr_nat(get(i))) continue;
     l = cons((void *)get(i), l);
   }
   return l;
@@ -1260,9 +1274,9 @@ void write_dot_extra(char *label, char *extra, Value * v) {
   fprintf(f, "nodesep=.10;\n");
   fprintf(f, "rankdir=LR;\n");
   fprintf(f, "\n// stack\n");
-  fprintf_stack(f, stack_to_list());
+  fprintf_stack(f);
   fprintf(f, "\n// heap\n");
-  Node * heap_input = stack_to_list();
+  Node * heap_input = stack_to_list_heap_only();
   if (v != NULL) {
     heap_input = cons((void *)v, heap_input);
   }
