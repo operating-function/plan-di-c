@@ -34,11 +34,11 @@ NatCase="($MkPin ($MkLaw %NatCase 3 (0 (0 (0 (0 (0 (0 $Case (0 $Cnst 1)) (0 $Cns
 PlanCase="($MkPin ($MkLaw %PlanCase 5 (0 (0 (0 (0 (0 (0 $Case 1) 2) 3) 4) (0 $Cnst 4)) 5)))"
 
 id="($MkLaw 0 1 1)"
-Dec="($MkPin ($MkLaw %Dec 1 (0 (0 ($NatCase (2 0)) $id) 1)))"
+Dec="($MkPin ($MkLaw %Dec 1 (0 (0 ($NatCase (0 0)) $id) 1)))"
 ToNat="($NatCase 0 $Inc)"
 Times="($MkLaw %Times 3 (0 (0 (0 $NatCase 2) (0 (0 0 1) (0 1 2))) 3))"
 Add="($MkPin ($MkLaw %Add 2 (0 (0 ($Times $Inc) (0 $ToNat 1)) 2)))"
-Mul="($MkPin ($MkLaw %Mul 2 (0 (0 (0 $Times (0 $Add 1)) (2 0)) 2)))"
+Mul="($MkPin ($MkLaw %Mul 2 (0 (0 (0 $Times (0 $Add 1)) (0 0)) 2)))"
 Sub="($MkPin ($MkLaw %Sub 2 (0 (0 ($Times $Dec) (0 $ToNat 1)) 2)))"
 
 Ignore="($MkLaw 0 2 2)"
@@ -55,8 +55,8 @@ AppHead="($PlanCase 0 0 $Cnst 0)"
 AppTail="($PlanCase 0 0 $Ignore 0)"
 
 Inf1s="($MkLaw 99 1 (1 (0 1 2) 2) 1)"
-# InfNats="($MkLaw 77 1 (0 (0 (0 $PlanCase (2 0))
-#                             (2 0))
+# InfNats="($MkLaw 77 1 (0 (0 (0 $PlanCase (0 0))
+#                             (0 0))
 #                          (0 (
 
 FAILED=0
@@ -77,7 +77,7 @@ echo "basic"
 check "5" "($Inc 4)"
 check "1" "($Inc ($PlanCase 1 0 0 0 (4 9)))"
 check "7" "($Dec 8)"
-check "8" "(($MkLaw 1 2 (2 ($Inc 7))) 3 4)"
+check "8" "(($MkLaw 1 2 (0 ($Inc 7))) 3 4)"
 check "{1 2 0}" "($MkLaw ($Inc 0) ($Inc ($Inc 0)) 0)"
 check "{1 2 0}" "(($MkLaw 1 2 0) 9 7)"
 check "9" "(($MkLaw 1 2 1) 9 7)"
@@ -162,7 +162,7 @@ echo "refer to earlier binder from a later one"
 check "7" "($MkLaw 0 1 (1 7 (1 2 3)) 9)"
 
 echo "more complex example"
-check "(1 (0 2))" "($MkLaw 0 1 (1 (0 (2 0) 3) (1 (2 2) (0 1 2))) 1)"
+check "(1 (0 2))" "($MkLaw 0 1 (1 (0 (0 0) 3) (1 (0 2) (0 1 2))) 1)"
 
 echo "trivial cycles are okay if not used"
 check "7" "($MkLaw 0 1 (1 7 (1 3 2)) 9)"

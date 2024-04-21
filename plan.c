@@ -1551,8 +1551,8 @@ void kal(u64 n) {
         eval();                   // => [app_res (f y) ...]
         goto end;
       }
-    } else if ((IS_NAT(car)) && EQ2(NT(car))) {
-      // (2 y)
+    } else if ((IS_NAT(car)) && EQZ(NT(car))) {
+      // (0 y)
       push_val(deref(TL(x)));
       goto end;
     }
