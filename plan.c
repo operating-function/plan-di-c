@@ -68,6 +68,7 @@ struct Value {
 ////////////////////////////////////////////////////////////////////////////////
 //  Prototypes
 
+void clone();
 static inline Value *direct(u64);
 void BigPlusDirect(u64, u64);
 Value *pop();
@@ -457,7 +458,7 @@ int nat_char_width(Value *x) {
 int str_cmp_nat(char *jet_name, Value *nm, size_t min_len) {
   u64 x = get_direct(nm);
 
-  u64 *buf = (nm->type == NAT) ? BN(nm).buf : &x;
+  u64 *buf = (is_direct(nm) ? &x : BN(nm).buf);
 
   return strncmp(jet_name, (char *)buf, min_len);
 }
@@ -617,13 +618,29 @@ void Add() {
   BigPlusBig(BN(a).size, BN(b).size);
 }
 
-Value *Dec(Value *n) {
-  crash("TODO");
+void BigSubDirect(u64 bigSz, u64 direct) {
+  nn_t buf = nn_init(bigSz);
+  BigNat big = BN(pop_deref());
+  word_t c = nn_sub1(buf, big.buf, bigSz, direct);
+  // a positive borrow (nonzero `c`) should only be possible if we
+  // underflowed a single u64. our invariant is to convert to SMALL when we
+  // reach 1 u64, so we should never encounter this case.
+  assert (c == 0);
+  push_big(big);
 }
 
-/*
-Value *Dec(Value *n) {
-  return Sub(n, direct_one);
+void Dec() {
+  Value * v = pop_deref(0);
+
+  if (is_direct(v)) {
+    u64 n = get_direct(v);
+    push_val( (n == 0) ? direct_zero : direct(n - 1) );
+    return;
+  }
+
+  push_val(v);
+  BigSubDirect(BN(v).size, 1);
+}
 
   // if (is_direct(n)) {
   //   u64 v = get_direct(n)
@@ -640,8 +657,8 @@ Value *Dec(Value *n) {
   // assert (c == 0);
 
   // return a_Big((BigNat){ .size = new_size, .buf = nat_buf });
-}
 
+/*
 Nat Sub(Nat a, Nat b) {
   if ((a.type == SMALL) && (b.type == SMALL)) {
     if (a.direct < b.direct)
@@ -815,8 +832,7 @@ void rem_jet() {
 }
 
 // TODO
-void dec_jet() {
-}
+void dec_jet() { clone(); eval(); update(1); Dec(); }
 
 void trace_jet() {
   push(0); // force msg
@@ -1377,9 +1393,10 @@ void prim_case() {
         push_val(z);
         return;
       }
-      push_val(Dec(o)); // d
-      push_val(m);      // d m
-      mk_app_rev();     // (m d)
+      push_val(o);  // o
+      Dec();        // d
+      push_val(m);  // d m
+      mk_app_rev(); // (m d)
       return;
     }
     case HOL: crash("plan_case: HOL");
