@@ -34,15 +34,15 @@ NatCase="($MkPin ($MkLaw %NatCase 3 (0 (0 (0 (0 (0 (0 $Case (0 $Cnst 1)) (0 $Cns
 PlanCase="($MkPin ($MkLaw %PlanCase 5 (0 (0 (0 (0 (0 (0 $Case 1) 2) 3) 4) (0 $Cnst 4)) 5)))"
 
 id="($MkLaw 0 1 1)"
-Dec="($MkPin ($MkLaw %_Dec 1 (0 (0 ($NatCase (2 0)) $id) 1)))"
+Dec="($MkPin ($MkLaw %Dec 1 (0 (0 ($NatCase (2 0)) $id) 1)))"
 ToNat="($NatCase 0 $Inc)"
-Times="($MkLaw %_Times 3 (0 (0 (0 (2 $NatCase) 2) (0 (0 0 1) (0 1 2))) 3))"
-Add="($MkPin ($MkLaw %_Add 2 (0 (0 ($Times $Inc) (0 $ToNat 1)) 2)))"
-Mul="($MkPin ($MkLaw %_Mul 2 (0 (0 (0 $Times (0 $Add 1)) (2 0)) 2)))"
-Sub="($MkPin ($MkLaw %_Sub 2 (0 (0 ($Times $Dec) (0 $ToNat 1)) 2)))"
+Times="($MkLaw %Times 3 (0 (0 (0 $NatCase 2) (0 (0 0 1) (0 1 2))) 3))"
+Add="($MkPin ($MkLaw %Add 2 (0 (0 ($Times $Inc) (0 $ToNat 1)) 2)))"
+Mul="($MkPin ($MkLaw %Mul 2 (0 (0 (0 $Times (0 $Add 1)) (2 0)) 2)))"
+Sub="($MkPin ($MkLaw %Sub 2 (0 (0 ($Times $Dec) (0 $ToNat 1)) 2)))"
 
 Ignore="($MkLaw 0 2 2)"
-Trace="($MkPin ($MkLaw %_Trace 2 2))" # this is a wrong defn of _Trace, as it doesn't force the first arg
+Trace="($MkPin ($MkLaw %Trace 2 2))" # this is a wrong defn of _Trace, as it doesn't force the first arg
 
 MapApp="($MkLaw 0 4 (0 (0 (0 1 2) 3) (0 2 4)))"
 Map="($MkLaw 0 2 (0 (0 (0 (0 (0 $PlanCase (0 $Cnst 2))

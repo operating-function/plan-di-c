@@ -896,13 +896,13 @@ Value * trace_jet() {
 
 #define NUM_JETS 7
 Jet jet_table[NUM_JETS] =
-  { (Jet) {.name = "_Add", .arity = 2, .jet_exec = add_jet }
-  , (Jet) {.name = "_Sub", .arity = 2, .jet_exec = sub_jet }
-  , (Jet) {.name = "_Mul", .arity = 2, .jet_exec = mul_jet }
-  , (Jet) {.name = "_Div", .arity = 2, .jet_exec = div_jet }
-  , (Jet) {.name = "_Rem", .arity = 2, .jet_exec = rem_jet }
-  , (Jet) {.name = "_Dec", .arity = 1, .jet_exec = dec_jet }
-  , (Jet) {.name = "_Trace", .arity = 2, .jet_exec = trace_jet }
+  { (Jet) {.name = "Add", .arity = 2, .jet_exec = add_jet }
+  , (Jet) {.name = "Sub", .arity = 2, .jet_exec = sub_jet }
+  , (Jet) {.name = "Mul", .arity = 2, .jet_exec = mul_jet }
+  , (Jet) {.name = "Div", .arity = 2, .jet_exec = div_jet }
+  , (Jet) {.name = "Rem", .arity = 2, .jet_exec = rem_jet }
+  , (Jet) {.name = "Dec", .arity = 1, .jet_exec = dec_jet }
+  , (Jet) {.name = "Trace", .arity = 2, .jet_exec = trace_jet }
   };
 
 ////////////////////////////////////////////////////////////////////////////////
