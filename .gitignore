@@ -4,6 +4,8 @@ plan_with_tracing
 plan_debug
 linked_list_test
 
+*.seed
+
 *.h.gch
 *.o
 
