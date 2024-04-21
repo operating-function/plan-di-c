@@ -307,7 +307,7 @@ void fprintf_value_app(FILE * f, Value * v, int recur) {
 
 void fprintf_value_internal(FILE * f, Value * v, int recur) {
   v = deref(v);
-  if (recur > 10) {
+  if (recur > 1000) {
     fprintf(f, "‥");
     return;
   }
@@ -1550,7 +1550,6 @@ void kal(u64 n) {
         swap();                   // => [y fres (f y) ..]
         kal(n+2);                 // => [yres fres (f y) ...]
         mk_app();                 // => [(fres yres) (f y) ...]
-        eval();                   // => [app_res (f y) ...]
         goto end;
       }
     } else if ((IS_NAT(car)) && EQZ(NT(car))) {
@@ -1589,26 +1588,25 @@ void eval_law(u64 n) {
   sprintf(lab, "eval_law %lu", n);
   write_dot(lab);
   //
-  Value * x = pop_deref();
-  u64 m = length_let_spine(x);
+  Value * b = pop_deref();
+  u64 m = length_let_spine(b);
   //
   stack_grow(m);
-  push_val(x);
+  push_val(b);
   stack_fill_holes(1, m);
   //
-  Value * b;
   for (u64 i = 0; i < m; i++) {
-                                // => [((1 v) b) allocs ...]
-    x = pop_deref();            // => [allocs ...]
-    push_val(deref(TL(x)));     // => [b allocs ...]
-    push_val(deref(TL(HD(x)))); // => [v b allocs ...]
-    kal(n+m+1);                 // => [vres b allocs ...]
+                                // => [((1 v) b) origB allocs ...]
+    b = pop_deref();            // => [allocs ...]
+    push_val(deref(TL(b)));     // => [b allocs ...]
+    push_val(deref(TL(HD(b)))); // => [v b allocs ...]
+    kal(n+m+1);                 // => [vExp b allocs ...]
     update((m+1)-i);            // => [b allocs ...]
   }
                                 // => [b allocs ...]
-  kal(n+m);                     // => [bres allocs ...]
-  eval(); // TODO why is this needed?
-  return slide(n+m);
+  kal(n+m);                     // => [bExp allocs ...]
+  eval();                       // => [bRes allocs ...]
+  return slide(n+m);            // => [bRes ...]
 }
 
 // TODO more efficient match algo (we do linear scan of all jets)
@@ -1619,6 +1617,9 @@ void eval_law(u64 n) {
 // false.
 bool jet_dispatch(Value * self, u64 ar) {
   write_dot("jet_dispatch: entry");
+  // fprintf(stderr, "jet_dispatch: ");
+  // fprintf_value(stderr, self);
+  // fprintf(stderr, "\n");
   for (int i = 0; i < NUM_JETS; i++) {
     Jet jet = jet_table[i];
     Nat nm = NM(self);
@@ -1636,6 +1637,8 @@ bool jet_dispatch(Value * self, u64 ar) {
 }
 
 void law_step(u64 depth, bool should_jet) {
+  static int call_depth = 0;
+
   char lab[40];
   sprintf(lab, "law_step %lu", depth);
   write_dot(lab);
@@ -1649,6 +1652,12 @@ void law_step(u64 depth, bool should_jet) {
     }
     backout(depth-1);
   } else {
+    fprintf(stderr, "CALL: ");
+    for (int i=0; i<call_depth; i++) fprintf(stderr, "  ");
+    fprintf_value(stderr, get_deref(depth-1));
+    fprintf(stderr, "\n");
+
+    call_depth++;
     setup_call(depth);
     u64 ar = nat_to_u64(AR(self));
     if ((should_jet) && (jet_dispatch(self, ar))) {
@@ -1662,6 +1671,12 @@ void law_step(u64 depth, bool should_jet) {
       push_val(BD(self));
       eval_law(ar+1);
     }
+    // for (int i=0; i<call_depth; i++) fprintf(stderr, "  ");
+    // fprintf(stderr, "    => ");
+    // // fprintf_value(stderr, get_deref(0));
+    // fprintf(stderr, "\n");
+    //
+    call_depth--;
     if (ar < depth) handle_oversaturated_application(depth - ar);
   }
 }
@@ -1696,7 +1711,7 @@ void do_prim(u64 prim) {
   switch (prim) {
     case 0: { // mk_pin
       u64 arity = prim_arity(prim);
-      eval();
+      push(0); force();
       return mk_pin();
     }
     case 1: { // mk_law
@@ -1708,18 +1723,19 @@ void do_prim(u64 prim) {
     }
     case 2: { // incr
       u64 arity = prim_arity(prim);
-      eval();
+      push(0); eval(); update(1);
       return incr();
     }
     case 3: { // case
       u64 arity = prim_arity(prim);
-      eval(); // x
+      push(0); eval(); update(1);
       prim_case();
       return eval();
     }
   }
 }
 
+// TODO make this a loop, not tail recursion.
 void unwind(u64 depth) {
   char lab[20];
   sprintf(lab, "unwind %lu", depth);

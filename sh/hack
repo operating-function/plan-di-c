@@ -1,0 +1,6 @@
+set -ex
+
+pushd ../plunder
+nix develop -c stack run -- plunder save $1 sire_00_boot
+nix develop -c stack run -- plunder show $1
+cp $1 ../plan-di-c
