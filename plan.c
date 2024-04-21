@@ -354,6 +354,22 @@ bool is_symbol(const char *str) {
   }
 }
 
+bool is_symbol_nat(u64 nat) {
+  char tmp[9] = {0};
+  memcpy(tmp, (char *)(&nat), 8);
+  return is_symbol(tmp);
+}
+
+void show_direct_nat(char *buf, Value *v) {
+  u64 nat = get_ptr_nat(v);
+  if (is_symbol_nat(nat)) {
+    u64 *lol = (u64*) buf;
+    *lol = nat;
+  } else {
+    sprintf(buf, "%lu", nat);
+  }
+}
+
 void fprintf_nat(FILE * f, Nat n) {
   switch (n.type) {
     case SMALL: {
@@ -1184,8 +1200,8 @@ void fprintf_heap(FILE *f, Node *input, Node *seen) {
       char *h_p = p_ptr(h);
       char *t_p = p_ptr(t);
       char hbuf[256] = "", tbuf[256] = "";
-      if (is_ptr_nat(h)) { sprintf(hbuf, "%lu", get_ptr_nat(h)); }
-      if (is_ptr_nat(t)) { sprintf(tbuf, "%lu", get_ptr_nat(t)); }
+      if (is_ptr_nat(h)) { show_direct_nat(hbuf, h); }
+      if (is_ptr_nat(t)) { show_direct_nat(tbuf, t); }
       fprintf(f, "%s [label=\" <f> %s | <x> %s \"]", v_p, hbuf, tbuf);
       if (!is_ptr_nat(h)) {
         fprintf(f, "%s:f -> %s;\n", v_p, h_p);
@@ -1236,9 +1252,7 @@ void fprintf_stack(FILE *f) {
   fprintf(f, "stack [label=\"<ss> stack");
   for (int i = 0; i < sp; i++) {
     char label[256] = "";
-    if (is_ptr_nat(get(i))) {
-      sprintf(label, "%lu", get_ptr_nat(get(i)));
-    }
+    if (is_ptr_nat(get(i))) show_direct_nat(label, get(i));
     fprintf(f, "| <s%d> %s ", i, label);
   }
   fprintf(f, "\", color=blue, height=2.5];\n");
