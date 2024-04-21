@@ -1606,7 +1606,7 @@ void law_step(u64 depth, bool should_jet) {
     } else {
       // if no match, perform regular law evaluation
       push_val(self);
-      flip_stack(depth+1);
+      flip_stack(ar+1);
       push_val(BD(self));
       eval_law(ar+1);
     }
