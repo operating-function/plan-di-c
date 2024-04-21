@@ -964,14 +964,20 @@ Value * seed_load(u64 *buf) {
   u64 n_bytes = buf[3];
   u64 n_frags = buf[4];
 
-  if (n_holes != 0) {
+  if (n_holes > 1) {
     fprintf(stderr, "file is just one seed, expected seedpod\n");
     exit(5);
   }
 
-  u64 n_entries = n_bigs + n_words + n_bytes + n_frags;
+  u64 n_entries = n_bigs + n_words + n_bytes + n_frags + n_holes;
 
   Value **tab = malloc(sizeof(Value*) * n_entries);
+
+  Value **next_ref = tab;
+
+  if (n_holes) {
+    *next_ref++ = a_Pin(ptr_Nat(0));
+  }
 
   // How big are the bignats?
   u64 bigwidths[n_bigs];
@@ -979,7 +985,6 @@ Value * seed_load(u64 *buf) {
     bigwidths[i] = buf[5+i];
   }
 
-  Value **next_ref = tab;
   int used = 5 + n_bigs; // number of words used
 
   for (int i=0; i<n_bigs; i++) {
