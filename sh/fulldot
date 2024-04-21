@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+
+set -ex
+
+find ./dot -type f | xargs rm
+echo "(#1 0 1 (1 7 (1 2 3)) 9)" | ./plan
+sh/dotify # risky if many .dot files
+feh -FB black -Z ./dot/*.png
