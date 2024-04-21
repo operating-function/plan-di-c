@@ -356,6 +356,7 @@ bool is_symbol(const char *str) {
   }
 }
 
+
 void fprintf_nat(FILE * f, Value *v) {
   assert(TY(v) == NAT);
 
@@ -370,23 +371,22 @@ void fprintf_nat(FILE * f, Value *v) {
     }
     return;
   }
+}
 
-  BigNat big = BN(v);
+bool is_symbol_nat(u64 nat) {
+  char tmp[9] = {0};
+  memcpy(tmp, (char *)(&nat), 8);
+  return is_symbol(tmp);
+}
 
-  long num_chars = big.size * sizeof(word_t);
-  // add 1 for null terminator
-  char * nat_str = calloc((num_chars+1), sizeof(char));
-  memcpy(nat_str, big.buf, num_chars);
-  if (is_symbol(nat_str)) {
-    // symbolic, so we can print it as a string, with a leading `%`
-    fprintf(f, "%%%s", nat_str);
+void show_direct_nat(char *buf, Value *v) {
+  u64 nat = get_direct(v);
+  if (is_symbol_nat(nat)) {
+    u64 *lol = (u64*) buf;
+    *lol = nat;
   } else {
-    // non-symbolic, so we use bsdnt to print as decimal
-    free(nat_str);
-    nat_str = nn_get_str(big.buf, big.size);
-    fprintf(f, "%s", nat_str);
+    sprintf(buf, "%lu", nat);
   }
-  free(nat_str);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -480,7 +480,7 @@ Nat clone_nat(Nat x) {
 
 int less=0, equals=1, greater=2;
 
-static inline int cmp_direct(u64 a, u64 b) {
+int cmp_direct(u64 a, u64 b) {
   if (a == b) return equals;
   if (a < b) return less;
   return greater;
@@ -1095,8 +1095,8 @@ void fprintf_heap(FILE *f, Node *input, Node *seen) {
       char *h_p = p_ptr(h);
       char *t_p = p_ptr(t);
       char hbuf[256] = "", tbuf[256] = "";
-      if (is_direct(h)) { sprintf(hbuf, "%lu", get_direct(h)); }
-      if (is_direct(t)) { sprintf(tbuf, "%lu", get_direct(t)); }
+      if (is_direct(h)) { show_direct_nat(hbuf, h); }
+      if (is_direct(t)) { show_direct_nat(tbuf, t); }
       fprintf(f, "%s [label=\" <f> %s | <x> %s \"]", v_p, hbuf, tbuf);
       if (!is_direct(h)) {
         fprintf(f, "%s:f -> %s;\n", v_p, h_p);
@@ -1147,9 +1147,7 @@ void fprintf_stack(FILE *f) {
   fprintf(f, "stack [label=\"<ss> stack");
   for (int i = 0; i < sp; i++) {
     char label[256] = "";
-    if (is_direct(get(i))) {
-      sprintf(label, "%lu", get_direct(get(i)));
-    }
+    if (is_direct(get(i))) show_direct_nat(label, get(i));
     fprintf(f, "| <s%d> %s ", i, label);
   }
   fprintf(f, "\", color=blue, height=2.5];\n");
