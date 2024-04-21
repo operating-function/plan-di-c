@@ -840,48 +840,66 @@ typedef struct Jet {
   Value * (*jet_exec)();
 } Jet;
 
-Nat to_nat(Value * x) {
-  return (IS_NAT(x)) ? NT(x) : d_Small(0);
+Value * get();
+Value * get_deref();
+void update(u64 idx);
+void push(u64);
+void eval();
+Value ** get_ptr(u64 idx);
+void to_nat(int i) {
+  push(i);
+  eval();
+  update(i+1);
+  Value * x = get_deref(i);
+  *get_ptr(i) = (IS_NAT(x)) ? x : a_Nat(d_Small(0));
 }
 
-Value * get_deref();
 Value * add_jet() {
-  Nat x = to_nat(get_deref(0));
-  Nat y = to_nat(get_deref(1));
+  to_nat(0);
+  to_nat(1);
+  Nat x = NT(get(0));
+  Nat y = NT(get(1));
   return mk_Nat(Add(x, y));
 }
 
 Value * sub_jet() {
-  Nat x = to_nat(get_deref(0));
-  Nat y = to_nat(get_deref(1));
+  to_nat(0);
+  to_nat(1);
+  Nat x = NT(get(0));
+  Nat y = NT(get(1));
   return mk_Nat(Sub(x, y));
 }
 
 Value * mul_jet() {
-  Nat x = to_nat(get_deref(0));
-  Nat y = to_nat(get_deref(1));
+  to_nat(0);
+  to_nat(1);
+  Nat x = NT(get(0));
+  Nat y = NT(get(1));
   return mk_Nat(Mul(x, y));
 }
 
 Value * div_jet() {
-  Nat x = to_nat(get_deref(0));
-  Nat y = to_nat(get_deref(1));
+  to_nat(0);
+  to_nat(1);
+  Nat x = NT(get(0));
+  Nat y = NT(get(1));
   return mk_Nat(Div(x, y));
 }
 
 Value * rem_jet() {
-  Nat x = to_nat(get_deref(0));
-  Nat y = to_nat(get_deref(1));
+  to_nat(0);
+  to_nat(1);
+  Nat x = NT(get(0));
+  Nat y = NT(get(1));
   return mk_Nat(Rem(x, y));
 }
 
 Value * dec_jet() {
-  Nat x = to_nat(get_deref(0));
+  to_nat(0);
+  Nat x = NT(get(0));
   return mk_Nat(Dec(x));
 }
 
-void push(u64);
-Value * get_deref();
 void force();
 
 Value * trace_jet() {
@@ -1595,26 +1613,6 @@ bool jet_dispatch(Value * self, u64 ar) {
     if (strncmp(jet.name, nat_chars(&nm), min_len) == 0) {
       if (EQ(AR(self), d_Small(jet.arity))) {
         fprintf(stderr, "jet name + arity match: %s\n", jet.name);
-        // dot
-        char * lab;
-        int ret;
-        ret = asprintf(&lab, "jet_dispatch: %s match pre-arg-eval+update", jet.name);
-        if (ret == -1) crash("asprintf: bad");
-        write_dot(lab);
-        free(lab);
-        //
-        for (int j = 0; j < jet.arity; j++) {
-          // eval+update each arg in-place.
-          push(j);
-          eval();
-          update(j+1);
-        }
-        // dot
-        ret = asprintf(&lab, "jet_dispatch: %s match post-arg-eval+update", jet.name);
-        if (ret == -1) crash("asprintf: bad");
-        write_dot(lab);
-        free(lab);
-        //
         push_val(jet.jet_exec());
         slide(ar);
         return true;
