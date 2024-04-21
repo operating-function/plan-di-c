@@ -1952,7 +1952,6 @@ Value *read_exp() {
     }
     case '<': {
         char buf[1234] = {0};
-        printf("hi\n");
         for (int i=0; i<1234; i++) {
             buf[i] = getchar();
             if (feof(stdin)) {
