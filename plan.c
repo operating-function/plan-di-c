@@ -389,7 +389,7 @@ void fprintf_nat(FILE *f, Value *v) {
   } else {
     // non-symbolic, so we use bsdnt to print as decimal
     char *tmp = nn_get_str(n.buf, n.size);
-    fprintf(f, "%s", nat_str);
+    fprintf(f, "%s", tmp);
     free(tmp);
   }
 }
@@ -720,57 +720,66 @@ void Sub() {
   }
 }
 
-/*
-Nat Mul(Nat a, Nat b) {
-  bool free_a = false;
-  bool free_b = false;
-  if ((a.type == SMALL) && (b.type == SMALL)) {
-    //printf("smol/smol\n");
-    u64 res;
-    if ((a.direct == 0) || (b.direct == 0)) {
-      //printf("0 res\n");
-      return d_Small(0);
-    }
-    res = a.direct * b.direct;
-    if (res / a.direct == b.direct) {
-      // no overflow - return res
-      //printf("smol res\n");
-      return d_Small(res);
-    }
-    // overflow
-    //printf("overflow\n");
-    a = u64_to_big(&a.direct);
-    b = u64_to_big(&b.direct);
-    free_a = true;
-    free_b = true;
+void DirectTimesDirect(u64 a, u64 b) {
+  if (a==0 || b==0) {
+    push_val(direct_zero);
+    return;
   }
-  if (a.type == SMALL) {
-    //printf("smol/bigge\n");
-    // use below BIG/SMALL logic
-    return Mul(b, a);
+
+  u64 res = a * b;
+
+  // if no overflow
+  if ((res / a) == b) { // TODO does this always work?
+    push_val(direct(res));
+    return;
   }
-  if (b.type == SMALL) {
-    //printf("bigge/smol\n");
-    long new_size = 1 + a.big.size;
-    nn_t nat_buf = nn_init(new_size);
-    nn_mul1(nat_buf, a.big.buf, a.big.size, b.direct);
-    Nat n = { .type = BIG, .big = { .size = new_size, .buf = nat_buf }};
-    return resize_nat(n);
-  }
-  // a & b are both BIG here
-  assert(a.type == BIG);
-  assert(b.type == BIG);
-  if (b.big.size > (UINT64_MAX - a.big.size)) crash("Mul: size overflow");
-  long new_size = a.big.size + b.big.size;
-  nn_t nat_buf = nn_init(new_size);
-  nn_zero(nat_buf, new_size);
-  nn_mul_classical(nat_buf, a.big.buf, a.big.size, b.big.buf, b.big.size);
-  if (free_a) free_nat(a);
-  if (free_b) free_nat(b);
-  Nat n = { .type = BIG, .big = { .size = new_size, .buf = nat_buf }};
-  return resize_nat(n);
+
+  nn_t buf = nn_init(2);
+  buf[1] = nn_mul1(buf, &a, 1, b);
+  push_big((BigNat) { .size = 2, .buf = buf });
 }
 
+void BigTimesDirect(u64 small, Value *big) {
+  u64 newSz = BN(big).size + 1;
+  push_val(big);             // save pointer to stack
+  nn_t buf = nn_init(newSz); // gc
+  nn_zero(buf, newSz);       //
+  BigNat nat = BN(pop(0));   // reload pointer
+  nn_mul1(buf, nat.buf, nat.size, small);
+  push_big((BigNat){ .size = newSz, .buf = buf });
+}
+
+void BigTimesBig(Value *a, Value *b) {
+  long new_size = BN(a).size + BN(b).size;
+  push_val(a);
+  push_val(b);
+  nn_t buf = nn_init(new_size); // gc
+  nn_zero(buf, new_size);       //
+  b = pop(); a = pop();         // reload pointer
+  BigNat aBig = BN(a);
+  BigNat bBig = BN(b);
+  nn_mul_classical(buf, aBig.buf, aBig.size, bBig.buf, bBig.size);
+  push_big((BigNat){ .size = new_size, .buf = buf });
+}
+
+void Mul() {
+  Value *a = pop();
+  Value *b = pop();
+
+  u64 aSmall = get_direct(a);
+  u64 bSmall = get_direct(b);
+
+  if (is_direct(a)) {
+    if (is_direct(b)) DirectTimesDirect(aSmall, bSmall);
+    else BigTimesDirect(aSmall, b);
+    return;
+  }
+
+  if (is_direct(b)) BigTimesDirect(bSmall, a);
+  else BigTimesBig(a, b);
+}
+
+/*
 Nat DivRem(Nat *rem, Nat a, Nat b) {
   bool free_b = false;
   if ((a.type == SMALL) && (b.type == SMALL)) {
@@ -852,9 +861,7 @@ void sub_jet() {
   write_dot_extra("</sub_jet>", "", NULL);
 }
 
-// TODO
-void mul_jet() {
-}
+void mul_jet() { to_nat(0); to_nat(1); Mul(); }
 
 // TODO
 void div_jet() {
