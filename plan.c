@@ -1699,10 +1699,16 @@ bool jet_dispatch(Value *self, u64 ar) {
   for (int i = 0; i < NUM_JETS; i++) {
     Jet jet = jet_table[i];
     Value *nm = NM(self);
-    int min_len = MIN(nat_char_width(nm), strlen(jet.name));
-    if (str_cmp_nat(jet.name, nm, min_len) == 0) {
+
+    int nmSz = nat_char_width(nm);
+    int jetNmSz = strlen(jet.name);
+
+    if (nmSz != jetNmSz) return false;
+
+    if (str_cmp_nat(jet.name, nm, nmSz) == 0) {
       if (EQ(AR(self), direct(jet.arity))) {
-        if (trace_calls) fprintf(stderr, "jet name + arity match: %s\n", jet.name);
+        if (trace_calls)
+          fprintf(stderr, "jet name + arity match: %s\n", jet.name);
         jet.jet_exec();
         return true;
       }
