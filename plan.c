@@ -79,12 +79,13 @@ void force();
 Value *get();
 Value *get_deref();
 Value *pop_deref();
-void update(u64 idx);
+void slide(u64);
+void update(u64);
 void push(u64);
 void push_val(Value*);
 bool eval();
 void eval_update(int);
-Value **get_ptr(u64 idx);
+Value **get_ptr(u64);
 
 Value *frag_load(Value **tab, u64 tabSz, int *, u64 *, u64 **);
 Value *read_exp();
@@ -780,14 +781,53 @@ void Mul() {
 }
 
 void DivRemDirectDirect(u64 a, u64 b) {
+  if (b == 0) {
+    push_val(direct(a));   // rem
+    push_val(direct_zero); // div
+    return;
+  }
+  push_val(direct(a % b)); // rem
+  push_val(direct(a / b)); // div
 }
 
 void DivRemBigDirect(Value *a, u64 b) {
+  if (b == 0) {
+    push_val(a);
+    push_val(direct_zero);
+    return;
+  }
+  BigNat aBig = BN(a);
+  long sz = aBig.size;
+  push_val(a);                    // save
+  nn_t a_buf_clone = nn_init(sz); // gc
+  nn_t buf = nn_init(sz);         // gc
+  aBig = BN(pop());               // restore a
+  nn_copy(buf, aBig.buf, sz);     // copy a's buf (it will be mutated)
+  word_t rem = nn_divrem1_simple(buf, a_buf_clone, sz, b);
+  push_val(direct(rem));                        // rem
+  push_big((BigNat){ .size = sz, .buf = buf }); // div
 }
 
 void DivRemBigBig(Value *a, Value *b) {
+  BigNat aBig = BN(a);
+  BigNat bBig = BN(b);
+  if (aBig.size < bBig.size) {
+    push_val(a);         // rem
+    push_val(direct(0)); // div
+    return;
+  }
+  long sz = aBig.size - bBig.size + 1;
+  push_val(b);                           // save
+  nn_t a_buf_clone = nn_init(aBig.size); // gc
+  nn_t buf = nn_init(sz);                // gc
+  bBig = BN(pop());                      // restore
+  nn_divrem(buf, a_buf_clone, aBig.size, bBig.buf, bBig.size);
+  push_big((BigNat){ .size = aBig.size, .buf = a_buf_clone }); // rem
+  push_big((BigNat){ .size = sz, .buf = buf });                // div
 }
 
+// stack before: ..rest b a
+// stack after:  ..rest (a%b) (a/b)
 void DivRem() {
   Value *a = pop();
   Value *b = pop();
@@ -805,64 +845,15 @@ void DivRem() {
   else DivRemBigBig(a, b);
 }
 
-  /*
-  bool free_b = false;
-  if ((a.type == SMALL) && (b.type == SMALL)) {
-    //fprintf(stderr, "SMALL/SMALL\n");
-    if (b.direct == 0) {
-      *rem = a;
-      return d_Small(0);
-    }
-    rem->type = SMALL;
-    rem->direct = a.direct % b.direct;
-    return d_Small(a.direct / b.direct);
-  }
-  if (a.type == SMALL) {
-    // b is BIG, and therefore is greater than a
-    //fprintf(stderr, "SMALL/BIG\n");
-    *rem = clone_nat(a);
-    return d_Small(0);
-  }
-  if (b.type == SMALL) {
-    // a is BIG, and therefore is greater than b
-    //fprintf(stderr, "BIG/SMALL\n");
-    b = u64_to_big(&b.direct);
-    free_b = true;
-  }
-  // a & b are both BIG here
-  //fprintf(stderr, "BIG/BIG\n");
-  if (a.big.size < b.big.size) {
-    if (free_b) free_nat(b);
-    *rem = clone_nat(a);
-    return d_Small(0);
-  }
-  long new_size = (a.big.size - b.big.size) + 1;
-  nn_t nat_buf = nn_init(new_size);
-  Nat a_clone = clone_nat(a);
-  nn_divrem(nat_buf, a_clone.big.buf, a_clone.big.size, b.big.buf, b.big.size);
-  //
-  a_clone.big.size = b.big.size;
-  *rem = resize_nat(a_clone);
-  //
-  if (free_b) free_nat(b);
-  Nat n = { .type = BIG, .big = { .size = new_size, .buf = nat_buf }};
-  return resize_nat(n);
+void Div() {
+  DivRem();
+  slide(1);
 }
 
-/*
-Nat Div(Nat a, Nat b) {
-  Nat rem;
-  Nat ret = DivRem(&rem, a, b);
-  free_nat(rem);
-  return ret;
+void Rem() {
+  DivRem();
+  pop();
 }
-
-Nat Rem(Nat a, Nat b) {
-  Nat rem;
-  free_nat(DivRem(&rem, a, b));
-  return rem;
-}
-*/
 
 ////////////////////////////////////////////////////////////////////////////////
 //  Jets
