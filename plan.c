@@ -827,7 +827,7 @@ void DivModBigBig(Value *a, Value *b) {
   nn_zero(buf, sz);
   bBig = BN(pop());                          // restore b
   nn_divrem(buf, a_buf_clone, aBig.size, bBig.buf, bBig.size);
-  push_big((BigNat){ .size = aBig.size, .buf = a_buf_clone }); // mod
+  push_big((BigNat){ .size = bBig.size, .buf = a_buf_clone }); // mod
   push_big((BigNat){ .size = sz,        .buf = buf });         // div
 }
 
