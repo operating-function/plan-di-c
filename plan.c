@@ -70,7 +70,10 @@ struct Value {
 //  Prototypes
 
 static bool graphviz = 0;
+void write_dot(char *);
 
+void stack_grow(u64);
+void mk_app();
 void write_dot_extra(char*, char*, Value*);
 void clone();
 static inline Value *direct(u64);
@@ -88,15 +91,15 @@ bool eval();
 void eval_update(int);
 Value **get_ptr(u64);
 
-Value *frag_load(Value **tab, u64 tabSz, int *, u64 *, u64 **);
+void frag_load(Value**, u64, int*, u64*, u64**);
 Value *read_exp();
 
 ////////////////////////////////////////////////////////////////////////////////
 //  Globals
 
 #define STACK_SIZE 4096
-Value **stack;
-u64 sp;
+Value *stack[STACK_SIZE];
+u64 sp = 0;
 
 ////////////////////////////////////////////////////////////////////////////////
 //  Crash
@@ -249,6 +252,8 @@ static inline Value *IN(Value *x) {
 //  Printing
 
 void check_nat(Value *v) {
+  if (v == NULL) crash("check_nat: NULL");
+
   if (is_direct(v)) return;
 
   if (v->type != NAT) crash("check_nat: not nat");
@@ -266,6 +271,8 @@ void check_nat(Value *v) {
 }
 
 void check_value(Value *v) {
+  if (v == NULL) crash("check_value: NULL");
+
   if (is_direct(v)) return;
 
   switch (TY(v)) {
@@ -972,10 +979,10 @@ Jet jet_table[NUM_JETS] =
 ////////////////////////////////////////////////////////////////////////////////
 //  Seeds
 
-Value *frag_load_cell(Value **tab, u64 tabSz, int *use, u64 *acc, u64 **mor) {
-  Value *f = frag_load(tab, tabSz, use, acc, mor);
-  Value *x = frag_load(tab, tabSz, use, acc, mor);
-  return a_App(f,x);
+void frag_load_cell(Value **tab, u64 tabSz, int *use, u64 *acc, u64 **mor) {
+  frag_load(tab, tabSz, use, acc, mor); // .. f
+  frag_load(tab, tabSz, use, acc, mor); // .. f x
+  mk_app();                             // .. (f x)
 }
 
 u64 u64_bits (u64 w) {
@@ -983,7 +990,7 @@ u64 u64_bits (u64 w) {
   return 64 - __builtin_clzll(w);
 }
 
-Value *frag_load(Value **tab, u64 tabSz, int *use, u64 *acc, u64 **mor) {
+void frag_load(Value **tab, u64 tabSz, int *use, u64 *acc, u64 **mor) {
   u64 isCell = ((*acc >> *use) & 1ULL);
 
   // move forward by one bit.
@@ -995,7 +1002,8 @@ Value *frag_load(Value **tab, u64 tabSz, int *use, u64 *acc, u64 **mor) {
   }
 
   if (isCell) {
-    return frag_load_cell(tab, tabSz, use, acc, mor);
+    frag_load_cell(tab, tabSz, use, acc, mor);
+    return;
   }
 
   // `tmp` is the remaining bits from acc (high bits) combined
@@ -1016,10 +1024,10 @@ Value *frag_load(Value **tab, u64 tabSz, int *use, u64 *acc, u64 **mor) {
     *mor = (*mor)+1;
   }
 
-  return tab[ref];
+  push_val(tab[ref]);
 }
 
-Value *seed_load(u64 *buf) {
+void seed_load(u64 *buf) {
   u64 n_holes = buf[0];
   u64 n_bigs  = buf[1];
   u64 n_words = buf[2];
@@ -1033,7 +1041,10 @@ Value *seed_load(u64 *buf) {
 
   u64 n_entries = n_bigs + n_words + n_bytes + n_frags + n_holes;
 
-  Value **tab = malloc(sizeof(Value*) * n_entries);
+  if (n_entries == 0) crash("empty seed");
+
+  stack_grow(n_entries);
+  Value **tab = get_ptr(n_entries-1); // 0
 
   Value **next_ref = tab;
 
@@ -1076,18 +1087,24 @@ Value *seed_load(u64 *buf) {
   u64 acc = buf[used];
   u64 *more = &buf[used+1];
 
+  graphviz = 1;
+
   for (int i=0; i<n_frags; i++) {
+    write_dot("<frag>");
     u64 tabSz = (next_ref - tab);
-    *next_ref++ = frag_load_cell(tab, tabSz, &use, &acc, &more);
+    frag_load_cell(tab, tabSz, &use, &acc, &more);
+    *next_ref++ = pop();
+    write_dot("</frag>");
   }
 
-  return next_ref[-1];
+  // The top-most entry is the result
+  slide(n_entries - 1);
 }
 
 u64 *load_seed_file (const char *filename, u64 *sizeOut) {
   FILE *f = fopen (filename, "rb");
 
-  if (!f) exit(2);
+  if (!f) crash("seed file does not exist");
 
   fseek(f, 0, SEEK_END);
   u64 szBytes = ftell(f);
@@ -1099,8 +1116,8 @@ u64 *load_seed_file (const char *filename, u64 *sizeOut) {
                                    // so that we can over-read
                                    // by one word, this simplifies
                                    // decoding.
-  if (!buf) exit(3);
-  if (fread (buf, 1, szBytes, f) != szBytes) exit(4);
+  if (!buf) crash("load_seed_file: allocation failed");
+  if (fread (buf, 1, szBytes, f) != szBytes) crash("load_seed_file: can't read");
   fclose(f);
 
   *sizeOut = szWords;
@@ -1924,19 +1941,6 @@ void force() {
 ////////////////////////////////////////////////////////////////////////////////
 //  Runner
 
-Value *run(Value *v) {
-  stack = malloc(STACK_SIZE*sizeof(Value *));
-  sp = 0;
-  //
-  push_val(v);
-  clone();
-  force();
-  //
-  write_dot("main final");
-  Value *res = pop_deref();
-  return res;
-}
-
 // when `is_sym == true`,  we are parsing symbols.
 // when `is_sym == false`, we are parsing digits.
 // this seems tidier than passing a function pointer, as issym & isdigit do not
@@ -2048,8 +2052,8 @@ Value *read_exp() {
         return NULL;
     }
     case '<': {
-        char buf[1234] = {0};
-        for (int i=0; i<1234; i++) {
+        char buf[1234] = "./seed/";
+        for (int i=7; i<1234; i++) {
             buf[i] = getchar();
             if (feof(stdin)) {
                 crash("Unexpected EOF");
@@ -2058,7 +2062,8 @@ Value *read_exp() {
                 buf[i] = 0;
                 u64 seedSz;
                 u64 *words = load_seed_file(buf, &seedSz);
-                Value *loaded = seed_load(words);
+                seed_load(words);
+                Value *loaded = pop(0);
                 check_value(loaded);
                 return loaded;
             }
@@ -2107,9 +2112,16 @@ int main (void) {
     if (isInteractive) printf(">> ");
     Value *v = read_exp_top();
     if (!v) return 0;
-    Value *res = run(v);
+
+    push_val(v);
+    clone();
+    force();
+
+    write_dot("main final");
+    Value *res = pop_deref();
     fprintf_value(stdout, res);
     printf("\n");
+
     goto again;
     return 0;
 }

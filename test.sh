@@ -278,6 +278,12 @@ else
   echo "large symbol test PASSED";
 fi
 
+echo "seed tests"
+check "1" "(<Sub> 2 1)"
+check "6" "(<Mul> 2 3)"
+
+################################################################################
+
 if [[ "$FAILED" -eq 0 ]]; then
   echo "all tests passed!"
 elif [[ "$FAILED" -eq 1 ]]; then
