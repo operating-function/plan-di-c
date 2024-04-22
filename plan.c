@@ -10,6 +10,7 @@
 #include <sys/stat.h>
 #include <inttypes.h>
 #include <unistd.h>
+#include <stdnoreturn.h>
 
 #include "bsdnt/nn.h"
 
@@ -100,7 +101,7 @@ u64 sp;
 ////////////////////////////////////////////////////////////////////////////////
 //  Crash
 
-void crash(char *s) {
+noreturn void crash(char *s) {
   printf("Error: %s\n", s);
   exit(1);
 }
@@ -247,9 +248,21 @@ static inline Value *IN(Value *x) {
 ////////////////////////////////////////////////////////////////////////////////
 //  Printing
 
-void check_nat(Value *n) {
-  // TODO validate bignat invariants
-  return;
+void check_nat(Value *v) {
+  if (is_direct(v)) return;
+
+  if (v->type != NAT) crash("check_nat: not nat");
+
+  BigNat n = BN(v);
+
+  if (n.size == 0) crash("check_nat: bignat zero");
+
+  if (n.size == 1) {
+    if (n.buf[0] < ptr_nat_mask) crash("check_nat: direct atom encoded as bignat");
+    return;
+  }
+
+  if (n.buf[n.size - 1] == 0) crash("check_nat: bad size (high word is zero)");
 }
 
 void check_value(Value *v) {
