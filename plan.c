@@ -50,8 +50,8 @@ typedef struct Law {
 } Law;
 
 typedef struct App {
-  Value * f;
-  Value * g;
+  Value *f;
+  Value *g;
 } App;
 
 struct Value {
@@ -74,17 +74,17 @@ static inline Value *direct(u64);
 void BigPlusDirect(u64, u64);
 Value *pop();
 void force();
-Value * get();
-Value * get_deref();
-Value * pop_deref();
+Value *get();
+Value *get_deref();
+Value *pop_deref();
 void update(u64 idx);
 void push(u64);
 void push_val(Value*);
 bool eval();
 void eval_update(int);
-Value ** get_ptr(u64 idx);
+Value **get_ptr(u64 idx);
 
-Value * frag_load(Value **tab, u64 tabSz, int *, u64 *, u64 **);
+Value *frag_load(Value **tab, u64 tabSz, int *, u64 *, u64 **);
 Value *read_exp();
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -97,7 +97,7 @@ u64 sp;
 ////////////////////////////////////////////////////////////////////////////////
 //  Crash
 
-void crash(char * s) {
+void crash(char *s) {
   printf("Error: %s\n", s);
   exit(1);
 }
@@ -115,11 +115,11 @@ Value *direct_zero = (Value*) 9223372036854775808ull;
 Value *direct_one  = (Value*) 9223372036854775809ull;
 Value *direct_two  = (Value*) 9223372036854775810ull;
 
-bool is_direct(Value * x) {
+bool is_direct(Value *x) {
   return (((u64) x) & ptr_nat_mask) != 0;
 }
 
-static inline u64 get_direct(Value * x) {
+static inline u64 get_direct(Value *x) {
   return (u64) (((u64) x) & ~ptr_nat_mask);
 }
 
@@ -128,16 +128,16 @@ static inline u64 get_direct(Value * x) {
 
 #define CHECK_TAGS 1
 
-Value * deref(Value * x);
+Value *deref(Value *x);
 
-static inline void ck_pin(char * fn_nm, Value * x) {
+static inline void ck_pin(char *fn_nm, Value *x) {
   char s[14];
   sprintf(s, "%s not a PIN!", fn_nm);
   if (x->type != PIN) crash(s);
 }
 
 // we allow PIN LAWs
-static inline void ck_law(char * fn_nm, Value * x) {
+static inline void ck_law(char *fn_nm, Value *x) {
   char s[28];
   sprintf(s, "%s not a LAW or PIN-LAW!", fn_nm);
   if (x->type == LAW) return;
@@ -147,34 +147,34 @@ static inline void ck_law(char * fn_nm, Value * x) {
   crash(s);
 }
 
-static inline void ck_app(char * fn_nm, Value * x) {
+static inline void ck_app(char *fn_nm, Value *x) {
   char s[15];
   sprintf(s, "%s not an APP!", fn_nm);
   if (x->type != APP) crash(s);
 }
 
-static inline void ck_nat(char * fn_nm, Value * x) {
+static inline void ck_nat(char *fn_nm, Value *x) {
   char s[14];
   sprintf(s, "%s not a NAT!", fn_nm);
   if (x->type != NAT) crash(s);
 }
 
-static inline void ck_ind(char * fn_nm, Value * x) {
+static inline void ck_ind(char *fn_nm, Value *x) {
   char s[14];
   sprintf(s, "%s not a IND!", fn_nm);
   if (x->type != IND) crash(s);
 }
 
-static inline Type TY(Value * x) {
+static inline Type TY(Value *x) {
   if (is_direct(x)) return NAT;
   return x->type;
 }
 
-static inline bool IS_NAT(Value * x) {
+static inline bool IS_NAT(Value *x) {
   return (TY(x) == NAT);
 }
 
-static inline Value * IT(Value * x) {
+static inline Value *IT(Value *x) {
   x = deref(x);
   #ifdef CHECK_TAGS
   ck_pin("IT", x);
@@ -182,7 +182,7 @@ static inline Value * IT(Value * x) {
   return x->p;
 };
 
-static inline Value *NM(Value * x) {
+static inline Value *NM(Value *x) {
   x = deref(x);
   #ifdef CHECK_TAGS
   ck_law("NM", x);
@@ -191,7 +191,7 @@ static inline Value *NM(Value * x) {
   return x->l.n;
 }
 
-static inline Value *AR(Value * x) {
+static inline Value *AR(Value *x) {
   x = deref(x);
   #ifdef CHECK_TAGS
   ck_law("AR", x);
@@ -200,7 +200,7 @@ static inline Value *AR(Value * x) {
   return x->l.a;
 }
 
-static inline Value * BD(Value * x) {
+static inline Value *BD(Value *x) {
   x = deref(x);
   #ifdef CHECK_TAGS
   ck_law("BD", x);
@@ -209,7 +209,7 @@ static inline Value * BD(Value * x) {
   return x->l.b;
 }
 
-static inline Value * HD(Value * x) {
+static inline Value *HD(Value *x) {
   x = deref(x);
   #ifdef CHECK_TAGS
   ck_app("HD", x);
@@ -217,7 +217,7 @@ static inline Value * HD(Value * x) {
   return x->a.f;
 };
 
-static inline Value * TL(Value * x) {
+static inline Value *TL(Value *x) {
   x = deref(x);
   #ifdef CHECK_TAGS
   ck_app("TL", x);
@@ -225,7 +225,7 @@ static inline Value * TL(Value * x) {
   return x->a.g;
 };
 
-static inline BigNat BN(Value * x) {
+static inline BigNat BN(Value *x) {
   if (is_direct(x)) crash("BN: got direct");
   x = deref(x);
   #ifdef CHECK_TAGS
@@ -234,7 +234,7 @@ static inline BigNat BN(Value * x) {
   return x->n;
 };
 
-static inline Value * IN(Value * x) {
+static inline Value *IN(Value *x) {
   #ifdef CHECK_TAGS
   ck_ind("IN", x);
   #endif
@@ -279,7 +279,7 @@ void fprintf_value_internal(FILE *, Value *, int);
 
 void fprintf_nat(FILE *, Value *);
 
-void fprintf_value(FILE *f , Value * v) {
+void fprintf_value(FILE *f , Value *v) {
   switch (TY(v)) {
   case PIN:
     fprintf(f, "<");
@@ -300,7 +300,7 @@ void fprintf_value(FILE *f , Value * v) {
   }
 }
 
-void fprintf_value_app(FILE * f, Value * v, int recur) {
+void fprintf_value_app(FILE *f, Value *v, int recur) {
   if (TY(v) != APP) {
     return fprintf_value_internal(f, v, recur);
   }
@@ -309,7 +309,7 @@ void fprintf_value_app(FILE * f, Value * v, int recur) {
   fprintf_value_internal(f, TL(v), recur+1);
 }
 
-void fprintf_value_internal(FILE * f, Value * v, int recur) {
+void fprintf_value_internal(FILE *f, Value *v, int recur) {
   v = deref(v);
   if (recur > 1000) {
     fprintf(f, "‥");
@@ -359,7 +359,7 @@ bool is_symbol(const char *str) {
 }
 
 
-void fprintf_nat(FILE * f, Value *v) {
+void fprintf_nat(FILE *f, Value *v) {
   assert(TY(v) == NAT);
 
   if (is_direct(v)) {
@@ -376,7 +376,7 @@ void fprintf_nat(FILE * f, Value *v) {
 
   BigNat n = BN(v);
 
-  long num_chars = n.size * sizeof(word_t);
+  long num_chars = n.size *sizeof(word_t);
   char nat_str[num_chars+1];
   memcpy(nat_str, n.buf, num_chars);
   nat_str[num_chars] = 0;
@@ -411,7 +411,7 @@ void show_direct_nat(char *buf, Value *v) {
 ////////////////////////////////////////////////////////////////////////////////
 //  Construction
 
-Value * a_Big(BigNat n) {
+Value *a_Big(BigNat n) {
   while (n.size && n.buf[n.size - 1] == 0) n.size--;
 
   if (n.size == 0)
@@ -421,7 +421,7 @@ Value * a_Big(BigNat n) {
     return direct(n.buf[0]);
   }
 
-  Value * res = (Value *)malloc(sizeof(Value));
+  Value *res = (Value *)malloc(sizeof(Value));
   *res = (Value){ .type = NAT, .n = n };
   return res;
 }
@@ -437,23 +437,23 @@ static inline Value *direct(u64 x) {
   return a_Big((BigNat){ .size = 1, .buf = x_nat });
 }
 
-Value * a_Pin(Value * v) {
-  Value * res = (Value *)malloc(sizeof(Value));
+Value *a_Pin(Value *v) {
+  Value *res = (Value *)malloc(sizeof(Value));
   res->type = PIN;
   res->p = v;
   return res;
 }
 
-Value * a_App(Value * f, Value * g) {
-  Value * res = (Value *)malloc(sizeof(Value));
+Value *a_App(Value *f, Value *g) {
+  Value *res = (Value *)malloc(sizeof(Value));
   res->type = APP;
   res->a.f = f;
   res->a.g = g;
   return res;
 }
 
-Value * a_Hol() {
-  Value * res = (Value *)malloc(sizeof(Value));
+Value *a_Hol() {
+  Value *res = (Value *)malloc(sizeof(Value));
   res->type = HOL;
   return res;
 }
@@ -560,7 +560,7 @@ static inline bool NEQ(Value *a, Value *b) {
   return cmp(a,b) != 1;
 }
 
-static inline bool EQZ(Value* x) {
+static inline bool EQZ(Value *x) {
    return (x == direct_zero);
 }
 
@@ -652,7 +652,7 @@ void BigSubDirect(u64 bigSz, u64 direct) {
 void Dec() {
   write_dot_extra("<Dec>", "", NULL);
 
-  Value * v = pop_deref(0);
+  Value *v = pop_deref(0);
 
   if (is_direct(v)) {
     u64 n = get_direct(v);
@@ -827,14 +827,14 @@ Nat Rem(Nat a, Nat b) {
 //  Jets
 
 typedef struct Jet {
-  char * name;
+  char *name;
   u64 arity;
   void (*jet_exec)();
 } Jet;
 
 void to_nat(int i) {
   eval_update(i);
-  Value ** p = get_ptr(i);
+  Value **p = get_ptr(i);
   if (!IS_NAT(*p)) { *p = direct(0); }
 }
 
@@ -903,7 +903,7 @@ void add_jet() {
 void trace_jet() {
   push(0); // force msg
   force();
-  Value * msg = pop_deref();
+  Value *msg = pop_deref();
   fprintf_value(stdout, msg);
   printf("\n");
 }
@@ -922,7 +922,7 @@ Jet jet_table[NUM_JETS] =
 ////////////////////////////////////////////////////////////////////////////////
 //  Seeds
 
-Value * frag_load_cell(Value **tab, u64 tabSz, int *use, u64 *acc, u64 **mor) {
+Value *frag_load_cell(Value **tab, u64 tabSz, int *use, u64 *acc, u64 **mor) {
   Value *f = frag_load(tab, tabSz, use, acc, mor);
   Value *x = frag_load(tab, tabSz, use, acc, mor);
   return a_App(f,x);
@@ -933,7 +933,7 @@ u64 u64_bits (u64 w) {
   return 64 - __builtin_clzll(w);
 }
 
-Value * frag_load(Value **tab, u64 tabSz, int *use, u64 *acc, u64 **mor) {
+Value *frag_load(Value **tab, u64 tabSz, int *use, u64 *acc, u64 **mor) {
   u64 isCell = ((*acc >> *use) & 1ULL);
 
   // move forward by one bit.
@@ -969,7 +969,7 @@ Value * frag_load(Value **tab, u64 tabSz, int *use, u64 *acc, u64 **mor) {
   return tab[ref];
 }
 
-Value * seed_load(u64 *buf) {
+Value *seed_load(u64 *buf) {
   u64 n_holes = buf[0];
   u64 n_bigs  = buf[1];
   u64 n_words = buf[2];
@@ -1002,7 +1002,7 @@ Value * seed_load(u64 *buf) {
   for (int i=0; i<n_bigs; i++) {
     u64 wid  = bigwidths[i];
 
-    u64 * big_buf = calloc(wid, sizeof(u64));
+    u64 *big_buf = calloc(wid, sizeof(u64));
     big_buf = memcpy(big_buf, buf+used, wid*sizeof(u64));
     BigNat big_nat = (BigNat){ .size=wid, .buf = big_buf } ;
 
@@ -1034,8 +1034,8 @@ Value * seed_load(u64 *buf) {
   return next_ref[-1];
 }
 
-u64 *load_seed_file (const char* filename, u64 *sizeOut) {
-  FILE * f = fopen (filename, "rb");
+u64 *load_seed_file (const char *filename, u64 *sizeOut) {
+  FILE *f = fopen (filename, "rb");
 
   if (!f) exit(2);
 
@@ -1060,33 +1060,33 @@ u64 *load_seed_file (const char* filename, u64 *sizeOut) {
 ////////////////////////////////////////////////////////////////////////////////
 //  Interpreter stack fns
 
-Value * deref(Value * x) {
+Value *deref(Value *x) {
   while (TY(x) == IND) {
     x = IN(x);
   }
   return x;
 }
 
-Value * pop() {
+Value *pop() {
   if (sp == 0) crash("pop: empty stack");
   sp--;
   return stack[sp];
 }
 
-Value * pop_deref() {
+Value *pop_deref() {
   return deref(pop());
 }
 
-Value ** get_ptr(u64 idx) {
+Value **get_ptr(u64 idx) {
   if (idx >= sp) crash("get: indexed off stack");
   return &stack[(sp-1)-idx];
 }
 
-Value * get(u64 idx) {
+Value *get(u64 idx) {
   return *get_ptr(idx);
 }
 
-Value * get_deref(u64 idx) {
+Value *get_deref(u64 idx) {
   return deref(get(idx));
 }
 
@@ -1094,10 +1094,10 @@ Value * get_deref(u64 idx) {
 //  DOT printing
 
 int dot_count = 0;
-char * dot_dir_path = "./dot";
+char *dot_dir_path = "./dot";
 
-char * p_ptr(Value * x) {
-  char * buf = malloc(30*sizeof(char));
+char *p_ptr(Value *x) {
+  char *buf = malloc(30*sizeof(char));
   if (x == NULL) {
     sprintf(buf, "N_null");
   } else if (is_direct(x)) {
@@ -1114,8 +1114,8 @@ void fprintf_heap(FILE *f, Node *input, Node *seen) {
     free_list(seen, false);
     return;
   }
-  Node * tmp = input;
-  Value * v = (Value *)input->ptr;
+  Node *tmp = input;
+  Value *v = (Value *)input->ptr;
   input = input->next;
   free(tmp);
   //
@@ -1128,8 +1128,8 @@ void fprintf_heap(FILE *f, Node *input, Node *seen) {
   // to `input`.
   switch (TY(v)) {
     case PIN: {
-      char * v_p = p_ptr(v);
-      char * i_p = p_ptr(IT(v));
+      char *v_p = p_ptr(v);
+      char *i_p = p_ptr(IT(v));
       if (is_direct(IT(v))) {
         fprintf(f, "%s [label = \"\\<%lu\\>\"];\n", v_p, get_direct(IT(v)));
       } else {
@@ -1142,8 +1142,8 @@ void fprintf_heap(FILE *f, Node *input, Node *seen) {
       break;
     }
     case LAW: {
-      char * v_p = p_ptr(v);
-      char * b_p = p_ptr(BD(v));
+      char *v_p = p_ptr(v);
+      char *b_p = p_ptr(BD(v));
       fprintf(f, "%s [label=\"law nm:", v_p);
       fprintf_nat(f, NM(v));
       fprintf(f, " ar:");
@@ -1156,7 +1156,7 @@ void fprintf_heap(FILE *f, Node *input, Node *seen) {
       break;
     }
     case APP: {
-      char * v_p = p_ptr(v);
+      char *v_p = p_ptr(v);
       Value *h = HD(v), *t = TL(v);
       char *h_p = p_ptr(h);
       char *t_p = p_ptr(t);
@@ -1178,7 +1178,7 @@ void fprintf_heap(FILE *f, Node *input, Node *seen) {
       break;
     }
     case NAT: {
-      char * v_p = p_ptr(v);
+      char *v_p = p_ptr(v);
       fprintf(f, "%s [label=\"", v_p);
       fprintf_nat(f, v);
       fprintf(f, "\"];\n");
@@ -1186,8 +1186,8 @@ void fprintf_heap(FILE *f, Node *input, Node *seen) {
       break;
     }
     case IND: {
-      char * v_p = p_ptr(v);
-      char * i_p = p_ptr(IN(v));
+      char *v_p = p_ptr(v);
+      char *i_p = p_ptr(IN(v));
       fprintf(f, "%s [label=ind];\n", v_p);
       fprintf(f, "%s -> %s [arrowhead=dot];\n", v_p, i_p);
       free(v_p);
@@ -1196,7 +1196,7 @@ void fprintf_heap(FILE *f, Node *input, Node *seen) {
       break;
     }
     case HOL: {
-      char * v_p = p_ptr(v);
+      char *v_p = p_ptr(v);
       fprintf(f, "%s [label=hole];\n", v_p);
       free(v_p);
       break;
@@ -1219,16 +1219,16 @@ void fprintf_stack(FILE *f) {
 
   // print edges between stack topper Values
   for (int i = 0; i < sp; i++) {
-    Value * v = get(i);
+    Value *v = get(i);
     if (is_direct(v)) continue;
-    char * v_p = p_ptr(v);
+    char *v_p = p_ptr(v);
     fprintf(f, "stack:s%d -> %s;\n", i, v_p);
     free(v_p);
   }
 }
 
-Node * stack_to_list_heap_only() {
-  Node * l = NULL;
+Node *stack_to_list_heap_only() {
+  Node *l = NULL;
   if (sp == 0) return l;
   for (u64 i = 0; i < sp; i++) {
     if (is_direct(get(i))) continue;
@@ -1237,12 +1237,12 @@ Node * stack_to_list_heap_only() {
   return l;
 }
 
-void write_dot_extra(char *label, char *extra, Value * v) {
+void write_dot_extra(char *label, char *extra, Value *v) {
   if (!graphviz) return;
   char fp[20] = {0};
   sprintf(fp, "%s/%05d.dot", dot_dir_path, dot_count);
   dot_count++;
-  FILE * f = fopen(fp, "w+");
+  FILE *f = fopen(fp, "w+");
   fprintf(f, "digraph {\nbgcolor=\"#665c54\"\n");
   fprintf(f, "label = \"%s\";\n", label);
   fprintf(f, "node [shape=record,width=.1,height=.1];\n");
@@ -1251,7 +1251,7 @@ void write_dot_extra(char *label, char *extra, Value * v) {
   fprintf(f, "\n// stack\n");
   fprintf_stack(f);
   fprintf(f, "\n// heap\n");
-  Node * heap_input = stack_to_list_heap_only();
+  Node *heap_input = stack_to_list_heap_only();
   if (v != NULL) {
     heap_input = cons((void *)v, heap_input);
   }
@@ -1286,7 +1286,7 @@ void update(u64 idx) {
 
 void push_val(Value *x) {
   char extra[50];
-  char * x_p = p_ptr(x);
+  char *x_p = p_ptr(x);
   sprintf(extra, "i[color=red];\ni -> %s", x_p);
   free(x_p);
   write_dot_extra("push_val", extra, x);
@@ -1314,9 +1314,9 @@ void clone() {
 void mk_app() {
   write_dot("mk_app");
   //
-  Value * x = pop();
-  Value * f = pop();
-  Value * fx = a_App(f, x);
+  Value *x = pop();
+  Value *f = pop();
+  Value *fx = a_App(f, x);
   push_val(fx);
 }
 
@@ -1325,17 +1325,17 @@ void mk_app() {
 void mk_app_rev() {
   write_dot("mk_app_rev");
   //
-  Value * f = pop();
-  Value * x = pop();
-  Value * ap = a_App(f, x);
+  Value *f = pop();
+  Value *x = pop();
+  Value *ap = a_App(f, x);
   push_val(ap);
 }
 
 // before: ..rest x y
 // after:  ..rest y x
 void swap() {
-  Value * n1 = pop();
-  Value * n2 = pop();
+  Value *n1 = pop();
+  Value *n2 = pop();
   push_val(n1);
   push_val(n2);
 }
@@ -1372,7 +1372,7 @@ void slide(u64 count) {
   sprintf(lab, "slide %lu", count);
   write_dot(lab);
   //
-  Value * top = get_deref(0);
+  Value *top = get_deref(0);
   sp -= count;
   stack[sp-1] = top;
   //
@@ -1382,22 +1382,22 @@ void slide(u64 count) {
 
 void mk_pin() {
   write_dot("mk_pin");
-  Value * top = pop_deref();
+  Value *top = pop_deref();
   if (TY(top) == HOL) crash("mk_pin: hol");
-  Value * p = a_Pin(top);
+  Value *p = a_Pin(top);
   push_val(p);
 }
 
 void mk_law() {
   write_dot("mk_law");
 
-  Value * res = (Value *)malloc(sizeof(Value));
+  Value *res = (Value *)malloc(sizeof(Value));
 
   to_nat(1); // a
   to_nat(2); // n
-  Value * b = pop_deref();
-  Value * a = pop_deref();
-  Value * n = pop_deref();
+  Value *b = pop_deref();
+  Value *a = pop_deref();
+  Value *n = pop_deref();
 
   Law l = { .n = n, .a = a, .b=b };
   *res = (Value){ .type = LAW, .l = l };
@@ -1406,7 +1406,7 @@ void mk_law() {
 
 void incr() {
   write_dot("incr");
-  Value * x = pop_deref();
+  Value *x = pop_deref();
 
   if (is_direct(x)) {
     push_val(direct(get_direct(x) + 1));
@@ -1424,12 +1424,12 @@ void incr() {
 
 void prim_case() {
   write_dot("prim_case");
-  Value * o = pop_deref();
-  Value * m = pop_deref();
-  Value * z = pop_deref();
-  Value * a = pop_deref();
-  Value * l = pop_deref();
-  Value * p = pop_deref();
+  Value *o = pop_deref();
+  Value *m = pop_deref();
+  Value *z = pop_deref();
+  Value *a = pop_deref();
+  Value *l = pop_deref();
+  Value *p = pop_deref();
   switch (TY(o)) {
     case PIN:
       push_val(IT(o)); // o
@@ -1486,7 +1486,7 @@ void flip_stack(u64 depth) {
   write_dot(lab);
   //
   if (depth == 0) return;
-  Value * tmp;
+  Value *tmp;
   u64 d_1 = depth-1;
   for (u64 i = 0; i < depth/2; i++) {
     tmp                   = stack[(sp-1)-i];
@@ -1532,7 +1532,7 @@ void kal(u64 n) {
   sprintf(lab, "kal %lu", n);
   write_dot(lab);
   //
-  Value * x = get_deref(0);
+  Value *x = get_deref(0);
   if (IS_NAT(x)) {
     if (LTE(x, direct(n))) {
       push(n - get_direct(x)); // we know this is direct b/c < n
@@ -1541,13 +1541,13 @@ void kal(u64 n) {
     goto raw_const;
   }
   if (TY(x) == APP) {
-    Value * car = deref(HD(x));
+    Value *car = deref(HD(x));
     if (TY(car) == APP) {
-      Value * caar = deref(HD(car));
+      Value *caar = deref(HD(car));
       if (EQZ(caar)) {
         // x: ((0 f) y)
-        Value * f = deref(TL(car));
-        Value * y = deref(TL(x)); // => [(f y) ...]
+        Value *f = deref(TL(car));
+        Value *y = deref(TL(x)); // => [(f y) ...]
         push_val(y);              // => [y (f y) ...]
         push_val(f);              // => [f y (f y) ...]
         kal(n+2);                 // => [fres y (f y) ..]
@@ -1569,13 +1569,13 @@ end:
 }
 
 // 0 indicates no lets
-u64 length_let_spine(Value * x) {
+u64 length_let_spine(Value *x) {
   u64 count = 0;
 loop:
   if (TY(x) == APP) {
-    Value * car = deref(HD(x));
+    Value *car = deref(HD(x));
     if (TY(car) == APP) {
-      Value * caar = deref(HD(car));
+      Value *caar = deref(HD(car));
       if (EQ1(caar)) {
         // ((1 v) k)
         count++;
@@ -1592,7 +1592,7 @@ void eval_law(u64 n) {
   sprintf(lab, "eval_law %lu", n);
   write_dot(lab);
   //
-  Value * b = pop_deref();
+  Value *b = pop_deref();
   u64 m = length_let_spine(b);
   //
   stack_grow(m);
@@ -1619,7 +1619,7 @@ void eval_law(u64 n) {
 // matched, we consume the arguments and leave the return value on the top of
 // the stack, returning true. if no match, leave the arguments as-is and return
 // false.
-bool jet_dispatch(Value * self, u64 ar) {
+bool jet_dispatch(Value *self, u64 ar) {
   write_dot("jet_dispatch: entry");
   // fprintf(stderr, "jet_dispatch: ");
   // fprintf_value(stderr, self);
@@ -1649,7 +1649,7 @@ bool law_step(u64 depth, bool should_jet) {
   sprintf(lab, "law_step %lu", depth);
   write_dot(lab);
   //
-  Value * self = pop_deref();
+  Value *self = pop_deref();
   if (GT(AR(self), direct(depth))) {
     // unsaturated application. this is a little weird, but works?
     if (depth <= 1) {
@@ -1691,7 +1691,7 @@ bool law_step(u64 depth, bool should_jet) {
   }
 }
 
-u64 prim_arity(Value * op) {
+u64 prim_arity(Value *op) {
   if (!is_direct(op)) return 1;
   switch (get_direct(op)) {
     case 0:  return 1; // mk_pin
@@ -1758,7 +1758,7 @@ bool unwind(u64 depth) {
   sprintf(lab, "unwind %lu", depth);
   write_dot(lab);
   //
-  Value * x = get_deref(0);
+  Value *x = get_deref(0);
   switch (TY(x)) {
     case APP: {
       push_val(HD(x));
@@ -1768,7 +1768,7 @@ bool unwind(u64 depth) {
       return law_step(depth, false);
     }
     case PIN: {
-      Value * item = deref(x->p);
+      Value *item = deref(x->p);
       switch (TY(item)) {
         case NAT: {
           u64 arity = prim_arity(item);
@@ -1830,7 +1830,7 @@ bool unwind(u64 depth) {
 bool eval() {
   write_dot("eval");
   //
-  Value * x = get_deref(0);
+  Value *x = get_deref(0);
   switch (TY(x)) {
     case APP:
       return unwind(0);
@@ -1858,7 +1858,7 @@ void force_whnf() {
 void force() {
   write_dot("force");
   //
-  Value * top = get_deref(0);
+  Value *top = get_deref(0);
   if (TY(top) == APP) {
     clone();
     eval();
@@ -1872,7 +1872,7 @@ void force() {
 ////////////////////////////////////////////////////////////////////////////////
 //  Runner
 
-Value * run(Value * v) {
+Value *run(Value *v) {
   stack = malloc(STACK_SIZE*sizeof(Value *));
   sp = 0;
   //
@@ -1889,10 +1889,10 @@ Value * run(Value * v) {
 // when `is_sym == false`, we are parsing digits.
 // this seems tidier than passing a function pointer, as issym & isdigit do not
 // have the same type (??).
-char * read_str_input(bool is_sym) {
+char *read_str_input(bool is_sym) {
   u64 len = 100;
   u64 idx = 0;
-  char * str = malloc(len * sizeof(char));
+  char *str = malloc(len * sizeof(char));
   memset(str, 0, len);
   char c;
   while (true) {
@@ -1912,7 +1912,7 @@ char * read_str_input(bool is_sym) {
 }
 
 Value *read_atom() {
-  char * str = read_str_input(false);
+  char *str = read_str_input(false);
   //
   // y : # of bits required to store
   // x : length of string of '9's
@@ -1960,7 +1960,7 @@ Value *read_app(Value *f) {
 }
 
 Value *read_sym() {
-  char * str = read_str_input(true);
+  char *str = read_str_input(true);
   int len = strlen(str);
   if (!len)    crash("Empty symbol");
   if (len > 8) {
@@ -2039,10 +2039,10 @@ Value *read_exp_top() {
 }
 
 int main (void) {
-  // Value * x = direct(UINT64_MAX);
-  // Value * y = direct(3);
-  // Value * arr[2] = { x, y };
-  // Value * res = jet_table[0].jet_exec(arr);
+  // Value *x = direct(UINT64_MAX);
+  // Value *y = direct(3);
+  // Value *arr[2] = { x, y };
+  // Value *res = jet_table[0].jet_exec(arr);
   // fprintf_value(stdout, res);
   // printf("\n");
 
@@ -2055,7 +2055,7 @@ int main (void) {
     if (isInteractive) printf(">> ");
     Value *v = read_exp_top();
     if (!v) return 0;
-    Value * res = run(v);
+    Value *res = run(v);
     fprintf_value(stdout, res);
     printf("\n");
     goto again;
