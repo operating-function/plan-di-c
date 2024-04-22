@@ -38,7 +38,7 @@ Dec="($MkPin ($MkLaw %Dec 1 (0 (0 ($NatCase (0 0)) $id) 1)))"
 ToNat="($NatCase 0 $Inc)"
 Times="($MkLaw %Times 3 (0 (0 (0 $NatCase 2) (0 (0 0 1) (0 1 2))) 3))"
 Add="($MkPin ($MkLaw %Add 2 (0 (0 ($Times $Inc) (0 $ToNat 1)) 2)))"
-Mul="($MkPin ($MkLaw %Mul 2 (0 (0 (0 $Times ($Add 1)) (0 0)) 2)))"
+Mul="($MkPin ($MkLaw %Mul 2 (0 (0 (0 $Times (0 $Add 1)) (0 0)) 2)))"
 Sub="($MkPin ($MkLaw %Sub 2 (0 (0 ($Times $Dec) (0 $ToNat 1)) 2)))"
 
 LawDec="($MkLaw %Dec 1 (0 (0 ($NatCase (0 0)) $id) 1))"
