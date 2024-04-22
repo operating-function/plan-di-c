@@ -68,7 +68,7 @@ struct Value {
 ////////////////////////////////////////////////////////////////////////////////
 //  Prototypes
 
-static bool graphviz = 1;
+static bool graphviz = 0;
 
 void write_dot_extra(char*, char*, Value*);
 void clone();
@@ -845,7 +845,6 @@ void to_nat(int i) {
 }
 
 void sub_jet() {
-  graphviz=1;
   write_dot_extra("<sub_jet>", "", NULL);
   to_nat(0);
   to_nat(1);
@@ -892,7 +891,6 @@ void eval_update(int i) {
 }
 
 void dec_jet() {
-  graphviz=1;
   write_dot_extra("<dec_jet>", "", NULL);
   eval_update(0);
   Dec();
@@ -900,7 +898,6 @@ void dec_jet() {
 }
 
 void add_jet() {
-  graphviz=1;
   write_dot_extra("<add_jet>", "", NULL);
   to_nat(0);
   to_nat(1);
@@ -1152,16 +1149,17 @@ void fprintf_heap(FILE *f, Node *input, Node *seen) {
     }
     case LAW: {
       char *v_p = p_ptr(v);
-      char *b_p = p_ptr(BD(v));
-      fprintf(f, "%s [label=\"law nm:", v_p);
+      // char *b_p = p_ptr(BD(v));
+      fprintf(f, "%s [label=\"\\{", v_p);
       fprintf_nat(f, NM(v));
-      fprintf(f, " ar:");
-      fprintf_nat(f, AR(v));
-      fprintf(f, "\"];\n");
-      fprintf(f, "%s -> %s [label=bd];\n", v_p, b_p);
+      fprintf(f, "\\}\"];\n");
+      // fprintf(f, " ar:");
+      // fprintf_nat(f, AR(v));
+      // fprintf(f, "\"];\n");
+      // fprintf(f, "%s -> %s [label=bd];\n", v_p, b_p);
       free(v_p);
-      free(b_p);
-      input = cons((void *)BD(v), input);
+      // free(b_p);
+      // input = cons((void *)BD(v), input);
       break;
     }
     case APP: {
@@ -1545,7 +1543,8 @@ void kal(u64 n) {
   if (IS_NAT(x)) {
     if (LTE(x, direct(n))) {
       push(n - get_direct(x)); // we know this is direct b/c < n
-      goto end;
+      slide(1);
+      return;
     }
     goto raw_const;
   }
@@ -1556,25 +1555,26 @@ void kal(u64 n) {
       if (EQZ(caar)) {
         // x: ((0 f) y)
         Value *f = deref(TL(car));
-        Value *y = deref(TL(x)); // => [(f y) ...]
+        Value *y = deref(TL(x));  // => [(f y) ...]
         push_val(y);              // => [y (f y) ...]
         push_val(f);              // => [f y (f y) ...]
         kal(n+2);                 // => [fres y (f y) ..]
         swap();                   // => [y fres (f y) ..]
         kal(n+2);                 // => [yres fres (f y) ...]
         mk_app();                 // => [(fres yres) (f y) ...]
-        goto end;
+        slide(1);
+        return;
       }
     } else if (EQZ(car)) {
       // (0 y)
+      pop();
       push_val(deref(TL(x)));
-      goto end;
+      return;
     }
   }
 raw_const:
+  pop();
   push_val(x);
-end:
-  return slide(1);
 }
 
 // 0 indicates no lets
@@ -1641,8 +1641,6 @@ bool jet_dispatch(Value *self, u64 ar) {
       if (EQ(AR(self), direct(jet.arity))) {
         fprintf(stderr, "jet name + arity match: %s\n", jet.name);
         jet.jet_exec();
-        // slide(ar);
-        // NEW CALLING CONVENTION IS THAT THE JET CONSUMES IT's ARGS.
         return true;
       }
     }
