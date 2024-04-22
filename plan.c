@@ -880,13 +880,9 @@ void sub_jet() {
 
 void mul_jet() { to_nat(0); to_nat(1); Mul(); }
 
-// TODO
-void div_jet() {
-}
+void div_jet() { to_nat(0); to_nat(1); Div(); }
 
-// TODO
-void rem_jet() {
-}
+void rem_jet() { to_nat(0); to_nat(1); Rem(); }
 
 // causes a stack slot to be updated (and dereferenced) in place,
 // otherwise leaving the stack shape the same as it was before.
@@ -928,7 +924,6 @@ void add_jet() {
   Add();
   write_dot_extra("</add_jet>", "", NULL);
 }
-
 
 void trace_jet() {
   push(0); // force msg
