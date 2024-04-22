@@ -2025,22 +2025,21 @@ Value *read_app(Value *f) {
   }
 }
 
+Value *utf8_nat (char *str) {
+  long byteSz = strlen(str);
+  long wordSz = (7 + byteSz) / 8;
+  nn_t buf = nn_init(wordSz);
+  nn_zero(buf, wordSz);
+  len_t actual_len;
+  memcpy(buf, str, byteSz);
+  return a_Big((BigNat){ .size = wordSz, .buf = buf });
+}
+
 Value *read_sym() {
   char *str = read_str_input(true);
   int len = strlen(str);
   if (!len)    crash("Empty symbol");
-  if (len > 8) {
-    int u64_len = (len / sizeof(u64));
-    // round up
-    if ((len % sizeof(u64)) > 0) u64_len++;
-    nn_t nat_buf = nn_init(u64_len);
-    memcpy((char*)nat_buf, str, len);
-    return a_Big((BigNat){ .size=u64_len, .buf = nat_buf });
-  } else {
-    u64 word = 0;
-    memcpy((char*)&word, str, len);
-    return direct(word);
-  }
+  return utf8_nat(str);
 }
 
 Value *read_exp() {
