@@ -48,6 +48,10 @@ Sub="($MkPin ($MkLaw %Sub 2 (0 (0 ($Times $Dec) (0 $ToNat 1)) 2)))"
 Div="($MkPin ($MkLaw %Div 2 1))"
 # Div="($MkPin ($MkLaw %Div 2 (
 
+# TODO fix Mod, this is wrong
+Mod="($MkPin ($MkLaw %Mod 2 1))"
+# Div="($MkPin ($MkLaw %Div 2 (
+
 LawDec="($MkLaw %Dec 1 (0 (0 ($NatCase (0 0)) $id) 1))"
 
 Ignore="($MkLaw 0 2 2)"
@@ -204,6 +208,26 @@ echo "Div big/big -> direct"
 check "2" "($Div 1090477602481288021329630 %octocactus)"
 echo "Div big/big -> big"
 check "%foooooooooooooooo" "($Div 1475887433180421662838272732634687279056224492909545382656893899996011391342627596 %baaaaaaaaaaaaaaar)"
+
+echo "Mod directs"
+check "0" "($Mod 1 1)"
+check "1" "($Mod 1 2)"
+check "0" "($Mod 2 0)"
+check "0" "($Mod 2 1)"
+check "0" "($Mod 8 4)"
+check "0" "($Mod 9 3)"
+check "3" "($Mod 11 8)"
+check "21" "($Mod 917 64)"
+echo "Mod big/direct"
+check "0" "($Mod 85070591730234615893513767968506380290 9223372036854775810)"
+check "100000" "($Mod 85070591730234615893513767968506480290 9223372036854775810)"
+check "0" "($Mod 270350929966754336679420811073719260 %turkeys)"
+check "22503098823046516" "($Mod 270350929966754336669420811073719260 %turkeys)"
+echo "Mod big/big -> direct"
+check "0" "($Mod 1090477602481288021329630 %octocactus)"
+check "545238801230644010664815" "($Mod 1090477602471288021329630 %octocactus)"
+echo "Mod big/big -> big"
+check "22574545732039792372647150078446771890150" "($Mod 14758874331804216628382727326346872790562244929095453826568938999601391342627596 %baaaaaaaaaaaaaaar)"
 
 # echo "cnst/ignore"
 # check "11" "($Cnst 11 7)"
