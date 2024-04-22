@@ -70,6 +70,8 @@ struct Value {
 //  Prototypes
 
 static bool graphviz = 0;
+static bool trace_calls = 0;
+
 void write_dot(char *);
 
 void stack_grow(u64);
@@ -1087,8 +1089,6 @@ void seed_load(u64 *buf) {
   u64 acc = buf[used];
   u64 *more = &buf[used+1];
 
-  graphviz = 1;
-
   for (int i=0; i<n_frags; i++) {
     write_dot("<frag>");
     u64 tabSz = (next_ref - tab);
@@ -1700,7 +1700,7 @@ bool jet_dispatch(Value *self, u64 ar) {
     int min_len = MIN(nat_char_width(nm), strlen(jet.name));
     if (str_cmp_nat(jet.name, nm, min_len) == 0) {
       if (EQ(AR(self), direct(jet.arity))) {
-        fprintf(stderr, "jet name + arity match: %s\n", jet.name);
+        if (trace_calls) fprintf(stderr, "jet name + arity match: %s\n", jet.name);
         jet.jet_exec();
         return true;
       }
@@ -1727,13 +1727,17 @@ bool law_step(u64 depth, bool should_jet) {
     backout(depth-1);
     return false;
   } else {
-    graphviz=1;
-    fprintf(stderr, "CALL: ");
-    for (int i=0; i<call_depth; i++) fprintf(stderr, "  ");
-    fprintf_value(stderr, get_deref(depth-1));
-    fprintf(stderr, "\n");
 
-    call_depth++;
+    // graphviz=1;
+
+    if (trace_calls) {
+      fprintf(stderr, "CALL: ");
+      for (int i=0; i<call_depth; i++) fprintf(stderr, "  ");
+      fprintf_value(stderr, get_deref(depth-1));
+      fprintf(stderr, "\n");
+      call_depth++;
+    }
+
     setup_call(depth);
     if (!is_direct(AR(self))) crash("impossible: called law with huge arity");
     u64 ar = get_direct(AR(self));
@@ -1748,12 +1752,15 @@ bool law_step(u64 depth, bool should_jet) {
       push_val(BD(self));
       eval_law(ar+1);
     }
-    // for (int i=0; i<call_depth; i++) fprintf(stderr, "  ");
-    // fprintf(stderr, "    => ");
-    // // fprintf_value(stderr, get_deref(0));
-    // fprintf(stderr, "\n");
-    //
-    call_depth--;
+
+    if (trace_calls) {
+      // for (int i=0; i<call_depth; i++) fprintf(stderr, "  ");
+      // fprintf(stderr, "    => ");
+      // // fprintf_value(stderr, get_deref(0));
+      // fprintf(stderr, "\n");
+      //
+      call_depth--;
+    }
     if (ar < depth) handle_oversaturated_application(depth - ar);
     return true;
   }
