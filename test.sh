@@ -91,16 +91,16 @@ check() {
   fi
 }
 
-# echo "primop inc"
+echo "primop inc"
 check "3" "(#2 2)"
 check "(3 4)" "(#2 2 4)"
 
-# echo "primop dec"
+echo "primop dec"
 check "%z"     "(#3 7 7 7 %z 7 0)"
 check "(%p 0)" "(#3 7 7 7 7 %p 1)"
 check "(%p 1)" "(#3 7 7 7 7 %p 2)"
 
-# echo "basic"
+echo "basic"
 check "5" "($Inc 4)"
 check "1" "($Inc ($PlanCase 1 0 0 0 (4 9)))"
 check "7" "($LawDec 8)"
@@ -112,6 +112,9 @@ check "9" "(($MkLaw 1 2 1) 9 7)"
 check "7" "(($MkLaw 1 2 2) 9 7)"
 check "3" "(($MkLaw 1 2 3) 9 7)"
 check "2" "($id ($id 2))"
+
+echo "nat direct/big boundary"
+check "9223372036854775810" "9223372036854775810"
 
 echo "Eqz"
 check "1" "($Eqz 0)"
