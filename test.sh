@@ -41,6 +41,8 @@ Add="($MkPin ($MkLaw %Add 2 (0 (0 ($Times $Inc) (0 $ToNat 1)) 2)))"
 Mul="($MkPin ($MkLaw %Mul 2 (0 (0 (0 $Times ($Add 1)) (0 0)) 2)))"
 Sub="($MkPin ($MkLaw %Sub 2 (0 (0 ($Times $Dec) (0 $ToNat 1)) 2)))"
 
+LawDec="($MkLaw %Dec 1 (0 (0 ($NatCase (0 0)) $id) 1))"
+
 Ignore="($MkLaw 0 2 2)"
 Trace="($MkPin ($MkLaw %Trace 2 2))" # this is a wrong defn of _Trace, as it doesn't force the first arg
 
@@ -65,6 +67,7 @@ Inf1s="($MkLaw 99 1 (1 (0 1 2) 2) 1)"
 FAILED=0
 
 check() {
+  rm -f ./dot/*
   echo -n "TEST: $1 == [./plan] $2 ... "
   diff <(echo -e "$1") <(echo "$2" | ./plan)
   EXIT_CODE=$?
@@ -73,61 +76,76 @@ check() {
   else
     FAILED=$((FAILED+1))
     echo "FAILED"
+    sh/dotify # risky if many .dot files
+    echo press ENTER once CPU usage backs off
+    read
+    feh -FB black -Z ./dot/*.png
+    exit 1
   fi
 }
 
+# echo "primop inc"
+check "3" "(#2 2)"
+check "(3 4)" "(#2 2 4)"
+
+# echo "primop dec"
+check "%z"     "(#3 7 7 7 %z 7 0)"
+check "(%p 0)" "(#3 7 7 7 7 %p 1)"
+check "(%p 1)" "(#3 7 7 7 7 %p 2)"
+
 # echo "basic"
-# check "5" "($Inc 4)"
-# check "1" "($Inc ($PlanCase 1 0 0 0 (4 9)))"
+check "5" "($Inc 4)"
+check "1" "($Inc ($PlanCase 1 0 0 0 (4 9)))"
+check "7" "($LawDec 8)"
 check "7" "($Dec 8)"
-# check "8" "($MkLaw 1 2 ($Inc 7) 3 4)"
-# check "{1 2 0}" "($MkLaw ($Inc 0) ($Inc ($Inc 0)) 0)"
-# check "{1 2 0}" "(($MkLaw 1 2 0) 9 7)"
-# check "9" "(($MkLaw 1 2 1) 9 7)"
-# check "7" "(($MkLaw 1 2 2) 9 7)"
-# check "3" "(($MkLaw 1 2 3) 9 7)"
-# check "2" "($id ($id 2))"
-# 
-# echo "check sym bug"
-# check "(%fo %f)" "(%fo %f)"
-# 
-# echo "pins"
-# check "(<(0 1)> 2 3)" "(($MkPin (0 1)) 2 3)"
-# check "{1 2 0}" "(($MkPin 1) 1 2 0)"
-# check "{1 2 0}" "(($MkPin ($MkLaw 1)) 2 0)"
-# check "<{1 2 0}>" "(($MkPin ($MkLaw 1 2 0)) 3 4)"
-# check "<{1 2 0}>" "(($MkPin ($MkPin ($MkLaw 1 2 0))) 3 4)"
-# 
-# echo "let bindings"
-# check "9" "(($MkLaw 0 1 1) 9)"
-# check "9" "(($MkLaw 0 1 (1 1 2)) 9)"
-# 
-# echo "plan case"
-# check "(7 (4 5 6) 7)" "($PlanCase 7 7 7 7 (4 5 6 7))"
-# 
-# echo "symbols"
-# check "%foo" "7303014"
-# check "%goobar" "($Inc %foobar)"
-# 
-# check "%goobarfoobar" "(#2 %foobarfoobar)"
-# 
+check "8" "($MkLaw 1 2 ($Inc 7) 3 4)"
+check "{1 2 0}" "($MkLaw ($Inc 0) ($Inc ($Inc 0)) 0)"
+check "{1 2 0}" "(($MkLaw 1 2 0) 9 7)"
+check "9" "(($MkLaw 1 2 1) 9 7)"
+check "7" "(($MkLaw 1 2 2) 9 7)"
+check "3" "(($MkLaw 1 2 3) 9 7)"
+check "2" "($id ($id 2))"
+
+echo "check sym bug"
+check "(%fo %f)" "(%fo %f)"
+
+echo "pins"
+check "(<(0 1)> 2 3)" "(($MkPin (0 1)) 2 3)"
+check "{1 2 0}" "(($MkPin 1) 1 2 0)"
+check "{1 2 0}" "(($MkPin ($MkLaw 1)) 2 0)"
+check "<{1 2 0}>" "(($MkPin ($MkLaw 1 2 0)) 3 4)"
+check "<{1 2 0}>" "(($MkPin ($MkPin ($MkLaw 1 2 0))) 3 4)"
+
+echo "let bindings"
+check "9" "(($MkLaw 0 1 1) 9)"
+check "9" "(($MkLaw 0 1 (1 1 2)) 9)"
+
+echo "plan case"
+check "(7 (4 5 6) 7)" "($PlanCase 7 7 7 7 (4 5 6 7))"
+
+echo "symbols"
+check "%foo" "7303014"
+check "%goobar" "($Inc %foobar)"
+
+check "%goobarfoobar" "(#2 %foobarfoobar)"
+
 # echo "nat arith"
-# check "3" "($ToNat 3)"
-# check "4" "($ToNat 4)"
-# check "0" "($ToNat 0)"
-# check "0" "($ToNat (0 0))"
-# check "0" "($id 0)"
-# check "4" "($id 4)"
+check "3" "($ToNat 3)"
+check "4" "($ToNat 4)"
+check "0" "($ToNat 0)"
+check "0" "($ToNat (0 0))"
+check "0" "($id 0)"
+check "4" "($id 4)"
 check "8" "($Dec 9)"
 check "900" "($Dec 901)"
-# check "7" "($Times $Inc 3 4)"
+check "7" "($Times $Inc 3 4)"
 # echo "Add"
-# check "10" "($Add 4 6)"
-# check "(10 1)" "(($Add 4 6) 1)"
-# check "%n" "($Add 44 66)"
-# check "7" "($Add 4 ($Add 1 2))"
+check "2" "($Add 1 1)"
+check "10" "($Add 4 6)"
+check "(10 1)" "(($Add 4 6) 1)"
+check "%n" "($Add 44 66)"
+check "7" "($Add 4 ($Add 1 2))"
 # echo "Sub"
-# check "2" "($Sub 6 4)"
 # check "0" "($Sub 4 6)"
 # check "22" "($Sub 66 44)"
 # check "307" "($Sub 777 470)"

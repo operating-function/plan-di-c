@@ -68,6 +68,7 @@ struct Value {
 ////////////////////////////////////////////////////////////////////////////////
 //  Prototypes
 
+void write_dot_extra(char*, char*, Value*);
 void clone();
 static inline Value *direct(u64);
 void BigPlusDirect(u64, u64);
@@ -80,6 +81,7 @@ void update(u64 idx);
 void push(u64);
 void push_val(Value*);
 void eval();
+void eval_update(int);
 Value ** get_ptr(u64 idx);
 
 Value * frag_load(Value **tab, u64 tabSz, int *, u64 *, u64 **);
@@ -371,6 +373,23 @@ void fprintf_nat(FILE * f, Value *v) {
     }
     return;
   }
+
+  BigNat n = BN(v);
+
+  long num_chars = n.size * sizeof(word_t);
+  char nat_str[num_chars+1];
+  memcpy(nat_str, n.buf, num_chars);
+  nat_str[num_chars] = 0;
+
+  if (is_symbol(nat_str)) {
+    // symbolic, so we can print it as a string, with a leading `%`
+    fprintf(f, "%%%s", nat_str);
+  } else {
+    // non-symbolic, so we use bsdnt to print as decimal
+    char *tmp = nn_get_str(n.buf, n.size);
+    fprintf(f, "%s", nat_str);
+    free(tmp);
+  }
 }
 
 bool is_symbol_nat(u64 nat) {
@@ -589,6 +608,7 @@ void BigPlusDirect(u64 direct, u64 bigSz) {
   push_big((BigNat) { .size = newSz, .buf = buf });
 }
 
+// arguments must both have already been evaluated and coerced into nats.
 void Add() {
   Value *a = pop();
   Value *b = pop();
@@ -630,16 +650,21 @@ void BigSubDirect(u64 bigSz, u64 direct) {
 }
 
 void Dec() {
+  write_dot_extra("<Dec>", "", NULL);
+
   Value * v = pop_deref(0);
 
   if (is_direct(v)) {
     u64 n = get_direct(v);
     push_val( (n == 0) ? direct_zero : direct(n - 1) );
-    return;
+    goto end;
   }
 
   push_val(v);
   BigSubDirect(BN(v).size, 1);
+
+ end:
+  write_dot_extra("</Dec>", "", NULL);
 }
 
   // if (is_direct(n)) {
@@ -808,11 +833,9 @@ typedef struct Jet {
 } Jet;
 
 void to_nat(int i) {
-  push(i);
-  eval();
-  update(i+1);
-  Value * x = get_deref(i);
-  *get_ptr(i) = (IS_NAT(x)) ? x : direct(0);
+  eval_update(i);
+  Value ** p = get_ptr(i);
+  if (!IS_NAT(*p)) { *p = direct(0); }
 }
 
 // TODO
@@ -831,8 +854,47 @@ void div_jet() {
 void rem_jet() {
 }
 
-// TODO
-void dec_jet() { clone(); eval(); update(1); Dec(); }
+static bool graphviz = 1;
+
+// causes a stack slot to be updated (and dereferenced) in place,
+// otherwise leaving the stack shape the same as it was before.
+void eval_update(int i) {
+  Value **p = get_ptr(i);
+ again:
+  write_dot_extra("<eval_update>", "", NULL);
+  if (is_direct(*p)) return;
+  switch ((**p).type) {
+  case IND:
+    *p = deref(*p); // update the stack slot to not be indirect.
+    goto again;
+  case APP:
+    push(i);
+    eval();
+    update(i+1);
+    *p = deref(*p); // never leave an indirection on the stack.
+    return;
+  default:
+    return;
+  }
+}
+
+void dec_jet() {
+  graphviz=1;
+  write_dot_extra("<dec_jet>", "", NULL);
+  eval_update(0);
+  Dec();
+  write_dot_extra("</dec_jet>", "", NULL);
+}
+
+void add_jet() {
+  graphviz=1;
+  write_dot_extra("<add_jet>", "", NULL);
+  to_nat(0);
+  to_nat(1);
+  Add();
+  write_dot_extra("</add_jet>", "", NULL);
+}
+
 
 void trace_jet() {
   push(0); // force msg
@@ -844,7 +906,7 @@ void trace_jet() {
 
 #define NUM_JETS 7
 Jet jet_table[NUM_JETS] =
-  { (Jet) {.name = "Add", .arity = 2, .jet_exec = Add }
+  { (Jet) {.name = "Add", .arity = 2, .jet_exec = add_jet }
   , (Jet) {.name = "Sub", .arity = 2, .jet_exec = sub_jet }
   , (Jet) {.name = "Mul", .arity = 2, .jet_exec = mul_jet }
   , (Jet) {.name = "Div", .arity = 2, .jet_exec = div_jet }
@@ -1114,7 +1176,6 @@ void fprintf_heap(FILE *f, Node *input, Node *seen) {
     case NAT: {
       char * v_p = p_ptr(v);
       fprintf(f, "%s [label=\"", v_p);
-      if (is_direct(v)) fprintf(f, "direct:");
       fprintf_nat(f, v);
       fprintf(f, "\"];\n");
       free(v_p);
@@ -1173,6 +1234,7 @@ Node * stack_to_list_heap_only() {
 }
 
 void write_dot_extra(char *label, char *extra, Value * v) {
+  if (!graphviz) return;
   char fp[20] = {0};
   sprintf(fp, "%s/%05d.dot", dot_dir_path, dot_count);
   dot_count++;
@@ -1566,7 +1628,8 @@ bool jet_dispatch(Value * self, u64 ar) {
       if (EQ(AR(self), direct(jet.arity))) {
         fprintf(stderr, "jet name + arity match: %s\n", jet.name);
         jet.jet_exec();
-        slide(ar);
+        // slide(ar);
+        // NEW CALLING CONVENTION IS THAT THE JET CONSUMES IT's ARGS.
         return true;
       }
     }
@@ -1590,6 +1653,7 @@ void law_step(u64 depth, bool should_jet) {
     }
     backout(depth-1);
   } else {
+    graphviz=1;
     fprintf(stderr, "CALL: ");
     for (int i=0; i<call_depth; i++) fprintf(stderr, "  ");
     fprintf_value(stderr, get_deref(depth-1));
@@ -1656,20 +1720,20 @@ void do_prim(u64 prim) {
     case 1: { // mk_law
       u64 arity = prim_arity(prim);
       push(0); force();           // b
-      push(1); eval(); update(2); // a
-      push(2); eval(); update(3); // n
+      eval_update(1);             // a
+      eval_update(2);             // n
       return mk_law();
     }
     case 2: { // incr
       u64 arity = prim_arity(prim);
-      push(0); eval(); update(1);
+      eval_update(0);
       return incr();
     }
     case 3: { // case
       u64 arity = prim_arity(prim);
-      push(0); eval(); update(1);
+      eval_update(0);
       prim_case();
-      return eval();
+      return eval(); // TODO: Maybe prim_case should handle this?
     }
   }
 }
