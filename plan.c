@@ -2085,8 +2085,12 @@ Value *read_exp() {
                 u64 seedSz;
                 u64 *words = load_seed_file(buf, &seedSz);
                 seed_load(words);
-                Value *loaded = pop(0);
+                check_value(get(0));
+                push(0);
+                force();
+                Value *loaded = get(0);
                 check_value(loaded);
+                // graphviz=1;
                 return loaded;
             }
         }
