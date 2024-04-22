@@ -80,7 +80,7 @@ Value * pop_deref();
 void update(u64 idx);
 void push(u64);
 void push_val(Value*);
-void eval();
+bool eval();
 void eval_update(int);
 Value ** get_ptr(u64 idx);
 
@@ -869,9 +869,13 @@ void eval_update(int i) {
     goto again;
   case APP:
     push(i);
-    eval();
-    update(i+1);
-    *p = deref(*p); // never leave an indirection on the stack.
+    bool did_eval = eval();
+    if (did_eval) {
+      update(i+1);
+      *p = deref(*p); // never leave an indirection on the stack.
+    } else {
+      pop();
+    }
     return;
   default:
     return;
@@ -1637,7 +1641,8 @@ bool jet_dispatch(Value * self, u64 ar) {
   return false;
 }
 
-void law_step(u64 depth, bool should_jet) {
+// returns true if it eval-ed
+bool law_step(u64 depth, bool should_jet) {
   static int call_depth = 0;
 
   char lab[40];
@@ -1649,9 +1654,10 @@ void law_step(u64 depth, bool should_jet) {
     // unsaturated application. this is a little weird, but works?
     if (depth <= 1) {
       write_dot("unsaturated / 0-backout");
-      return;
+      return false;
     }
     backout(depth-1);
+    return false;
   } else {
     graphviz=1;
     fprintf(stderr, "CALL: ");
@@ -1681,65 +1687,73 @@ void law_step(u64 depth, bool should_jet) {
     //
     call_depth--;
     if (ar < depth) handle_oversaturated_application(depth - ar);
+    return true;
   }
 }
 
-// 0 indicates an invalid primop.
-u64 prim_arity(u64 prim) {
-  switch (prim) {
-    case 0: { // mk_pin
-      return 1;
-    }
-    case 1: { // mk_law
-      return 3;
-    }
-    case 2: { // incr
-      return 1;
-    }
-    case 3: { // case
-      return 6;
-    }
-    default:
-      return 0;
+u64 prim_arity(Value * op) {
+  if (!is_direct(op)) return 1;
+  switch (get_direct(op)) {
+    case 0:  return 1; // mk_pin
+    case 1:  return 3; // mk_law
+    case 2:  return 1; // incr
+    case 3:  return 6; // case
+    default: return 1;
   }
 }
 
 // this assumes there are sufficient stack args to saturate whichever primop
 // we run.
-void do_prim(u64 prim) {
+void do_prim(Value *op) {
   char lab[40];
-  sprintf(lab, "do_prim: %lu", prim);
   write_dot(lab);
   //
-  switch (prim) {
+  if (!is_direct(op)) goto exception_case;
+
+  sprintf(lab, "do_prim: %lu", get_direct(op));
+
+  switch (get_direct(op)) {
     case 0: { // mk_pin
-      u64 arity = prim_arity(prim);
+      pop();
       push(0); force();
       return mk_pin();
     }
     case 1: { // mk_law
-      u64 arity = prim_arity(prim);
+      pop();
       push(0); force();           // b
       eval_update(1);             // a
       eval_update(2);             // n
       return mk_law();
     }
     case 2: { // incr
-      u64 arity = prim_arity(prim);
+      pop();
       eval_update(0);
       return incr();
     }
     case 3: { // case
-      u64 arity = prim_arity(prim);
+      pop();
       eval_update(0);
       prim_case();
-      return eval(); // TODO: Maybe prim_case should handle this?
+      eval();
+      return;
+    }
+    default: {
+      goto exception_case;
     }
   }
+exception_case:
+  push(1); // param
+  force();
+  fprintf(stderr, "Exception: ");
+  fprintf_value(stderr, get_deref(0));
+  fprintf(stderr, "\n\n\t");
+  fprintf_value(stderr, get_deref(1));
+  fprintf(stderr, "\n");
+  exit(1);
 }
 
 // TODO make this a loop, not tail recursion.
-void unwind(u64 depth) {
+bool unwind(u64 depth) {
   char lab[20];
   sprintf(lab, "unwind %lu", depth);
   write_dot(lab);
@@ -1754,32 +1768,30 @@ void unwind(u64 depth) {
       return law_step(depth, false);
     }
     case PIN: {
-      Value * y = deref(x->p);
-      switch (TY(y)) {
+      Value * item = deref(x->p);
+      switch (TY(item)) {
         case NAT: {
-          pop(); // pop primop
-          if (!is_direct(y)) crash("impossible: huge prim");
-          u64 prim_u64 = get_direct(y);
-          u64 arity = prim_arity(prim_u64);
+          u64 arity = prim_arity(item);
           //
-          if ((arity == 0) || (depth < arity)) {
-            // 0 indicates an invalid primop. in that case, or if we are
-            // undersaturated, we backout. we subtract 1 since we already popped
-            // the primop above.
-            return backout(depth-1);
+          if (depth < arity) {
+            // if we are undersaturated, we backout.
+            backout(depth);
+            return false;
           }
           // run primop
+          pop();
           setup_call(depth);
           flip_stack(arity);
-          do_prim(prim_u64);
+          push_val(item);
+          do_prim(item);
           //
           if (arity < depth) {
             // oversaturated
-            return handle_oversaturated_application(depth - arity);
+            handle_oversaturated_application(depth - arity);
           } else {
             // application was perfectly saturated.
-            return;
           }
+          return true;
         }
         // unwind "through" pins & apps
         // we don't increment `depth` here because we are just setting up
@@ -1787,7 +1799,7 @@ void unwind(u64 depth) {
         case APP:
         case PIN: {
           pop(); // pop outer
-          push_val(y);
+          push_val(item);
           return unwind(depth);
         }
         case LAW: {
@@ -1802,7 +1814,8 @@ void unwind(u64 depth) {
       }
     }
     case NAT: {
-      return backout(depth);
+      backout(depth);
+      return false;
     }
     case HOL: {
       crash("unwind: <loop>");
@@ -1813,19 +1826,18 @@ void unwind(u64 depth) {
   }
 }
 
-void eval() {
+// returns true if we eval-ed
+bool eval() {
   write_dot("eval");
   //
   Value * x = get_deref(0);
   switch (TY(x)) {
-    case APP: {
+    case APP:
       return unwind(0);
-    }
     case PIN:
     case LAW:
-    case NAT: {
-      return;
-    }
+    case NAT:
+      return false;
     case HOL: crash("eval: HOL");
     case IND: crash("eval: IND");
   }
