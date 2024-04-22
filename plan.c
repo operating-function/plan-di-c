@@ -99,7 +99,7 @@ Value *read_exp();
 ////////////////////////////////////////////////////////////////////////////////
 //  Globals
 
-#define STACK_SIZE 4096
+#define STACK_SIZE 4096000
 Value *stack[STACK_SIZE];
 u64 sp = 0;
 
