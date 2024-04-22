@@ -68,6 +68,8 @@ struct Value {
 ////////////////////////////////////////////////////////////////////////////////
 //  Prototypes
 
+static bool graphviz = 1;
+
 void write_dot_extra(char*, char*, Value*);
 void clone();
 static inline Value *direct(u64);
@@ -590,7 +592,7 @@ BigNat bigify(u64 *x) {
 // stack before: ..rest b a
 // stack after:  ..rest (a+b)
 void BigPlusBig(u64 aSize, u64 bSize) {
-  long new_size = aSize + bSize + 1;
+  long new_size = MAX(aSize, bSize) + 1;
   nn_t buf = nn_init(new_size); // gc
   BigNat a = BN(pop_deref());
   BigNat b = BN(pop_deref());
@@ -638,7 +640,7 @@ void Add() {
   BigPlusBig(BN(a).size, BN(b).size);
 }
 
-void BigSubDirect(u64 bigSz, u64 direct) {
+void BigMinusDirect(u64 bigSz, u64 direct) {
   nn_t buf = nn_init(bigSz);
   BigNat big = BN(pop_deref());
   word_t c = nn_sub1(buf, big.buf, bigSz, direct);
@@ -661,7 +663,7 @@ void Dec() {
   }
 
   push_val(v);
-  BigSubDirect(BN(v).size, 1);
+  BigMinusDirect(BN(v).size, 1);
 
  end:
   write_dot_extra("</Dec>", "", NULL);
@@ -683,38 +685,58 @@ void Dec() {
 
   // return a_Big((BigNat){ .size = new_size, .buf = nat_buf });
 
-/*
-Nat Sub(Nat a, Nat b) {
-  if ((a.type == SMALL) && (b.type == SMALL)) {
-    if (a.direct < b.direct)
-      return d_Small(0);
-    return (Nat){ .type = SMALL, .direct = (a.direct - b.direct) };
-  }
-  if ((a.type == SMALL) && (b.type == BIG))
-    return d_Small(0);
+void Sub() {
+  Value *a = pop();
+  Value *b = pop();
 
-  long new_size = a.big.size;
-  nn_t nat_buf = nn_init(new_size);
+  u64 aSmall = get_direct(a);
+  u64 bSmall = get_direct(b);
 
-  bool free_b = false;
-  if ((a.type == BIG) && (b.type == SMALL)) {
-    b = u64_to_big(&b.direct);
-    free_b = true;
-  }
-  if (a.big.size < b.big.size) {
-    if (free_b) free_nat(b);
-    return d_Small(0);
+  if (is_direct(a)) {
+    if (is_direct(b)) {
+      if (bSmall >= aSmall) {
+        push_val(direct_zero);
+        return;
+      }
+      push_val(direct(aSmall - bSmall));
+      return;
+    }
+    push_val(direct_zero);
+    return;
   }
 
-  word_t c = nn_sub_c(nat_buf, a.big.buf, a.big.size, b.big.buf, b.big.size, 0);
-  if (free_b) free_nat(b);
-  if (c > 0) {
-    return d_Small(0);
+  if (is_direct(b)) {
+    push_val(a);
+    BigMinusDirect(bSmall, BN(a).size);
+    return;
   }
-  Nat n = { .type = BIG, .big = { .size = new_size, .buf = nat_buf }};
-  return resize_nat(n);
+
+  u64 aSz = BN(a).size;
+  u64 bSz = BN(b).size;
+
+  if (aSz < bSz) {
+    push_val(direct_zero);
+    return;
+  }
+
+  // Big - Big
+
+  push_val(b);
+  push_val(a);
+
+  nn_t buf = nn_init(aSz); // gc
+
+  BigNat aBig = BN(pop_deref());
+  BigNat bBig = BN(pop_deref());
+  word_t borrow = nn_sub_c(buf, aBig.buf, aBig.size, bBig.buf, bBig.size, 0);
+  if (borrow) {
+    push_val(direct_zero);
+  } else {
+    push_big((BigNat) { .size = aSz, .buf = buf });
+  }
 }
 
+/*
 Nat Mul(Nat a, Nat b) {
   bool free_a = false;
   bool free_b = false;
@@ -838,8 +860,13 @@ void to_nat(int i) {
   if (!IS_NAT(*p)) { *p = direct(0); }
 }
 
-// TODO
 void sub_jet() {
+  graphviz=1;
+  write_dot_extra("<sub_jet>", "", NULL);
+  to_nat(0);
+  to_nat(1);
+  Sub();
+  write_dot_extra("</sub_jet>", "", NULL);
 }
 
 // TODO
@@ -853,8 +880,6 @@ void div_jet() {
 // TODO
 void rem_jet() {
 }
-
-static bool graphviz = 1;
 
 // causes a stack slot to be updated (and dereferenced) in place,
 // otherwise leaving the stack shape the same as it was before.
