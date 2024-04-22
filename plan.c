@@ -779,8 +779,33 @@ void Mul() {
   else BigTimesBig(a, b);
 }
 
-/*
-Nat DivRem(Nat *rem, Nat a, Nat b) {
+void DivRemDirectDirect(u64 a, u64 b) {
+}
+
+void DivRemBigDirect(Value *a, u64 b) {
+}
+
+void DivRemBigBig(Value *a, Value *b) {
+}
+
+void DivRem() {
+  Value *a = pop();
+  Value *b = pop();
+
+  u64 aSmall = get_direct(a);
+  u64 bSmall = get_direct(b);
+
+  if (is_direct(a)) {
+    if (is_direct(b)) DivRemDirectDirect(aSmall, bSmall);
+    else push_val(direct_zero);
+    return;
+  }
+
+  if (is_direct(b)) DivRemBigDirect(a, bSmall);
+  else DivRemBigBig(a, b);
+}
+
+  /*
   bool free_b = false;
   if ((a.type == SMALL) && (b.type == SMALL)) {
     //fprintf(stderr, "SMALL/SMALL\n");
@@ -824,6 +849,7 @@ Nat DivRem(Nat *rem, Nat a, Nat b) {
   return resize_nat(n);
 }
 
+/*
 Nat Div(Nat a, Nat b) {
   Nat rem;
   Nat ret = DivRem(&rem, a, b);
