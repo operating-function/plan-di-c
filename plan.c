@@ -295,6 +295,9 @@ void check_value(Value *v) {
       break;
     case HOL:
       break;
+    case IND:
+      check_value(IN(v));
+      break;
     default:
       crash("BAD VALUE TAG");
   }
