@@ -23,15 +23,18 @@ MkLaw="#1"
 Inc="#2"
 Case="#3"
 
-Cnst="($MkPin ($MkLaw 0 2 1))"
-Cnst2="($MkPin ($MkLaw 0 3 1))"
-Cnst3="($MkPin ($MkLaw 0 4 1))"
+Cnst="($MkPin ($MkLaw %Cnst 2 1))"
+Cnst2="($MkPin ($MkLaw %Cnst2 3 1))"
+Cnst3="($MkPin ($MkLaw %Cnst3 4 1))"
 
 # NatCase z p x = Case (const z) (const3 z) (const2 z) z p x
 NatCase="($MkPin ($MkLaw %NatCase 3 (0 (0 (0 (0 (0 (0 $Case (0 $Cnst 1)) (0 $Cnst3 1)) (0 $Cnst2 1)) 1) 2) 3)))"
 
 # PlanCase p l a n x = Case p l a n (const n) x
 PlanCase="($MkPin ($MkLaw %PlanCase 5 (0 (0 (0 (0 (0 (0 $Case 1) 2) 3) 4) (0 $Cnst 4)) 5)))"
+
+Eqz="($MkPin ($MkLaw %Eqz 1 (0 (0 (0 (0 (0 (0 $Case (0 $Cnst (0 0))) (0 $Cnst3 (0 0))) (0 $Cnst2 (0 0))) (0 1)) (0 $Cnst (0 0))) 1)))"
+If="($MkPin ($MkLaw %If 3 (0 (0 (0 $NatCase 2) (0 $Cnst 3)) (0 $Eqz 1))))"
 
 id="($MkLaw 0 1 1)"
 Dec="($MkPin ($MkLaw %Dec 1 (0 (0 ($NatCase (0 0)) $id) 1)))"
@@ -105,6 +108,17 @@ check "9" "(($MkLaw 1 2 1) 9 7)"
 check "7" "(($MkLaw 1 2 2) 9 7)"
 check "3" "(($MkLaw 1 2 3) 9 7)"
 check "2" "($id ($id 2))"
+
+echo "Eqz"
+check "1" "($Eqz 0)"
+check "0" "($Eqz 1)"
+check "0" "($Eqz (0 0))"
+
+echo "If"
+check "7" "($If 5 7 9)"
+check "9" "($If 0 7 9)"
+check "(0 7)" "($If 6 (0 7) (0 9))"
+check "(0 9)" "($If 0 (0 7) (0 9))"
 
 echo "check sym bug"
 check "(%fo %f)" "(%fo %f)"
