@@ -229,54 +229,54 @@ check "545238801230644010664815" "($Mod 1090477602471288021329630 %octocactus)"
 echo "Mod big/big -> big"
 check "22574545732039792372647150078446771890150" "($Mod 14758874331804216628382727326346872790562244929095453826568938999601391342627596 %baaaaaaaaaaaaaaar)"
 
-# echo "cnst/ignore"
-# check "11" "($Cnst 11 7)"
-# check "7"  "($Ignore 11 7)"
-# check "13" "($Cnst3 13 1 4 7)"
+echo "cnst/ignore"
+check "11" "($Cnst 11 7)"
+check "7"  "($Ignore 11 7)"
+check "13" "($Cnst3 13 1 4 7)"
 # 
-# echo "Trace"
-# check "0\n1" "($Trace 0 1)"
-# check "2\n0" "($Trace ($Add 1 1) 0)"
-# check "(0 1 2 3 4)\n1" "($Trace (0 1 2 3 4) 1)"
+echo "Trace"
+check "0\n1" "($Trace 0 1)"
+check "2\n0" "($Trace ($Add 1 1) 0)"
+check "(0 1 2 3 4)\n1" "($Trace (0 1 2 3 4) 1)"
 
-# echo "map"
-# check "(0 9999 10000 10001 10003 10004)" "($Map ($Add 9999) (0 5))"
+echo "map"
+check "(0 9999 10000 10001 10003 10004)" "($Map ($Add 9999) (0 0 1 2 4 5))"
 
-# echo "infinite values"
-# check "1" "($AppHead $Inf1s)"
+echo "infinite values"
+check "1" "($AppHead $Inf1s)"
 # 
-# echo "refer to later binder from an earlier one"
-# check "7" "($MkLaw 0 1 (1 3 (1 7 2)) 9)"
+echo "refer to later binder from an earlier one"
+check "7" "($MkLaw 0 1 (1 3 (1 7 2)) 9)"
+
+echo "refer to earlier binder from a later one"
+check "7" "($MkLaw 0 1 (1 7 (1 2 3)) 9)"
 # 
-# echo "refer to earlier binder from a later one"
-# check "7" "($MkLaw 0 1 (1 7 (1 2 3)) 9)"
-# 
-# echo "more complex example"
-# check "(1 (0 2))" "($MkLaw 0 1 (1 (0 (0 0) 3) (1 (0 2) (0 1 2))) 1)"
-# 
-# echo "trivial cycles are okay if not used"
-# check "7" "($MkLaw 0 1 (1 7 (1 3 2)) 9)"
-# 
-# echo "moderate-length symbols"
-# check "%fooooooooooooooooooooooooooo" "%fooooooooooooooooooooooooooo"
-# 
-# echo "incr smol sym"
-# check "%gooooooooooooooooooooooo" "($Inc ($PlanCase 0 0 $Cnst 0 (%fooooooooooooooooooooooo %f)))"
-# check "%g" "($Inc ($PlanCase 0 0 $Ignore 0 (%fooooooooooooooooooooooo %f)))"
-# 
-# echo "large atoms"
-# check "%foooooooooooooooo" "37919465640883872069706873901102452928358"
-# check "75838931281767744139413747802204905856717" "($Add 37919465640883872069706873901102452928358 37919465640883872069706873901102452928359)"
-# 
-# VAL=$(printf '%%%*s\n' "2000" | tr ' ' "a")
-# diff <(echo "$VAL") <(echo "$VAL" | ./plan)
-# EXIT_CODE=$?
-# if [[ $EXIT_CODE -ne 0 ]] ; then
-#   echo "large symbol test FAILED";
-#   FAILED=$((FAILED+1))
-# else
-#   echo "large symbol test PASSED";
-# fi
+echo "more complex example"
+check "(1 (0 2))" "($MkLaw 0 1 (1 (0 (0 0) 3) (1 (0 2) (0 1 2))) 1)"
+
+echo "trivial cycles are okay if not used"
+check "7" "($MkLaw 0 1 (1 7 (1 3 2)) 9)"
+
+echo "moderate-length symbols"
+check "%fooooooooooooooooooooooooooo" "%fooooooooooooooooooooooooooo"
+
+echo "incr smol sym"
+check "%gooooooooooooooooooooooo" "($Inc ($PlanCase 0 0 $Cnst 0 (%fooooooooooooooooooooooo %f)))"
+check "%g" "($Inc ($PlanCase 0 0 $Ignore 0 (%fooooooooooooooooooooooo %f)))"
+
+echo "large atoms"
+check "%foooooooooooooooo" "37919465640883872069706873901102452928358"
+check "75838931281767744139413747802204905856717" "($Add 37919465640883872069706873901102452928358 37919465640883872069706873901102452928359)"
+
+VAL=$(printf '%%%*s\n' "2000" | tr ' ' "a")
+diff <(echo "$VAL") <(echo "$VAL" | ./plan)
+EXIT_CODE=$?
+if [[ $EXIT_CODE -ne 0 ]] ; then
+  echo "large symbol test FAILED";
+  FAILED=$((FAILED+1))
+else
+  echo "large symbol test PASSED";
+fi
 
 if [[ "$FAILED" -eq 0 ]]; then
   echo "all tests passed!"
