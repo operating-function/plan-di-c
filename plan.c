@@ -1790,8 +1790,8 @@ exception_case:
   exit(1);
 }
 
-// TODO make this a loop, not tail recursion.
 bool unwind(u64 depth) {
+ again:
   char lab[20];
   sprintf(lab, "unwind %lu", depth);
   write_dot(lab);
@@ -1800,7 +1800,8 @@ bool unwind(u64 depth) {
   switch (TY(x)) {
     case APP: {
       push_val(HD(x));
-      return unwind(depth+1);
+      depth++;
+      goto again;
     }
     case LAW: {
       return law_step(depth, false);
@@ -1838,7 +1839,7 @@ bool unwind(u64 depth) {
         case PIN: {
           pop(); // pop outer
           push_val(item);
-          return unwind(depth);
+          goto again;
         }
         case LAW: {
           return law_step(depth, true);
