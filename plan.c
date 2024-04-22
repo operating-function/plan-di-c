@@ -669,22 +669,6 @@ void Dec() {
   write_dot_extra("</Dec>", "", NULL);
 }
 
-  // if (is_direct(n)) {
-  //   u64 v = get_direct(n)
-  //   if (v == 0) return n;
-  //   return direct(v - 1);
-  // }
-
-  // len_t new_size = n.big.size;
-  // nn_t nat_buf = nn_init(new_size);
-  // word_t c = nn_sub1(nat_buf, n.big.buf, n.big.size, 1);
-  // // a positive borrow (nonzero `c`) should only be possible if we
-  // // underflowed a single u64. our invariant is to convert to SMALL when we
-  // // reach 1 u64, so we should never encounter this case.
-  // assert (c == 0);
-
-  // return a_Big((BigNat){ .size = new_size, .buf = nat_buf });
-
 void Sub() {
   Value *a = pop();
   Value *b = pop();
