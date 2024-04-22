@@ -69,6 +69,8 @@ struct Value {
 ////////////////////////////////////////////////////////////////////////////////
 //  Prototypes
 
+int call_depth = 0;
+
 static bool graphviz = 0;
 static bool trace_calls = 0;
 
@@ -1711,8 +1713,6 @@ bool jet_dispatch(Value *self, u64 ar) {
 
 // returns true if it eval-ed
 bool law_step(u64 depth, bool should_jet) {
-  static int call_depth = 0;
-
   char lab[40];
   sprintf(lab, "law_step %lu", depth);
   write_dot(lab);
