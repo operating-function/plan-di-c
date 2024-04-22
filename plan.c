@@ -72,6 +72,7 @@ struct Value {
 int call_depth = 0;
 
 static bool graphviz = 0;
+static bool trace_jet_matches = 0;
 static bool trace_calls = 0;
 
 void write_dot(char *);
@@ -1707,7 +1708,7 @@ bool jet_dispatch(Value *self, u64 ar) {
 
     if (str_cmp_nat(jet.name, nm, nmSz) == 0) {
       if (EQ(AR(self), direct(jet.arity))) {
-        if (trace_calls)
+        if (trace_jet_matches)
           fprintf(stderr, "jet name + arity match: %s\n", jet.name);
         jet.jet_exec();
         return true;
