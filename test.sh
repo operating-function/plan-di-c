@@ -78,7 +78,7 @@ Inf1s="($MkLaw 99 1 (1 (0 1 2) 2) 1)"
 FAILED=0
 
 check() {
-  rm -f ./dot/*
+  rm -r ./dot
   echo -n "TEST: $1 == [./plan] $2 ... "
   diff <(echo -e "$1") <(echo "$2" | ./plan)
   EXIT_CODE=$?
