@@ -782,7 +782,8 @@ void Mul() {
 
 void DivRemDirectDirect(u64 a, u64 b) {
   if (b == 0) {
-    push_val(direct(a));   // rem
+    // we could crash here instead
+    push_val(direct_zero); // rem
     push_val(direct_zero); // div
     return;
   }
@@ -792,17 +793,19 @@ void DivRemDirectDirect(u64 a, u64 b) {
 
 void DivRemBigDirect(Value *a, u64 b) {
   if (b == 0) {
-    push_val(a);
-    push_val(direct_zero);
+    // we could crash here instead
+    push_val(direct_zero); // rem
+    push_val(direct_zero); // div
     return;
   }
   BigNat aBig = BN(a);
   long sz = aBig.size;
-  push_val(a);                    // save
-  nn_t a_buf_clone = nn_init(sz); // gc
-  nn_t buf = nn_init(sz);         // gc
-  aBig = BN(pop());               // restore a
-  nn_copy(buf, aBig.buf, sz);     // copy a's buf (it will be mutated)
+  push_val(a);                        // save a
+  nn_t a_buf_clone = nn_init(sz);     // gc
+  nn_t buf = nn_init(sz);             // gc
+  nn_zero(buf, sz);
+  aBig = BN(pop());                   // restore a
+  nn_copy(a_buf_clone, aBig.buf, sz); // copy a's buf (it will be mutated)
   word_t rem = nn_divrem1_simple(buf, a_buf_clone, sz, b);
   push_val(direct(rem));                        // rem
   push_big((BigNat){ .size = sz, .buf = buf }); // div
@@ -812,18 +815,20 @@ void DivRemBigBig(Value *a, Value *b) {
   BigNat aBig = BN(a);
   BigNat bBig = BN(b);
   if (aBig.size < bBig.size) {
-    push_val(a);         // rem
-    push_val(direct(0)); // div
+    push_val(a);           // rem
+    push_val(direct_zero); // div
     return;
   }
   long sz = aBig.size - bBig.size + 1;
-  push_val(b);                           // save
-  nn_t a_buf_clone = nn_init(aBig.size); // gc
-  nn_t buf = nn_init(sz);                // gc
-  bBig = BN(pop());                      // restore
+  push_val(b);                               // save b
+  nn_t a_buf_clone = nn_init(aBig.size);     // gc
+  nn_copy(a_buf_clone, aBig.buf, aBig.size);
+  nn_t buf = nn_init(sz);                    // gc
+  nn_zero(buf, sz);
+  bBig = BN(pop());                          // restore b
   nn_divrem(buf, a_buf_clone, aBig.size, bBig.buf, bBig.size);
   push_big((BigNat){ .size = aBig.size, .buf = a_buf_clone }); // rem
-  push_big((BigNat){ .size = sz, .buf = buf });                // div
+  push_big((BigNat){ .size = sz,        .buf = buf });         // div
 }
 
 // stack before: ..rest b a
@@ -837,7 +842,10 @@ void DivRem() {
 
   if (is_direct(a)) {
     if (is_direct(b)) DivRemDirectDirect(aSmall, bSmall);
-    else push_val(direct_zero);
+    else {
+      push_val(a); // rem
+      push_val(direct_zero); // div
+    }
     return;
   }
 
@@ -845,11 +853,15 @@ void DivRem() {
   else DivRemBigBig(a, b);
 }
 
+// stack before: ..rest b a
+// stack after:  ..rest (a/b)
 void Div() {
   DivRem();
   slide(1);
 }
 
+// stack before: ..rest b a
+// stack after:  ..rest (a%b)
 void Rem() {
   DivRem();
   pop();
