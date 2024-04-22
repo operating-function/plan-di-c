@@ -780,21 +780,21 @@ void Mul() {
   else BigTimesBig(a, b);
 }
 
-void DivRemDirectDirect(u64 a, u64 b) {
+void DivModDirectDirect(u64 a, u64 b) {
   if (b == 0) {
     // we could crash here instead
-    push_val(direct_zero); // rem
+    push_val(direct_zero); // mod
     push_val(direct_zero); // div
     return;
   }
-  push_val(direct(a % b)); // rem
+  push_val(direct(a % b)); // mod
   push_val(direct(a / b)); // div
 }
 
-void DivRemBigDirect(Value *a, u64 b) {
+void DivModBigDirect(Value *a, u64 b) {
   if (b == 0) {
     // we could crash here instead
-    push_val(direct_zero); // rem
+    push_val(direct_zero); // mod
     push_val(direct_zero); // div
     return;
   }
@@ -806,16 +806,16 @@ void DivRemBigDirect(Value *a, u64 b) {
   nn_zero(buf, sz);
   aBig = BN(pop());                   // restore a
   nn_copy(a_buf_clone, aBig.buf, sz); // copy a's buf (it will be mutated)
-  word_t rem = nn_divrem1_simple(buf, a_buf_clone, sz, b);
-  push_val(direct(rem));                        // rem
+  word_t mod = nn_divrem1_simple(buf, a_buf_clone, sz, b);
+  push_val(direct(mod));                        // mod
   push_big((BigNat){ .size = sz, .buf = buf }); // div
 }
 
-void DivRemBigBig(Value *a, Value *b) {
+void DivModBigBig(Value *a, Value *b) {
   BigNat aBig = BN(a);
   BigNat bBig = BN(b);
   if (aBig.size < bBig.size) {
-    push_val(a);           // rem
+    push_val(a);           // mod
     push_val(direct_zero); // div
     return;
   }
@@ -827,13 +827,13 @@ void DivRemBigBig(Value *a, Value *b) {
   nn_zero(buf, sz);
   bBig = BN(pop());                          // restore b
   nn_divrem(buf, a_buf_clone, aBig.size, bBig.buf, bBig.size);
-  push_big((BigNat){ .size = aBig.size, .buf = a_buf_clone }); // rem
+  push_big((BigNat){ .size = aBig.size, .buf = a_buf_clone }); // mod
   push_big((BigNat){ .size = sz,        .buf = buf });         // div
 }
 
 // stack before: ..rest b a
 // stack after:  ..rest (a%b) (a/b)
-void DivRem() {
+void DivMod() {
   Value *a = pop();
   Value *b = pop();
 
@@ -841,29 +841,29 @@ void DivRem() {
   u64 bSmall = get_direct(b);
 
   if (is_direct(a)) {
-    if (is_direct(b)) DivRemDirectDirect(aSmall, bSmall);
+    if (is_direct(b)) DivModDirectDirect(aSmall, bSmall);
     else {
-      push_val(a); // rem
+      push_val(a);           // mod
       push_val(direct_zero); // div
     }
     return;
   }
 
-  if (is_direct(b)) DivRemBigDirect(a, bSmall);
-  else DivRemBigBig(a, b);
+  if (is_direct(b)) DivModBigDirect(a, bSmall);
+  else DivModBigBig(a, b);
 }
 
 // stack before: ..rest b a
 // stack after:  ..rest (a/b)
 void Div() {
-  DivRem();
+  DivMod();
   slide(1);
 }
 
 // stack before: ..rest b a
 // stack after:  ..rest (a%b)
-void Rem() {
-  DivRem();
+void Mod() {
+  DivMod();
   pop();
 }
 
@@ -894,7 +894,7 @@ void mul_jet() { to_nat(0); to_nat(1); Mul(); }
 
 void div_jet() { to_nat(0); to_nat(1); Div(); }
 
-void rem_jet() { to_nat(0); to_nat(1); Rem(); }
+void mod_jet() { to_nat(0); to_nat(1); Mod(); }
 
 // causes a stack slot to be updated (and dereferenced) in place,
 // otherwise leaving the stack shape the same as it was before.
@@ -951,7 +951,7 @@ Jet jet_table[NUM_JETS] =
   , (Jet) {.name = "Sub", .arity = 2, .jet_exec = sub_jet }
   , (Jet) {.name = "Mul", .arity = 2, .jet_exec = mul_jet }
   , (Jet) {.name = "Div", .arity = 2, .jet_exec = div_jet }
-  , (Jet) {.name = "Rem", .arity = 2, .jet_exec = rem_jet }
+  , (Jet) {.name = "Mod", .arity = 2, .jet_exec = mod_jet }
   , (Jet) {.name = "Dec", .arity = 1, .jet_exec = dec_jet }
   , (Jet) {.name = "Trace", .arity = 2, .jet_exec = trace_jet }
   };
