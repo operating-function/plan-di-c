@@ -2060,6 +2060,19 @@ Value *read_exp() {
         exit(2);
         return NULL;
     }
+    case '{': {
+        char buf[1234] = {0};
+        for (int i=0; i<1234; i++) {
+            buf[i] = getchar();
+            if (feof(stdin)) { crash("Unexpected EOF"); }
+            if (buf[i] == '}') {
+                buf[i] = 0;
+                if (i == 0) { return direct_zero; }
+                return utf8_nat(buf);
+            }
+        }
+        crash("string too big");
+    }
     case '<': {
         char buf[1234] = "./seed/";
         for (int i=7; i<1234; i++) {
