@@ -2,8 +2,11 @@
 
 set -ex
 
+[ -n "$1" ]
+
+make plan
 find ./dot -type f | xargs rm
-echo "(#1 0 1 (1 7 (1 2 3)) 9)" | ./plan
+./plan <<<"$1" || true
 sh/dotify # risky if many .dot files
 read
 feh -FB black -Z ./dot/*.png

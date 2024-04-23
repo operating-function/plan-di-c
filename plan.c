@@ -72,7 +72,7 @@ struct Value {
 int call_depth = 0;
 
 static bool graphviz = 0;
-static bool trace_jet_matches = 0;
+static bool trace_jet_matches = 1;
 static bool trace_calls = 0;
 
 void write_dot(char *);
@@ -310,6 +310,44 @@ void fprintf_value_internal(FILE *, Value *, int);
 
 void fprintf_nat(FILE *, Value *);
 
+bool is_symbol(const char *);
+void fprintf_value(FILE*, Value*);
+
+void fprintf_func_name (FILE *f, Value *law, int recur) {
+  assert(TY(law) == LAW);
+
+  Value *nm = NM(law);
+
+  assert(TY(nm) == NAT);
+
+  if (is_direct(nm)) {
+    u64 w = get_direct(nm);
+    char tmp[9] = {0};
+    ((u64*) tmp)[0] = w;
+    if (!is_symbol(tmp)) goto fallback;
+    fprintf(f, "%s", tmp);
+    return;
+  }
+
+  BigNat n = BN(nm);
+
+  {
+    long num_chars = n.size *sizeof(word_t);
+    char nat_str[num_chars+1];
+    memcpy(nat_str, n.buf, num_chars);
+    nat_str[num_chars] = 0;
+
+    if (!is_symbol(nat_str)) { goto fallback; }
+    fprintf(f, "%s", nat_str);
+    return;
+  }
+
+fallback:
+  fprintf(f, "<");
+  fprintf_value_internal(f, law, recur);
+  fprintf(f, ">");
+}
+
 void fprintf_value(FILE *f , Value *v) {
   switch (TY(v)) {
   case PIN:
@@ -342,14 +380,21 @@ void fprintf_value_app(FILE *f, Value *v, int recur) {
 
 void fprintf_value_internal(FILE *f, Value *v, int recur) {
   v = deref(v);
-  if (recur > 1000) {
+  if (recur > 20) {
     fprintf(f, "‥");
     return;
   }
   switch (TY(v)) {
     case PIN:
+      Value *item = deref(IT(v));
+
+      if (TY(item) == LAW) {
+          fprintf_func_name(f, item, recur+1);
+          break;
+      }
+
       fprintf(f, "<");
-      fprintf_value_internal(f, IT(v), recur+1);
+      fprintf_value_internal(f, item, recur+1);
       fprintf(f, ">");
       break;
     case LAW:
@@ -499,19 +544,6 @@ void free_nat(Nat a) {
   }
 }
 */
-
-int nat_char_width(Value *x) {
-  if (is_direct(x)) return (sizeof(u64));
-  return BN(x).size * sizeof(word_t);
-}
-
-int str_cmp_nat(char *jet_name, Value *nm, size_t min_len) {
-  u64 x = get_direct(nm);
-
-  u64 *buf = (is_direct(nm) ? &x : BN(nm).buf);
-
-  return strncmp(jet_name, (char *)buf, min_len);
-}
 
 /*
 Nat clone_nat(Nat x) {
@@ -896,7 +928,7 @@ void Mod() {
 //  Jets
 
 typedef struct Jet {
-  char *name;
+  Value *name;
   u64 arity;
   void (*jet_exec)();
 } Jet;
@@ -911,13 +943,65 @@ void sub_jet() {
   write_dot_extra("<sub_jet>", "", NULL);
   to_nat(0);
   to_nat(1);
+
+  for (int i=0; i<call_depth; i++) fprintf(stderr, " ");
+  fprintf(stderr, "(Sub.jet ");
+  fprintf_value(stderr, get(0));
+  fprintf(stderr, " ");
+  fprintf_value(stderr, get(1));
+  fprintf(stderr, ")\n");
+
+  call_depth++;
+
   Sub();
+
+  call_depth--;
+
   write_dot_extra("</sub_jet>", "", NULL);
 }
 
 void mul_jet() { to_nat(0); to_nat(1); Mul(); }
 
-void div_jet() { to_nat(0); to_nat(1); Div(); }
+void before_eval(int i) {
+  if (!trace_calls) return;
+  for (int i=0; i<call_depth; i++) fprintf(stderr, " ");
+  fprintf_value(stderr, get_deref(i));
+  fprintf(stderr, "\n");
+  call_depth++;
+}
+
+void after_eval(int i) {
+  if (!trace_calls) return;
+  call_depth--;
+  for (int i=0; i<call_depth; i++) fprintf(stderr, " ");
+  fprintf(stderr, "=> ");
+  fprintf_value(stderr, get_deref(i));
+  fprintf(stderr, "\n");
+}
+
+
+
+void div_jet() {
+  to_nat(0); to_nat(1);
+
+  for (int i=0; i<call_depth; i++) fprintf(stderr, " ");
+  fprintf(stderr, "(Div.jet ");
+  fprintf_value(stderr, get(0));
+  fprintf(stderr, " ");
+  fprintf_value(stderr, get(1));
+  fprintf(stderr, ")\n");
+
+  call_depth++;
+
+  Div();
+
+  call_depth--;
+
+  for (int i=0; i<call_depth; i++) fprintf(stderr, " ");
+  fprintf(stderr, "=> ");
+  fprintf_value(stderr, get_deref(0));
+  fprintf(stderr, ")\n");
+}
 
 void mod_jet() { to_nat(0); to_nat(1); Mod(); }
 
@@ -970,15 +1054,24 @@ void trace_jet() {
   printf("\n");
 }
 
+#define ADD   (Value*)9223372036861355073ULL
+#define SUB   (Value*)9223372036861228371ULL
+#define MUL   (Value*)9223372036861883725ULL
+#define DIV   (Value*)9223372036862536004ULL
+#define DIV   (Value*)9223372036862536004ULL
+#define MOD   (Value*)9223372036861357901ULL
+#define DEC   (Value*)9223372036861289796ULL
+#define TRACE (Value*)9223372472313803348ULL
+
 #define NUM_JETS 7
 Jet jet_table[NUM_JETS] =
-  { (Jet) {.name = "Add", .arity = 2, .jet_exec = add_jet }
-  , (Jet) {.name = "Sub", .arity = 2, .jet_exec = sub_jet }
-  , (Jet) {.name = "Mul", .arity = 2, .jet_exec = mul_jet }
-  , (Jet) {.name = "Div", .arity = 2, .jet_exec = div_jet }
-  , (Jet) {.name = "Mod", .arity = 2, .jet_exec = mod_jet }
-  , (Jet) {.name = "Dec", .arity = 1, .jet_exec = dec_jet }
-  , (Jet) {.name = "Trace", .arity = 2, .jet_exec = trace_jet }
+  { (Jet) {.name = ADD,   .arity = 2, .jet_exec = add_jet }
+  , (Jet) {.name = SUB,   .arity = 2, .jet_exec = sub_jet }
+  , (Jet) {.name = MUL,   .arity = 2, .jet_exec = mul_jet }
+  , (Jet) {.name = DIV,   .arity = 2, .jet_exec = div_jet }
+  , (Jet) {.name = MOD,   .arity = 2, .jet_exec = mod_jet }
+  , (Jet) {.name = DEC,   .arity = 1, .jet_exec = dec_jet }
+  , (Jet) {.name = TRACE, .arity = 2, .jet_exec = trace_jet }
   };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1592,53 +1685,58 @@ void backout(u64 depth) {
   // of the stack.
 }
 
-// stack invariant: kal receives its arg `x` at the bottom of the stack. it
-// replaces `x` w/ the evaluation of `x`.
+// stack invariant: kal expects the top-of the stack to be a body
+// expression.  It substitutes the parameters into the expression and
+// replaces the top of the stack with the resulting APP-graph.
 //
 // kal expects `n` to be the right value for any var-refs in `x` to be at the
 // correct depth when they are subtracted from `n`. `n` must take `x` into
 // account.
-void kal(u64 n) {
+void kal(u64 envSz, u64 offset) {
   char lab[40];
-  sprintf(lab, "kal %lu", n);
+  sprintf(lab, "kal(envSz=%lu, offset=%lu)", envSz, offset);
   write_dot(lab);
-  //
+
   Value *x = get_deref(0);
+
   if (IS_NAT(x)) {
-    if (LTE(x, direct(n))) {
-      push(n - get_direct(x)); // we know this is direct b/c < n
-      slide(1);
-      return;
-    }
-    goto raw_const;
+    // we know this is direct b/c < n
+    if (GTE(x, direct(envSz))) return;
+    u64 varIx  = get_direct(x);               // .. exp/@
+    u64 maxRef = envSz - 1;
+    push(offset + (maxRef - varIx));          // .. exp/@ param
+    slide(1);                                 // .. param
+    return;
   }
+
   if (TY(x) == APP) {
     Value *car = deref(HD(x));
     if (TY(car) == APP) {
       Value *caar = deref(HD(car));
       if (EQZ(caar)) {
-        // x: ((0 f) y)
         Value *f = deref(TL(car));
-        Value *y = deref(TL(x));  // => [(f y) ...]
-        push_val(y);              // => [y (f y) ...]
-        push_val(f);              // => [f y (f y) ...]
-        kal(n+2);                 // => [fres y (f y) ..]
-        swap();                   // => [y fres (f y) ..]
-        kal(n+2);                 // => [yres fres (f y) ...]
-        mk_app();                 // => [(fres yres) (f y) ...]
-        slide(1);
+        Value *y = deref(TL(x));                 // .. (0 f y)
+        push_val(y);                             // .. (0 f y) y
+        push_val(f);                             // .. (0 f y) y f
+        kal(envSz, offset+2);                   // .. (0 f y) y fGr
+        swap();                                  // .. (0 f y) fGr y
+        kal(envSz, offset+2);                   // .. (0 f y) fGr yGr
+        mk_app();                                // .. (0 f y) (fGr yGr)
+        slide(1);                                // .. (fGr yGr)
         return;
       }
-    } else if (EQZ(car)) {
-      // (0 y)
-      pop();
-      push_val(deref(TL(x)));
+    }
+
+    if (EQZ(car)) {                              // .. (0 y)
+      pop();                                     // .. 
+      push_val(deref(TL(x)));                    // .. y
       return;
     }
   }
-raw_const:
-  pop();
-  push_val(x);
+
+  // in any other case, the result is an unquoted constant value, in
+  // which case we can simply leave that on the top of the stack, since
+  // our argument is identical to the value that we want to return.
 }
 
 // 0 indicates no lets
@@ -1666,24 +1764,30 @@ void eval_law(u64 n) {
   write_dot(lab);
   //
   Value *b = pop_deref();
-  u64 m = length_let_spine(b);
+  u64 m = length_let_spine(b); // number of lets
   //
   stack_grow(m);
-  push_val(b);
+  push_val(b);                 // .. self args slots lawBody
   stack_fill_holes(1, m);
   //
+  int envSz = (n + m);
+
   for (u64 i = 0; i < m; i++) {
-                                // => [((1 v) b) origB allocs ...]
-    b = pop_deref();            // => [allocs ...]
-    push_val(deref(TL(b)));     // => [b allocs ...]
-    push_val(deref(TL(HD(b)))); // => [v b allocs ...]
-    kal(n+m+1);                 // => [vExp b allocs ...]
-    update((m+1)-i);            // => [b allocs ...]
+                                // .. self args slots letExp
+    b = pop_deref();            // .. self args slots
+    push_val(deref(TL(b)));     // .. self args slots next
+    push_val(deref(TL(HD(b)))); // .. self args slots next letExp
+    kal(envSz, 2);              // .. self args slots next letGr
+    update(1 + (m-i));          // .. self args slots next
   }
-                                // => [b allocs ...]
-  kal(n+m);                     // => [bExp allocs ...]
-  eval();                       // => [bRes allocs ...]
-  return slide(n+m);            // => [bRes ...]
+
+                                // .. self args slots bExp
+  kal(envSz, 1);                // .. self args slots bGr
+  before_eval(0);
+  // exit(3);
+  eval();                       // .. self args slots bWhnf
+  after_eval(0);
+  return slide(envSz);          // .. bWhnf
 }
 
 // TODO more efficient match algo (we do linear scan of all jets)
@@ -1699,22 +1803,21 @@ bool jet_dispatch(Value *self, u64 ar) {
   // fprintf(stderr, "\n");
   for (int i = 0; i < NUM_JETS; i++) {
     Jet jet = jet_table[i];
-    Value *nm = NM(self);
 
-    int nmSz = nat_char_width(nm);
-    int jetNmSz = strlen(jet.name);
+    if (NEQ(AR(self), direct(jet.arity))) continue;
+    if (NEQ(NM(self), jet.name)) continue;
 
-    if (nmSz != jetNmSz) return false;
-
-    if (str_cmp_nat(jet.name, nm, nmSz) == 0) {
-      if (EQ(AR(self), direct(jet.arity))) {
-        if (trace_jet_matches)
-          fprintf(stderr, "jet name + arity match: %s\n", jet.name);
-        jet.jet_exec();
-        return true;
-      }
+    if (trace_jet_matches) {
+      fprintf(stderr, "jet name + arity match: ");
+      fprintf_value(stderr, jet.name);
+      fprintf(stderr, "\n");
     }
+
+    jet.jet_exec();
+
+    return true;
   }
+
   return false;
 }
 
@@ -1738,8 +1841,7 @@ bool law_step(u64 depth, bool should_jet) {
     // graphviz=1;
 
     if (trace_calls) {
-      fprintf(stderr, "CALL: ");
-      for (int i=0; i<call_depth; i++) fprintf(stderr, "  ");
+      for (int i=0; i<call_depth; i++) fprintf(stderr, " ");
       fprintf_value(stderr, get_deref(depth-1));
       fprintf(stderr, "\n");
       call_depth++;
@@ -1761,12 +1863,11 @@ bool law_step(u64 depth, bool should_jet) {
     }
 
     if (trace_calls) {
-      // for (int i=0; i<call_depth; i++) fprintf(stderr, "  ");
-      // fprintf(stderr, "    => ");
-      // // fprintf_value(stderr, get_deref(0));
-      // fprintf(stderr, "\n");
-      //
       call_depth--;
+      for (int i=0; i<call_depth; i++) fprintf(stderr, " ");
+      fprintf(stderr, "=> ");
+      fprintf_value(stderr, get_deref(0));
+      fprintf(stderr, "\n");
     }
     if (ar < depth) handle_oversaturated_application(depth - ar);
     return true;
@@ -2143,6 +2244,7 @@ int main (void) {
     Value *v = read_exp_top();
     if (!v) return 0;
 
+    fprintf(stderr, "\n");
     push_val(v);
     clone();
     force();

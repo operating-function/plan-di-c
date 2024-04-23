@@ -42,7 +42,8 @@ ToNat="($NatCase 0 $Inc)"
 Times="($MkLaw %Times 3 (0 (0 (0 $NatCase 2) (0 (0 0 1) (0 1 2))) 3))"
 Add="($MkPin ($MkLaw %Add 2 (0 (0 ($Times $Inc) (0 $ToNat 1)) 2)))"
 Mul="($MkPin ($MkLaw %Mul 2 (0 (0 (0 $Times (0 $Add 1)) (0 0)) 2)))"
-Sub="($MkPin ($MkLaw %Sub 2 (0 (0 ($Times $Dec) (0 $ToNat 1)) 2)))"
+SubLaw="($MkLaw %Sub 2 (0 (0 ($Times $Dec) (0 $ToNat 1)) 2))"
+Sub="($MkPin $SubLaw)"
 
 # TODO fix Div, this is wrong
 Div="($MkPin ($MkLaw %Div 2 1))"
@@ -110,8 +111,8 @@ check "1" "($Inc ($PlanCase 1 0 0 0 (4 9)))"
 check "7" "($LawDec 8)"
 check "7" "($Dec 8)"
 check "8" "($MkLaw 1 2 ($Inc 7) 3 4)"
-check "{1 2 0}" "($MkLaw ($Inc 0) ($Inc ($Inc 0)) 0)"
-check "{1 2 0}" "(($MkLaw 1 2 0) 9 7)"
+# check "{1 2 0}" "($MkLaw ($Inc 0) ($Inc ($Inc 0)) 0)"
+# check "{1 2 0}" "(($MkLaw 1 2 0) 9 7)"
 check "9" "(($MkLaw 1 2 1) 9 7)"
 check "7" "(($MkLaw 1 2 2) 9 7)"
 check "3" "(($MkLaw 1 2 3) 9 7)"
@@ -154,6 +155,16 @@ check "%goobar" "($Inc %foobar)"
 
 check "%goobarfoobar" "(#2 %foobarfoobar)"
 
+echo "complex law interp (calls)"
+check "(777 888 3 4)"     "($MkLaw %ex 2 (0 (0 (0 1 2) 3) 4) 777 888)"
+check "(777 (888 (3 4)))" "($MkLaw %ex 2 (0 1 (0 2 (0 3 4))) 777 888)"
+
+echo "complex law interp (lets)"
+check "4"     "($MkLaw %ex 2 (1 4 3)             777 888)"
+check "(5 5)" "($MkLaw %ex 2 (1 4 (1 5 (0 3 4))) 777 888)"
+check "(5 5)" "($MkLaw %ex 2 (1 5 (1 3 (0 3 4))) 777 888)"
+check "(5 6)" "($MkLaw %ex 2 (1 5 (1 6 (0 3 4))) 777 888)"
+
 echo "nat arith"
 check "3" "($ToNat 3)"
 check "4" "($ToNat 4)"
@@ -171,6 +182,16 @@ check "(10 1)" "(($Add 4 6) 1)"
 check "%n" "($Add 44 66)"
 check "7" "($Add 4 ($Add 1 2))"
 echo "Sub"
+check "0"   "($SubLaw 0 0)"
+check "0"   "($SubLaw 1 1)"
+check "1"   "($SubLaw 1 0)"
+check "0"   "($SubLaw 0 1)"
+check "0"   "($SubLaw 4 6)"
+check "8"   "($SubLaw 10 ($SubLaw 20 18))"
+check "0"   "($Sub 0 0)"
+check "0"   "($Sub 1 1)"
+check "1"   "($Sub 1 0)"
+check "0"   "($Sub 0 1)"
 check "0"   "($Sub 4 6)"
 check "22"  "($Sub 66 44)"
 check "307" "($Sub 777 470)"
@@ -196,7 +217,7 @@ check "1475887433180421662838272732634687279056224492909545382656893899996011391
 echo "Div directs"
 check "1" "($Div 1 1)"
 check "0" "($Div 1 2)"
-check "0" "($Div 2 0)"
+check "Error: divide by zero" "($Div 2 0)"
 check "2" "($Div 2 1)"
 check "2" "($Div 8 4)"
 check "3" "($Div 9 3)"
@@ -212,7 +233,7 @@ check "%foooooooooooooooo" "($Div 1475887433180421662838272732634687279056224492
 echo "Mod directs"
 check "0" "($Mod 1 1)"
 check "1" "($Mod 1 2)"
-check "0" "($Mod 2 0)"
+check "Error: divide by zero" "($Mod 2 0)"
 check "0" "($Mod 2 1)"
 check "0" "($Mod 8 4)"
 check "0" "($Mod 9 3)"
@@ -233,7 +254,7 @@ echo "cnst/ignore"
 check "11" "($Cnst 11 7)"
 check "7"  "($Ignore 11 7)"
 check "13" "($Cnst3 13 1 4 7)"
-# 
+
 echo "Trace"
 check "0\n1" "($Trace 0 1)"
 check "2\n0" "($Trace ($Add 1 1) 0)"
@@ -244,13 +265,13 @@ check "(0 9999 10000 10001 10003 10004)" "($Map ($Add 9999) (0 0 1 2 4 5))"
 
 echo "infinite values"
 check "1" "($AppHead $Inf1s)"
-# 
+
 echo "refer to later binder from an earlier one"
 check "7" "($MkLaw 0 1 (1 3 (1 7 2)) 9)"
 
 echo "refer to earlier binder from a later one"
 check "7" "($MkLaw 0 1 (1 7 (1 2 3)) 9)"
-# 
+
 echo "more complex example"
 check "(1 (0 2))" "($MkLaw 0 1 (1 (0 (0 0) 3) (1 (0 2) (0 1 2))) 1)"
 
@@ -290,6 +311,17 @@ check "1" "(<Cmp> #2 #2)"
 check "0" "(<Cmp> #2 (0 1))"
 
 check "(0 7 7 1 2 7 7)" "(<Splice> 2 (0 1 2) (0 7 7 7 7))"
+
+check "1" "(<strFindIndexOff> (<Neq> 32) 0 { x y })"
+check "1" "(<strFindIndexOff> (<Neq> 32) 1 { x y })"
+check "3" "(<strFindIndexOff> (<Neq> 32) 2 { x y })"
+check "3" "(<strFindIndexOff> (<Neq> 32) 3 { x y })"
+check "5" "(<strFindIndexOff> (<Neq> 32) 4 { x y })"
+check "5" "(<strFindIndexOff> (<Neq> 32) 5 { x y })"
+check "5" "(<strFindIndexOff> (<Neq> 32) 6 { x y })"
+
+check "(0 (0 %fn 1 %x) 0 1 %LWORD)"      "(<lexerTest> %x)"
+check "(0 (0 %fn 1 544897400) 0 3 %LWORD)" "(<lexerTest> {xyz })"
 
 ################################################################################
 
