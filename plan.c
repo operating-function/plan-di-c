@@ -955,7 +955,6 @@ typedef struct Jet {
   Value *name;
   u64 arity;
   JetTag tag;
-  void (*jet_exec)();
 } Jet;
 
 void to_nat(int i) {
@@ -1093,13 +1092,13 @@ void trace_jet() {
 
 #define NUM_JETS 7
 Jet jet_table[NUM_JETS] =
-  { (Jet) {.name = ADD,   .arity = 2, .tag = J_ADD,   .jet_exec = add_jet }
-  , (Jet) {.name = SUB,   .arity = 2, .tag = J_SUB,   .jet_exec = sub_jet }
-  , (Jet) {.name = MUL,   .arity = 2, .tag = J_MUL,   .jet_exec = mul_jet }
-  , (Jet) {.name = DIV,   .arity = 2, .tag = J_DIV,   .jet_exec = div_jet }
-  , (Jet) {.name = MOD,   .arity = 2, .tag = J_MOD,   .jet_exec = mod_jet }
-  , (Jet) {.name = DEC,   .arity = 1, .tag = J_DEC,   .jet_exec = dec_jet }
-  , (Jet) {.name = TRACE, .arity = 2, .tag = J_TRACE, .jet_exec = trace_jet }
+  { (Jet) { .name = ADD,   .arity = 2, .tag = J_ADD   }
+  , (Jet) { .name = SUB,   .arity = 2, .tag = J_SUB   }
+  , (Jet) { .name = MUL,   .arity = 2, .tag = J_MUL   }
+  , (Jet) { .name = DIV,   .arity = 2, .tag = J_DIV   }
+  , (Jet) { .name = MOD,   .arity = 2, .tag = J_MOD   }
+  , (Jet) { .name = DEC,   .arity = 1, .tag = J_DEC   }
+  , (Jet) { .name = TRACE, .arity = 2, .tag = J_TRACE }
   };
 
 ////////////////////////////////////////////////////////////////////////////////
