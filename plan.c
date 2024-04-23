@@ -105,10 +105,11 @@ struct Value {
 
 int call_depth = 0;
 
-static bool graphviz = 0;
-static bool trace_jet_matches = 0;
-static bool trace_calls = 0;
-static bool trace_laws = 0;
+#define TRACE_JET_MATCHES 0
+#define TRACE_CALLS 0
+#define TRACE_LAWS 0
+
+static bool enable_graphviz = 0;
 
 void write_dot(char *);
 
@@ -964,7 +965,7 @@ void to_nat(int i) {
 }
 
 void before_eval(int i) {
-  if (!trace_calls) return;
+  if (!TRACE_CALLS) return;
   for (int i=0; i<call_depth; i++) fprintf(stderr, " ");
   fprintf_value(stderr, get_deref(i));
   fprintf(stderr, "\n");
@@ -972,7 +973,7 @@ void before_eval(int i) {
 }
 
 void after_eval(int i) {
-  if (!trace_calls) return;
+  if (!TRACE_CALLS) return;
   call_depth--;
   for (int i=0; i<call_depth; i++) fprintf(stderr, " ");
   fprintf(stderr, "=> ");
@@ -1362,7 +1363,7 @@ Node *stack_to_list_heap_only() {
 }
 
 void write_dot_extra(char *label, char *extra, Value *v) {
-  if (!graphviz) return;
+  if (!enable_graphviz) return;
   char fp[20] = {0};
   sprintf(fp, "%s/%05d.dot", dot_dir_path, dot_count);
   dot_count++;
@@ -1527,7 +1528,7 @@ void mk_law() {
 
   weigh_law(1, &l.w, b);
 
-  if (trace_laws) {
+  if (TRACE_LAWS) {
     fprintf(stderr, "law: name=");
     fprintf_value(stderr, n);
     fprintf(stderr, ",\t{lets=%lu, calls=%lu}\n", l.w.n_lets, l.w.n_calls);
@@ -1728,7 +1729,6 @@ void law_alloc_graph(Law l, Value **holes, Value **calls) {
 void eval_law(Law l) {
   u64 args = get_direct(l.a); // this code is unreachable with bignat arity
   u64 lets = l.w.n_lets;
-  u64 kals = l.w.n_calls;
   int maxRef = args + lets;
   Value *holes=NULL, *apps=NULL;
 
@@ -1776,7 +1776,7 @@ void eval_law(Law l) {
 }
 
 bool jet_dispatch(Value *self, u64 ar) {
-  // assert (TY(self) == PIN);
+  assert (TY(self) == PIN);
 
   switch (self->p.jet) {
 
@@ -1842,7 +1842,7 @@ JetTag jet_match(Value *item) {
     if (NEQ(l.a, direct(jet.arity))) continue;
     if (NEQ(l.n, jet.name)) continue;
 
-    if (trace_jet_matches) {
+    if (TRACE_JET_MATCHES) {
       fprintf(stderr, "MATCH: jet name + arity match: ");
       fprintf_value(stderr, jet.name);
       fprintf(stderr, "\n");
@@ -1851,7 +1851,7 @@ JetTag jet_match(Value *item) {
     return jet.tag;
   }
 
-  if (trace_jet_matches) {
+  if (TRACE_JET_MATCHES) {
     fprintf(stderr, "NO MATCH: pinned law is not a jet: ");
     fprintf_value(stderr, l.a);
     fprintf(stderr, "\n");
@@ -1877,9 +1877,9 @@ bool law_step(u64 depth, bool should_jet) {
     return false;
   } else {
 
-    // graphviz=1;
+    // enable_graphviz=1;
 
-    if (trace_calls) {
+    if (TRACE_CALLS) {
       for (int i=0; i<call_depth; i++) fprintf(stderr, " ");
       fprintf_value(stderr, get_deref(depth-1));
       fprintf(stderr, "\n");
@@ -1901,7 +1901,7 @@ bool law_step(u64 depth, bool should_jet) {
       eval_law(FUNC(self));
     }
 
-    if (trace_calls) {
+    if (TRACE_CALLS) {
       call_depth--;
       for (int i=0; i<call_depth; i++) fprintf(stderr, " ");
       fprintf(stderr, "=> ");
@@ -2047,6 +2047,7 @@ bool unwind(u64 depth) {
       crash("unwind: bad deref");
     }
   }
+  crash("this should never happen");
 }
 
 // returns true if we eval-ed
@@ -2063,6 +2064,7 @@ bool eval() {
       return false;
     case HOL: crash("eval: HOL");
     case IND: crash("eval: IND");
+    default:  crash("eval: bad tag");
   }
 }
 
@@ -2174,7 +2176,6 @@ Value *utf8_nat (char *str) {
   long wordSz = (7 + byteSz) / 8;
   nn_t buf = nn_init(wordSz);
   nn_zero(buf, wordSz);
-  len_t actual_len;
   memcpy(buf, str, byteSz);
   return a_Big((BigNat){ .size = wordSz, .buf = buf });
 }
@@ -2187,79 +2188,76 @@ Value *read_sym() {
 }
 
 Value *read_exp() {
-  again: {
-    char c = getchar();
-    if (!c) return NULL;
-    switch (c) {
-    case '%': {
-        return read_sym();
-    }
-    case '#': {
-        char n = getchar();
-        if (isdigit(n)) {
-            ungetc(n, stdin);
-            return a_Pin(read_atom());
+  char c = getchar();
+  if (!c) return NULL;
+  switch (c) {
+  case '%':
+      return read_sym();
+
+  case '#': {
+    char n = getchar();
+    if (isdigit(n)) {
+          ungetc(n, stdin);
+          return a_Pin(read_atom());
+      }
+      fprintf(stderr, "Unexpected: '%c'\n", n);
+      exit(2);
+      return NULL;
+  }
+  case '{': {
+    char buf[1234] = {0};
+    for (int i=0; i<1234; i++) {
+        buf[i] = getchar();
+        if (feof(stdin)) { crash("Unexpected EOF"); }
+        if (buf[i] == '}') {
+            buf[i] = 0;
+            if (i == 0) { return direct_zero; }
+            return utf8_nat(buf);
         }
-        fprintf(stderr, "Unexpected: '%c'\n", n);
-        exit(2);
-        return NULL;
     }
-    case '{': {
-        char buf[1234] = {0};
-        for (int i=0; i<1234; i++) {
-            buf[i] = getchar();
-            if (feof(stdin)) { crash("Unexpected EOF"); }
-            if (buf[i] == '}') {
-                buf[i] = 0;
-                if (i == 0) { return direct_zero; }
-                return utf8_nat(buf);
-            }
+    crash("string too big");
+  }
+  case '<': {
+    char buf[1234] = "./seed/";
+    for (int i=7; i<1234; i++) {
+        buf[i] = getchar();
+        if (feof(stdin)) {
+            crash("Unexpected EOF");
         }
-        crash("string too big");
-    }
-    case '<': {
-        char buf[1234] = "./seed/";
-        for (int i=7; i<1234; i++) {
-            buf[i] = getchar();
-            if (feof(stdin)) {
-                crash("Unexpected EOF");
-            }
-            if (buf[i] == '>') {
-                buf[i] = 0;
-                u64 seedSz;
-                u64 *words = load_seed_file(buf, &seedSz);
-                seed_load(words);
-                check_value(get(0));
-                push(0);
-                force();
-                Value *loaded = get(0);
-                check_value(loaded);
-                // graphviz=1;
-                return loaded;
-            }
+        if (buf[i] == '>') {
+            buf[i] = 0;
+            u64 seedSz;
+            u64 *words = load_seed_file(buf, &seedSz);
+            seed_load(words);
+            check_value(get(0));
+            push(0);
+            force();
+            Value *loaded = get(0);
+            check_value(loaded);
+            // enable_graphviz=1;
+            return loaded;
         }
-        crash("load files");
-        return NULL;
     }
-    case '(': {
-        eat_spaces();
-        Value *f = read_exp();
-        return read_app(f);
+    crash("load files");
+    return NULL;
+  }
+  case '(':
+      eat_spaces();
+      Value *f = read_exp();
+      return read_app(f);
+
+  default:
+    if (isdigit(c)) {
+        ungetc(c, stdin);
+        return read_atom();
     }
-    default:
-        if (isdigit(c)) {
-            ungetc(c, stdin);
-            return read_atom();
-        }
-        fprintf(stderr, "Unexpected: '%c'\n", c);
-        exit(2);
-        return NULL;
-    }
+    fprintf(stderr, "Unexpected: '%c'\n", c);
+    exit(2);
+    return NULL;
   }
 }
 
 Value *read_exp_top() {
- again:
   eat_spaces();
   if (feof(stdin)) return NULL;
   return read_exp();
