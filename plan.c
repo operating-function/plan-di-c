@@ -701,15 +701,17 @@ void Add() {
   BigPlusBig(BN(a).size, BN(b).size);
 }
 
-void BigMinusDirect(u64 bigSz, u64 direct) {
-  nn_t buf = nn_init(bigSz);
-  BigNat big = BN(pop_deref());
-  word_t c = nn_sub1(buf, big.buf, bigSz, direct);
+void BigMinusDirect(Value *big, u64 direct) {
+  u64 bigSz = BN(big).size;
+  push_val(big);              // save
+  nn_t buf = nn_init(bigSz);  // gc
+  BigNat n = BN(pop_deref()); // reload
+  word_t c = nn_sub1(buf, n.buf, bigSz, direct);
   // a positive borrow (nonzero `c`) should only be possible if we
   // underflowed a single u64. our invariant is to convert to SMALL when we
   // reach 1 u64, so we should never encounter this case.
   assert (c == 0);
-  push_big(big);
+  push_big((BigNat){ .size = bigSz, .buf = buf });
 }
 
 void Dec() {
@@ -723,8 +725,7 @@ void Dec() {
     goto end;
   }
 
-  push_val(v);
-  BigMinusDirect(BN(v).size, 1);
+  BigMinusDirect(v, 1);
 
  end:
   write_dot_extra("</Dec>", "", NULL);
@@ -751,8 +752,7 @@ void Sub() {
   }
 
   if (is_direct(b)) {
-    push_val(a);
-    BigMinusDirect(bSmall, BN(a).size);
+    BigMinusDirect(a, bSmall);
     return;
   }
 
