@@ -72,7 +72,7 @@ struct Value {
 int call_depth = 0;
 
 static bool graphviz = 0;
-static bool trace_jet_matches = 1;
+static bool trace_jet_matches = 0;
 static bool trace_calls = 0;
 
 void write_dot(char *);
