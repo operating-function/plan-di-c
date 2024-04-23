@@ -56,10 +56,16 @@ struct Value;
 
 typedef struct Value Value;
 
+typedef struct LawWeight {
+    u64 n_lets;
+    u64 n_calls;
+} LawWeight;
+
 typedef struct Law {
   Value *n; // Always a nat
   Value *a; // Always a nat
   Value *b;
+  LawWeight w;
 } Law;
 
 typedef struct App {
@@ -86,6 +92,7 @@ int call_depth = 0;
 static bool graphviz = 0;
 static bool trace_jet_matches = 0;
 static bool trace_calls = 0;
+static bool trace_laws = 0;
 
 void write_dot(char *);
 
@@ -231,6 +238,12 @@ static inline Value *BD(Value *x) {
   #endif
   if (x->type == PIN) return BD(x->i);
   return x->l.b;
+}
+
+static inline Law FUNC(Value *x) {
+  x = deref(x);
+  if (x->type == PIN) return FUNC(x->i);
+  return x->l;
 }
 
 static inline Value *HD(Value *x) {
@@ -1546,6 +1559,33 @@ void mk_pin() {
   push_val(p);
 }
 
+// TODO: When constructing law bodies, remove all indirections, and then
+// skip all of the derefs here.
+void weigh_law(bool in_let_section, LawWeight *out, Value *x) {
+  while (true) {
+    if (TY(x) != APP) return;                    // neither a let nor a call
+    Value *car = deref(HD(x));
+
+    if (TY(car) != APP) return;                  // neither a let nor a call
+    Value *caar = deref(HD(car));
+
+    if (in_let_section && EQ1(caar)) {           // ((0 x) b)
+      out->n_lets++;                             // this is a let
+      weigh_law(0, out, deref(TL(car)));         // weight the let expr
+      x = deref(TL(x));                          // weight the let body
+      continue;
+    }
+
+    if (!EQZ(caar)) return;                      // neither a let nor a call
+
+    out->n_calls++;                              // this is a call
+    in_let_section = false;                      // no more lets
+    weigh_law(0, out, deref(TL(car)));           // weight the call function
+    x = deref(TL(x));                            // weight the call argument
+    continue;
+  }
+}
+
 void mk_law() {
   write_dot("mk_law");
 
@@ -1557,7 +1597,16 @@ void mk_law() {
   Value *a = pop_deref();
   Value *n = pop_deref();
 
-  Law l = { .n = n, .a = a, .b=b };
+  Law l = { .n = n, .a = a, .b=b, .w = { .n_lets = 0, .n_calls = 0 } };
+
+  weigh_law(1, &l.w, b);
+
+  if (trace_laws) {
+    fprintf(stderr, "law: name=");
+    fprintf_value(stderr, n);
+    fprintf(stderr, ",\t{lets=%lu, calls=%lu}\n", l.w.n_lets, l.w.n_calls);
+  }
+
   *res = (Value){ .type = LAW, .l = l };
   push_val(res);
 }
@@ -1752,13 +1801,15 @@ loop:
   return count;
 }
 
-void eval_law(u64 n) {
+void eval_law(Law l) {
+  u64 n    = get_direct(l.a) + 1; // this code is unreachable with bignat arity
+  u64 m    = l.w.n_lets;
+  Value *b = l.b;
+
   char lab[40];
   sprintf(lab, "eval_law %lu", n);
   write_dot(lab);
-  //
-  Value *b = pop_deref();
-  u64 m = length_let_spine(b); // number of lets
+
   //
   stack_grow(m);
   push_val(b);                 // .. self args slots lawBody
@@ -1869,8 +1920,7 @@ bool law_step(u64 depth, bool should_jet) {
       // if no match, perform regular law evaluation
       push_val(self);
       flip_stack(ar+1);
-      push_val(BD(self));
-      eval_law(ar+1);
+      eval_law(FUNC(self));
     }
 
     if (trace_calls) {
