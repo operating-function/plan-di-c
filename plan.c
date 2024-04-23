@@ -61,8 +61,20 @@ typedef struct LawWeight {
     u64 n_calls;
 } LawWeight;
 
+typedef enum JetTag {
+  J_NONE,
+  J_ADD,
+  J_SUB,
+  J_MUL,
+  J_DIV,
+  J_MOD,
+  J_DEC,
+  J_TRACE,
+} JetTag;
+
 typedef struct Pin {
   Value *item;
+  JetTag jet;
 } Pin;
 
 typedef struct Law {
@@ -100,6 +112,7 @@ static bool trace_laws = 0;
 
 void write_dot(char *);
 
+JetTag jet_match(Value*);
 void mk_app();
 void write_dot_extra(char*, char*, Value*);
 void clone();
@@ -544,10 +557,11 @@ static inline Value *direct(u64 x) {
   return a_Big((BigNat){ .size = 1, .buf = x_nat });
 }
 
-Value *a_Pin(Value *v) {
+Value *a_Pin(Value *item) {
   Value *res = (Value *)malloc(sizeof(Value));
   res->type = PIN;
-  res->p = (Pin){ .item = v };
+  JetTag jet = jet_match(item);
+  res->p = (Pin){ .item = item, .jet = jet };
   return res;
 }
 
@@ -940,6 +954,7 @@ void Mod() {
 typedef struct Jet {
   Value *name;
   u64 arity;
+  JetTag tag;
   void (*jet_exec)();
 } Jet;
 
@@ -1078,13 +1093,13 @@ void trace_jet() {
 
 #define NUM_JETS 7
 Jet jet_table[NUM_JETS] =
-  { (Jet) {.name = ADD,   .arity = 2, .jet_exec = add_jet }
-  , (Jet) {.name = SUB,   .arity = 2, .jet_exec = sub_jet }
-  , (Jet) {.name = MUL,   .arity = 2, .jet_exec = mul_jet }
-  , (Jet) {.name = DIV,   .arity = 2, .jet_exec = div_jet }
-  , (Jet) {.name = MOD,   .arity = 2, .jet_exec = mod_jet }
-  , (Jet) {.name = DEC,   .arity = 1, .jet_exec = dec_jet }
-  , (Jet) {.name = TRACE, .arity = 2, .jet_exec = trace_jet }
+  { (Jet) {.name = ADD,   .arity = 2, .tag = J_ADD,   .jet_exec = add_jet }
+  , (Jet) {.name = SUB,   .arity = 2, .tag = J_SUB,   .jet_exec = sub_jet }
+  , (Jet) {.name = MUL,   .arity = 2, .tag = J_MUL,   .jet_exec = mul_jet }
+  , (Jet) {.name = DIV,   .arity = 2, .tag = J_DIV,   .jet_exec = div_jet }
+  , (Jet) {.name = MOD,   .arity = 2, .tag = J_MOD,   .jet_exec = mod_jet }
+  , (Jet) {.name = DEC,   .arity = 1, .tag = J_DEC,   .jet_exec = dec_jet }
+  , (Jet) {.name = TRACE, .arity = 2, .tag = J_TRACE, .jet_exec = trace_jet }
   };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1883,6 +1898,37 @@ bool jet_dispatch(Value *self, u64 ar) {
   }
 
   return false;
+}
+
+JetTag jet_match(Value *item) {
+  item = deref(item);
+
+  if (TY(item) != LAW) return J_NONE;
+
+  Law l = item->l;
+
+  for (int i = 0; i < NUM_JETS; i++) {
+    Jet jet = jet_table[i];
+
+    if (NEQ(l.a, direct(jet.arity))) continue;
+    if (NEQ(l.n, jet.name)) continue;
+
+    if (trace_jet_matches) {
+      fprintf(stderr, "MATCH: jet name + arity match: ");
+      fprintf_value(stderr, jet.name);
+      fprintf(stderr, "\n");
+    }
+
+    return jet.tag;
+  }
+
+  if (trace_jet_matches) {
+    fprintf(stderr, "NO MATCH: pinned law is not a jet: ");
+    fprintf_value(stderr, l.a);
+    fprintf(stderr, "\n");
+  }
+
+  return J_NONE;
 }
 
 // returns true if it eval-ed
