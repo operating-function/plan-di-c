@@ -1852,52 +1852,20 @@ void eval_law(Law l) {
   return slide(maxRef+1);       // .. bodyWhnf
 }
 
-// TODO store function pointer in PINs at construction time. then, the jet would
-// just call that function pointer. non-jetted PINs would need a fallback dummy
-// "jet" which would just apply their `self` to the args. so, we'd want:
-//
-// void (*jet_exec)(u64 arity);
-//
-// so that the dummy-jet can locate self.
-//
-// we should also push self for jets, so the calling convention is the same.
-// the dummy-jet should be approx:
-//
-// void dummy_jet(u64 arity) {
-//   Value *self = get_deref(arity); // +/- 1 idk??
-//   push_val(BD(self)); // push body
-//   eval_law(arity+1);
-// }
-//
-// it's possible we'd need to flip_stack?
-
-// search the jet_table for a matching name & arity to what is in `self`. if
-// matched, we consume the arguments and leave the return value on the top of
-// the stack, returning true. if no match, leave the arguments as-is and return
-// false.
 bool jet_dispatch(Value *self, u64 ar) {
-  write_dot("jet_dispatch: entry");
-  // fprintf(stderr, "jet_dispatch: ");
-  // fprintf_value(stderr, self);
-  // fprintf(stderr, "\n");
-  for (int i = 0; i < NUM_JETS; i++) {
-    Jet jet = jet_table[i];
+  // assert (TY(self) == PIN);
 
-    if (NEQ(AR(self), direct(jet.arity))) continue;
-    if (NEQ(NM(self), jet.name)) continue;
-
-    if (trace_jet_matches) {
-      fprintf(stderr, "jet name + arity match: ");
-      fprintf_value(stderr, jet.name);
-      fprintf(stderr, "\n");
-    }
-
-    jet.jet_exec();
-
-    return true;
+  switch (self->p.jet) {
+  case J_ADD:   add_jet();   return true;
+  case J_SUB:   sub_jet();   return true;
+  case J_MUL:   mul_jet();   return true;
+  case J_DIV:   div_jet();   return true;
+  case J_MOD:   mod_jet();   return true;
+  case J_DEC:   dec_jet();   return true;
+  case J_TRACE: trace_jet(); return true;
+  case J_NONE:  return false;
+  default:      return false;
   }
-
-  return false;
 }
 
 JetTag jet_match(Value *item) {
@@ -1960,6 +1928,7 @@ bool law_step(u64 depth, bool should_jet) {
     setup_call(depth);
     if (!is_direct(AR(self))) crash("impossible: called law with huge arity");
     u64 ar = get_direct(AR(self));
+
     if (should_jet && jet_dispatch(self, ar)) {
       // if we should jet, we call jet_dispatch. it tells us if it fired a jet,
       // in which case the stack will no longer have arguments and will have the
