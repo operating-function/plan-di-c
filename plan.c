@@ -1712,23 +1712,10 @@ void backout(u64 depth) {
   // of the stack.
 }
 
-// stack invariant: kal expects the top-of the stack to be a body
-// expression.  It substitutes the parameters into the expression and
-// replaces the top of the stack with the resulting APP-graph.
-//
-// kal expects `n` to be the right value for any var-refs in `x` to be at the
-// correct depth when they are subtracted from `n`. `n` must take `x` into
-// account.
 Value *kal(u64 maxRef, Value **pool, Value *x) {
-  push_val(x);
-  { char lab[80]; sprintf(lab, "kal(maxRef = %lu)", maxRef); write_dot(lab); }
-  sp--;
-
   if (is_direct(x)) {
     u64 xv = get_direct(x);
     if (xv > maxRef) return x;                   // unquoted constant
-    // { char lab[80]; sprintf(lab, "$%lu = get(%lu)", xv, (maxRef - xv)); write_dot(lab); }
-    // fprintf(stderr, "get(%lu)", (maxRef - xv));
     return get(maxRef - xv);                     // var ref
   }
 
@@ -1812,20 +1799,6 @@ void eval_law(Law l) {
   push_val(l.b);                     // save (law body)
   law_alloc_graph(l, &holes, &apps); // gc
   Value *b = pop();                  // restore (law body)
-
-  /*
-  for (int i=0; i<lets; i++) {
-      fprintf(stderr, "hole[%d] = ", i);
-      fprintf_value(stderr, holes+i);
-      fprintf(stderr, "\n");
-  }
-
-  for (int i=0; i<kals; i++) {
-      fprintf(stderr, "call[%d] = ", i);
-      fprintf_value(stderr, apps+i);
-      fprintf(stderr, "\n");
-  }
-  */
 
   write_dot("starting graph construction");
 
