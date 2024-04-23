@@ -1,3 +1,15 @@
+// TODO
+//
+// GC:
+// - copy system malloc code
+// - define malloc in terms of system-malloc
+// - global heap ptr
+// - global heap size
+// - on each alloc, GC
+// - system-malloc new heap
+// - copy live stuff from old heap to new heap
+// - free old heap
+
 #include <stdint.h>
 #define __STDC_WANT_LIB_EXT2__  1
 #include <stdio.h>
@@ -537,29 +549,6 @@ Value *a_Hol() {
 ////////////////////////////////////////////////////////////////////////////////
 //  Nat Operators
 
-/*
-void free_nat(Nat a) {
-  if (a.type == BIG) {
-    free(a.big.buf);
-  }
-}
-*/
-
-/*
-Nat clone_nat(Nat x) {
-  switch (x.type) {
-    case SMALL:
-      return x;
-    case BIG: {
-      long sz = x.big.size;
-      nn_t nat_buf = nn_init(sz);
-      nn_copy(nat_buf, x.big.buf, sz);
-      return (Nat) { .type = BIG, .big = { .size = sz, .buf = nat_buf }};
-    }
-  }
-}
-*/
-
 int less=0, equals=1, greater=2;
 
 int cmp_direct(u64 a, u64 b) {
@@ -649,6 +638,8 @@ BigNat bigify(u64 *x) {
   return (BigNat){ .size = sz, .buf = x };
 }
 
+// TODO change to `Value *` arg style of Mul/DivMod/etc
+//
 // invariant: a.size >= b.size
 // stack before: ..rest b a
 // stack after:  ..rest (a+b)
@@ -1061,7 +1052,6 @@ void trace_jet() {
 #define ADD   (Value*)9223372036861355073ULL
 #define SUB   (Value*)9223372036861228371ULL
 #define MUL   (Value*)9223372036861883725ULL
-#define DIV   (Value*)9223372036862536004ULL
 #define DIV   (Value*)9223372036862536004ULL
 #define MOD   (Value*)9223372036861357901ULL
 #define DEC   (Value*)9223372036861289796ULL
@@ -1732,7 +1722,7 @@ void kal(u64 envSz, u64 offset) {
     }
 
     if (EQZ(car)) {                              // .. (0 y)
-      pop();                                     // .. 
+      pop();                                     // ..
       push_val(deref(TL(x)));                    // .. y
       return;
     }
@@ -1794,8 +1784,25 @@ void eval_law(u64 n) {
   return slide(envSz);          // .. bWhnf
 }
 
-// TODO more efficient match algo (we do linear scan of all jets)
+// TODO store function pointer in PINs at construction time. then, the jet would
+// just call that function pointer. non-jetted PINs would need a fallback dummy
+// "jet" which would just apply their `self` to the args. so, we'd want:
 //
+// void (*jet_exec)(u64 arity);
+//
+// so that the dummy-jet can locate self.
+//
+// we should also push self for jets, so the calling convention is the same.
+// the dummy-jet should be approx:
+//
+// void dummy_jet(u64 arity) {
+//   Value *self = get_deref(arity); // +/- 1 idk??
+//   push_val(BD(self)); // push body
+//   eval_law(arity+1);
+// }
+//
+// it's possible we'd need to flip_stack?
+
 // search the jet_table for a matching name & arity to what is in `self`. if
 // matched, we consume the arguments and leave the return value on the top of
 // the stack, returning true. if no match, leave the arguments as-is and return
