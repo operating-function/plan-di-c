@@ -1050,11 +1050,12 @@ void add_jet() {
 }
 
 void trace_jet() {
-  push(0); // force msg
-  force();
-  Value *msg = pop_deref();
+  push(0);                        // .. body msg msg
+  force();                        // .. body MSG
+  Value *msg = pop_deref();       // .. body
   fprintf_value(stdout, msg);
-  printf("\n");
+  fprintf(stdout, "\n");
+  eval();                         // .. *body
 }
 
 #define ADD   (Value*)9223372036861355073ULL
