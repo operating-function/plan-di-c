@@ -440,6 +440,9 @@ void fprintf_value_internal(FILE *f, Value *v, int recur) {
       break;
     case IND:
       crash("fprintf_value_internal: got IND");
+    default:
+      fprintf(f, "!!");
+      break;
   }
 }
 
