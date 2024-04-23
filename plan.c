@@ -56,11 +56,6 @@ struct Value;
 
 typedef struct Value Value;
 
-typedef struct LawWeight {
-    u64 n_lets;
-    u64 n_calls;
-} LawWeight;
-
 typedef enum JetTag {
   J_ADD,
   J_SUB,
@@ -76,6 +71,11 @@ typedef struct Pin {
   Value *item;
   JetTag jet;
 } Pin;
+
+typedef struct LawWeight {
+    u64 n_lets;
+    u64 n_calls;
+} LawWeight;
 
 typedef struct Law {
   Value *n; // Always a nat
@@ -1704,33 +1704,35 @@ loop:
   return count;
 }
 
-void law_alloc_graph(Law l, Value **holes, Value **calls) {
-    int n_lets = l.w.n_lets;
-    int n_kals = l.w.n_calls;
-    int n_vals = n_lets + n_kals;
+typedef struct GrMem {
+  Value *holes;
+  Value *apps;
+} GrMem;
 
-    Value *mem  = (Value *)malloc(sizeof(Value) * n_vals);
-    Value *iter = mem;
+GrMem law_alloc_graph(Law l) {
+  int n_lets = l.w.n_lets;
+  int n_kals = l.w.n_calls;
+  int n_vals = n_lets + n_kals;
 
-    for (int i=0; i<n_lets; i++, iter++) {
-        iter->type = HOL;
-    }
+  Value *mem  = malloc(sizeof(Value) * n_vals);
+  Value *iter = mem;
 
-    for (int j=0; j<n_kals; j++, iter++) {
-        iter->type = APP;
-        iter->a.f = direct_zero;
-        iter->a.g = direct_zero;
-    }
+  for (int i=0; i<n_lets; i++, iter++)
+    iter->type = HOL;
 
-    *holes = mem;
-    *calls = (mem + n_lets);
+  for (int j=0; j<n_kals; j++, iter++) {
+    iter->type = APP;
+    iter->a.f = direct_zero;
+    iter->a.g = direct_zero;
+  }
+
+  return (GrMem){ .holes = mem, .apps = mem + n_lets };
 }
 
 void eval_law(Law l) {
   u64 args = get_direct(l.a); // this code is unreachable with bignat arity
   u64 lets = l.w.n_lets;
   int maxRef = args + lets;
-  Value *holes=NULL, *apps=NULL;
 
   {
     char lab[40];
@@ -1738,27 +1740,27 @@ void eval_law(Law l) {
     write_dot(lab);
   }
 
-  push_val(l.b);                     // save (law body)
-  law_alloc_graph(l, &holes, &apps); // gc
-  Value *b = pop();                  // restore (law body)
+  push_val(l.b);                  // save (law body)
+  GrMem mem = law_alloc_graph(l); // gc
+  Value *b = pop();               // restore (law body)
 
   write_dot("starting graph construction");
 
   if (lets) {
     // Add a black hole per let.
-    for (u64 i = 0; i < lets; i++) stack[sp++] = holes+i;
+    for (u64 i = 0; i < lets; i++) stack[sp++] = mem.holes+i;
     if (sp > STACK_SIZE) crash("eval_law: stack overflow");
 
     write_dot("added holes for lets");
 
     // Compute the graph of each let, and fill the corresponding hole.
     for (u64 i = 0; i < lets; i++) {
-      Value *next   = deref(TL(b));
-      Value *exp    = deref(TL(HD(b)));
-      b             = next;
-      Value *gr     = kal(maxRef, &apps, exp);
-      holes[i].type = IND;
-      holes[i].i    = gr;
+      Value *next       = deref(TL(b));
+      Value *exp        = deref(TL(HD(b)));
+      b                 = next;
+      Value *gr         = kal(maxRef, &mem.apps, exp);
+      mem.holes[i].type = IND;
+      mem.holes[i].i    = gr;
       write_dot("filled one");
     }
 
@@ -1766,7 +1768,7 @@ void eval_law(Law l) {
 
   write_dot("constructing body graph");
 
-  Value *gr = kal(maxRef, &apps, b);
+  Value *gr = kal(maxRef, &mem.apps, b);
   push_val(gr);                 // .. self args slots bodyGr
   write_dot("result");
   before_eval(0);
