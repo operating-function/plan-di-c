@@ -62,7 +62,6 @@ typedef struct LawWeight {
 } LawWeight;
 
 typedef enum JetTag {
-  J_NONE,
   J_ADD,
   J_SUB,
   J_MUL,
@@ -70,6 +69,7 @@ typedef enum JetTag {
   J_MOD,
   J_DEC,
   J_TRACE,
+  J_NONE,
 } JetTag;
 
 typedef struct Pin {
@@ -963,30 +963,6 @@ void to_nat(int i) {
   if (!IS_NAT(*p)) { *p = direct(0); }
 }
 
-void sub_jet() {
-  write_dot_extra("<sub_jet>", "", NULL);
-  to_nat(0);
-  to_nat(1);
-
-  if (trace_calls) {
-    for (int i=0; i<call_depth; i++) fprintf(stderr, " ");
-    fprintf(stderr, "(Sub.jet ");
-    fprintf_value(stderr, get(0));
-    fprintf(stderr, " ");
-    fprintf_value(stderr, get(1));
-    fprintf(stderr, ")\n");
-    call_depth++;
-  }
-
-  Sub();
-
-  if (trace_calls) call_depth--;
-
-  write_dot_extra("</sub_jet>", "", NULL);
-}
-
-void mul_jet() { to_nat(0); to_nat(1); Mul(); }
-
 void before_eval(int i) {
   if (!trace_calls) return;
   for (int i=0; i<call_depth; i++) fprintf(stderr, " ");
@@ -1003,34 +979,6 @@ void after_eval(int i) {
   fprintf_value(stderr, get_deref(i));
   fprintf(stderr, "\n");
 }
-
-
-
-void div_jet() {
-  to_nat(0); to_nat(1);
-
-  if (trace_calls) {
-    for (int i=0; i<call_depth; i++) fprintf(stderr, " ");
-    fprintf(stderr, "(Div.jet ");
-    fprintf_value(stderr, get(0));
-    fprintf(stderr, " ");
-    fprintf_value(stderr, get(1));
-    fprintf(stderr, ")\n");
-    call_depth++;
-  }
-
-  Div();
-
-  if (trace_calls) {
-    call_depth--;
-    for (int i=0; i<call_depth; i++) fprintf(stderr, " ");
-    fprintf(stderr, "=> ");
-    fprintf_value(stderr, get_deref(0));
-    fprintf(stderr, ")\n");
-  }
-}
-
-void mod_jet() { to_nat(0); to_nat(1); Mod(); }
 
 // causes a stack slot to be updated (and dereferenced) in place,
 // otherwise leaving the stack shape the same as it was before.
@@ -1056,30 +1004,6 @@ void eval_update(int i) {
   default:
     return;
   }
-}
-
-void dec_jet() {
-  write_dot_extra("<dec_jet>", "", NULL);
-  eval_update(0);
-  Dec();
-  write_dot_extra("</dec_jet>", "", NULL);
-}
-
-void add_jet() {
-  write_dot_extra("<add_jet>", "", NULL);
-  to_nat(0);
-  to_nat(1);
-  Add();
-  write_dot_extra("</add_jet>", "", NULL);
-}
-
-void trace_jet() {
-  push(0);                        // .. body msg msg
-  force();                        // .. body MSG
-  Value *msg = pop_deref();       // .. body
-  fprintf_value(stdout, msg);
-  fprintf(stdout, "\n");
-  eval();                         // .. *body
 }
 
 #define ADD   (Value*)9223372036861355073ULL
@@ -1855,15 +1779,53 @@ bool jet_dispatch(Value *self, u64 ar) {
   // assert (TY(self) == PIN);
 
   switch (self->p.jet) {
-  case J_ADD:   add_jet();   return true;
-  case J_SUB:   sub_jet();   return true;
-  case J_MUL:   mul_jet();   return true;
-  case J_DIV:   div_jet();   return true;
-  case J_MOD:   mod_jet();   return true;
-  case J_DEC:   dec_jet();   return true;
-  case J_TRACE: trace_jet(); return true;
-  case J_NONE:  return false;
-  default:      return false;
+
+  case J_ADD:
+    to_nat(0);
+    to_nat(1);
+    Add();
+    return true;
+
+  case J_SUB:
+    to_nat(0);
+    to_nat(1);
+    Sub();
+    return true;
+
+  case J_MUL:
+    to_nat(0);
+    to_nat(1);
+    Mul();
+    return true;
+
+  case J_DIV:
+    to_nat(0);
+    to_nat(1);
+    Div();
+    return true;
+
+  case J_MOD:
+    to_nat(0);
+    to_nat(1);
+    Mod();
+    return true;
+
+  case J_DEC:
+    eval_update(0);
+    Dec();
+    return true;
+
+  case J_TRACE:
+    push(0);                        // .. body msg msg
+    force();                        // .. body MSG
+    Value *msg = pop_deref();       // .. body
+    fprintf_value(stdout, msg);
+    fprintf(stdout, "\n");
+    eval();                         // .. *body
+    return true;
+
+  default:
+    return false;
   }
 }
 
