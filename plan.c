@@ -96,7 +96,6 @@ static bool trace_laws = 0;
 
 void write_dot(char *);
 
-void stack_grow(u64);
 void mk_app();
 void write_dot_extra(char*, char*, Value*);
 void clone();
@@ -1135,6 +1134,15 @@ void frag_load(Value **tab, u64 tabSz, int *use, u64 *acc, u64 **mor) {
   push_val(tab[ref]);
 }
 
+void stack_grow(u64 count) {
+  char lab[20];
+  sprintf(lab, "stack_grow %lu", count);
+  write_dot(lab);
+  for (u64 i = 0; i < count; i++) {
+    push_val(NULL);
+  }
+}
+
 void seed_load(u64 *buf) {
   u64 n_holes = buf[0];
   u64 n_bigs  = buf[1];
@@ -1514,33 +1522,6 @@ void swap() {
   push_val(n2);
 }
 
-void stack_grow(u64 count) {
-  char lab[20];
-  sprintf(lab, "stack_grow %lu", count);
-  write_dot(lab);
-  for (u64 i = 0; i < count; i++) {
-    push_val(NULL);
-  }
-}
-
-void stack_fill_holes(u64 offset, u64 count) {
-  char lab[40];
-  sprintf(lab, "stack_fill_holes offset:%lu count:%lu", offset, count);
-  write_dot(lab);
-  for (u64 i = 0; i < count; i++) {
-    *(get_ptr(i+offset)) = a_Hol();
-  }
-}
-
-void alloc(u64 count) {
-  char lab[20];
-  sprintf(lab, "alloc %lu", count);
-  write_dot(lab);
-  //
-  stack_grow(count);
-  stack_fill_holes(0, count);
-}
-
 void slide(u64 count) {
   char lab[20];
   sprintf(lab, "slide %lu", count);
@@ -1738,51 +1719,40 @@ void backout(u64 depth) {
 // kal expects `n` to be the right value for any var-refs in `x` to be at the
 // correct depth when they are subtracted from `n`. `n` must take `x` into
 // account.
-void kal(u64 envSz, u64 offset) {
-  char lab[40];
-  sprintf(lab, "kal(envSz=%lu, offset=%lu)", envSz, offset);
-  write_dot(lab);
+Value *kal(u64 maxRef, Value **pool, Value *x) {
+  push_val(x);
+  { char lab[80]; sprintf(lab, "kal(maxRef = %lu)", maxRef); write_dot(lab); }
+  sp--;
 
-  Value *x = get_deref(0);
-
-  if (IS_NAT(x)) {
-    // we know this is direct b/c < n
-    if (GTE(x, direct(envSz))) return;
-    u64 varIx  = get_direct(x);               // .. exp/@
-    u64 maxRef = envSz - 1;
-    push(offset + (maxRef - varIx));          // .. exp/@ param
-    slide(1);                                 // .. param
-    return;
+  if (is_direct(x)) {
+    u64 xv = get_direct(x);
+    if (xv > maxRef) return x;                   // unquoted constant
+    // { char lab[80]; sprintf(lab, "$%lu = get(%lu)", xv, (maxRef - xv)); write_dot(lab); }
+    // fprintf(stderr, "get(%lu)", (maxRef - xv));
+    return get(maxRef - xv);                     // var ref
   }
 
-  if (TY(x) == APP) {
-    Value *car = deref(HD(x));
-    if (TY(car) == APP) {
-      Value *caar = deref(HD(car));
-      if (EQZ(caar)) {
-        Value *f = deref(TL(car));
-        Value *y = deref(TL(x));                 // .. (0 f y)
-        push_val(y);                             // .. (0 f y) y
-        push_val(f);                             // .. (0 f y) y f
-        kal(envSz, offset+2);                    // .. (0 f y) y fGr
-        swap();                                  // .. (0 f y) fGr y
-        kal(envSz, offset+2);                    // .. (0 f y) fGr yGr
-        mk_app();                                // .. (0 f y) (fGr yGr)
-        slide(1);                                // .. (fGr yGr)
-        return;
-      }
-    }
+  if (x->type != APP) return x;                  // unquoted constant
 
-    if (EQZ(car)) {                              // .. (0 y)
-      pop();                                     // ..
-      push_val(deref(TL(x)));                    // .. y
-      return;
-    }
-  }
+  Value *hx = deref(HD(x));
 
-  // in any other case, the result is an unquoted constant value, in
-  // which case we can simply leave that on the top of the stack, since
-  // our argument is identical to the value that we want to return.
+  if (EQZ(hx)) return deref(TL(x));              // quoted constant
+
+  if (TY(hx) != APP) return x;                   // unquoted constant
+
+  Value *hhx = deref(HD(hx));
+
+  if (!EQZ(hhx)) return x;                       // unquoted constant
+
+  // (0 f g) is a call.
+
+  Value *f = deref(TL(hx));
+  Value *g = deref(TL(x));
+
+  Value *this_call = (*pool)++;                  // allocte (type is preset)
+  this_call->a.f = kal(maxRef, pool, f);
+  this_call->a.g = kal(maxRef, pool, g);
+  return this_call;
 }
 
 // 0 indicates no lets
@@ -1804,38 +1774,90 @@ loop:
   return count;
 }
 
+void law_alloc_graph(Law l, Value **holes, Value **calls) {
+    int n_lets = l.w.n_lets;
+    int n_kals = l.w.n_calls;
+    int n_vals = n_lets + n_kals;
+
+    Value *mem  = (Value *)malloc(sizeof(Value) * n_vals);
+    Value *iter = mem;
+
+    for (int i=0; i<n_lets; i++, iter++) {
+        iter->type = HOL;
+    }
+
+    for (int j=0; j<n_kals; j++, iter++) {
+        iter->type = APP;
+        iter->a.f = direct_zero;
+        iter->a.g = direct_zero;
+    }
+
+    *holes = mem;
+    *calls = (mem + n_lets);
+}
+
 void eval_law(Law l) {
-  u64 n    = get_direct(l.a) + 1; // this code is unreachable with bignat arity
-  u64 m    = l.w.n_lets;
-  Value *b = l.b;
+  u64 args = get_direct(l.a); // this code is unreachable with bignat arity
+  u64 lets = l.w.n_lets;
+  u64 kals = l.w.n_calls;
+  int maxRef = args + lets;
+  Value *holes=NULL, *apps=NULL;
 
-  char lab[40];
-  sprintf(lab, "eval_law %lu", n);
-  write_dot(lab);
-
-  //
-  stack_grow(m);
-  push_val(b);                 // .. self args slots lawBody
-  stack_fill_holes(1, m);
-  //
-  int envSz = (n + m);
-
-  for (u64 i = 0; i < m; i++) {
-                                // .. self args slots letExp
-    b = pop_deref();            // .. self args slots
-    push_val(deref(TL(b)));     // .. self args slots next
-    push_val(deref(TL(HD(b)))); // .. self args slots next letExp
-    kal(envSz, 2);              // .. self args slots next letGr
-    update(1 + (m-i));          // .. self args slots next
+  {
+    char lab[40];
+    sprintf(lab, "eval_law(arity=%lu, lets=%lu)", args, lets);
+    write_dot(lab);
   }
 
-                                // .. self args slots bExp
-  kal(envSz, 1);                // .. self args slots bGr
+  push_val(l.b);                     // save (law body)
+  law_alloc_graph(l, &holes, &apps); // gc
+  Value *b = pop();                  // restore (law body)
+
+  /*
+  for (int i=0; i<lets; i++) {
+      fprintf(stderr, "hole[%d] = ", i);
+      fprintf_value(stderr, holes+i);
+      fprintf(stderr, "\n");
+  }
+
+  for (int i=0; i<kals; i++) {
+      fprintf(stderr, "call[%d] = ", i);
+      fprintf_value(stderr, apps+i);
+      fprintf(stderr, "\n");
+  }
+  */
+
+  write_dot("starting graph construction");
+
+  if (lets) {
+    // Add a black hole per let.
+    for (u64 i = 0; i < lets; i++) stack[sp++] = holes+i;
+    if (sp > STACK_SIZE) crash("eval_law: stack overflow");
+
+    write_dot("added holes for lets");
+
+    // Compute the graph of each let, and fill the corresponding hole.
+    for (u64 i = 0; i < lets; i++) {
+      Value *next   = deref(TL(b));
+      Value *exp    = deref(TL(HD(b)));
+      b             = next;
+      Value *gr     = kal(maxRef, &apps, exp);
+      holes[i].type = IND;
+      holes[i].i    = gr;
+      write_dot("filled one");
+    }
+
+  }
+
+  write_dot("constructing body graph");
+
+  Value *gr = kal(maxRef, &apps, b);
+  push_val(gr);                 // .. self args slots bodyGr
+  write_dot("result");
   before_eval(0);
-  // exit(3);
-  eval();                       // .. self args slots bWhnf
+  eval();                       // .. self args slots bodyWhnf
   after_eval(0);
-  return slide(envSz);          // .. bWhnf
+  return slide(maxRef+1);       // .. bodyWhnf
 }
 
 // TODO store function pointer in PINs at construction time. then, the jet would
