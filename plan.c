@@ -944,18 +944,19 @@ void sub_jet() {
   to_nat(0);
   to_nat(1);
 
-  for (int i=0; i<call_depth; i++) fprintf(stderr, " ");
-  fprintf(stderr, "(Sub.jet ");
-  fprintf_value(stderr, get(0));
-  fprintf(stderr, " ");
-  fprintf_value(stderr, get(1));
-  fprintf(stderr, ")\n");
-
-  call_depth++;
+  if (trace_calls) {
+    for (int i=0; i<call_depth; i++) fprintf(stderr, " ");
+    fprintf(stderr, "(Sub.jet ");
+    fprintf_value(stderr, get(0));
+    fprintf(stderr, " ");
+    fprintf_value(stderr, get(1));
+    fprintf(stderr, ")\n");
+    call_depth++;
+  }
 
   Sub();
 
-  call_depth--;
+  if (trace_calls) call_depth--;
 
   write_dot_extra("</sub_jet>", "", NULL);
 }
@@ -984,23 +985,25 @@ void after_eval(int i) {
 void div_jet() {
   to_nat(0); to_nat(1);
 
-  for (int i=0; i<call_depth; i++) fprintf(stderr, " ");
-  fprintf(stderr, "(Div.jet ");
-  fprintf_value(stderr, get(0));
-  fprintf(stderr, " ");
-  fprintf_value(stderr, get(1));
-  fprintf(stderr, ")\n");
-
-  call_depth++;
+  if (trace_calls) {
+    for (int i=0; i<call_depth; i++) fprintf(stderr, " ");
+    fprintf(stderr, "(Div.jet ");
+    fprintf_value(stderr, get(0));
+    fprintf(stderr, " ");
+    fprintf_value(stderr, get(1));
+    fprintf(stderr, ")\n");
+    call_depth++;
+  }
 
   Div();
 
-  call_depth--;
-
-  for (int i=0; i<call_depth; i++) fprintf(stderr, " ");
-  fprintf(stderr, "=> ");
-  fprintf_value(stderr, get_deref(0));
-  fprintf(stderr, ")\n");
+  if (trace_calls) {
+    call_depth--;
+    for (int i=0; i<call_depth; i++) fprintf(stderr, " ");
+    fprintf(stderr, "=> ");
+    fprintf_value(stderr, get_deref(0));
+    fprintf(stderr, ")\n");
+  }
 }
 
 void mod_jet() { to_nat(0); to_nat(1); Mod(); }
@@ -1718,9 +1721,9 @@ void kal(u64 envSz, u64 offset) {
         Value *y = deref(TL(x));                 // .. (0 f y)
         push_val(y);                             // .. (0 f y) y
         push_val(f);                             // .. (0 f y) y f
-        kal(envSz, offset+2);                   // .. (0 f y) y fGr
+        kal(envSz, offset+2);                    // .. (0 f y) y fGr
         swap();                                  // .. (0 f y) fGr y
-        kal(envSz, offset+2);                   // .. (0 f y) fGr yGr
+        kal(envSz, offset+2);                    // .. (0 f y) fGr yGr
         mk_app();                                // .. (0 f y) (fGr yGr)
         slide(1);                                // .. (fGr yGr)
         return;
@@ -1850,7 +1853,7 @@ bool law_step(u64 depth, bool should_jet) {
     setup_call(depth);
     if (!is_direct(AR(self))) crash("impossible: called law with huge arity");
     u64 ar = get_direct(AR(self));
-    if ((should_jet) && (jet_dispatch(self, ar))) {
+    if (should_jet && jet_dispatch(self, ar)) {
       // if we should jet, we call jet_dispatch. it tells us if it fired a jet,
       // in which case the stack will no longer have arguments and will have the
       // jet's return value at its top.
