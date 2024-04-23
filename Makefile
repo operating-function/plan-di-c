@@ -1,4 +1,4 @@
-all: plan plan_with_tracing
+all: plan
 
 .PHONY: clean
 clean:
@@ -16,9 +16,6 @@ linked_list_test: linked_list.o linked_list_test.c
 
 plan: bsdnt/build/nn.o bsdnt/build/zz0.o bsdnt/build/nn_linear.o bsdnt/build/nn_quadratic.o bsdnt/build/nn_subquadratic.o bsdnt/build/helper.o linked_list.o plan.c
 	gcc $^ -o $@ -lm
-
-plan_with_tracing: plan_with_tracing.c
-	gcc $^ -o $@
 
 plan_debug: bsdnt/build/nn.o bsdnt/build/zz0.o bsdnt/build/nn_linear.o bsdnt/build/nn_quadratic.o bsdnt/build/nn_subquadratic.o bsdnt/build/helper.o linked_list.o plan.c
 	gcc -g -O0 $^ -o $@ -lm
