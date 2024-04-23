@@ -51,7 +51,9 @@ Div="($MkPin ($MkLaw %Div 2 1))"
 
 # TODO fix Mod, this is wrong
 Mod="($MkPin ($MkLaw %Mod 2 1))"
-# Div="($MkPin ($MkLaw %Div 2 (
+
+BaseDec="($Case 0 0 0 0 $id)"
+DumbDec="($MkLaw %DumbDec 1 (0 ($Case 0 0 0 0 $id) 1))"
 
 LawDec="($MkLaw %Dec 1 (0 (0 ($NatCase (0 0)) $id) 1))"
 
@@ -108,6 +110,9 @@ check "(%p 1)" "(#3 7 7 7 7 %p 2)"
 echo "basic"
 check "5" "($Inc 4)"
 check "1" "($Inc ($PlanCase 1 0 0 0 (4 9)))"
+
+check "7" "($BaseDec 8)"
+check "7" "($DumbDec 8)"
 check "7" "($LawDec 8)"
 check "7" "($Dec 8)"
 check "8" "($MkLaw 1 2 ($Inc 7) 3 4)"
