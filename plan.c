@@ -61,6 +61,10 @@ typedef struct LawWeight {
     u64 n_calls;
 } LawWeight;
 
+typedef struct Pin {
+  Value *item;
+} Pin;
+
 typedef struct Law {
   Value *n; // Always a nat
   Value *a; // Always a nat
@@ -76,7 +80,7 @@ typedef struct App {
 struct Value {
   Type type;
   union {
-    Value *p; // PIN
+    Pin p;    // PIN
     Law l;    // LAW
     App a;    // APP
     BigNat n; // NAT
@@ -209,7 +213,7 @@ static inline Value *IT(Value *x) {
   #ifdef CHECK_TAGS
   ck_pin("IT", x);
   #endif
-  return x->p;
+  return x->p.item;
 };
 
 static inline Value *NM(Value *x) {
@@ -543,7 +547,7 @@ static inline Value *direct(u64 x) {
 Value *a_Pin(Value *v) {
   Value *res = (Value *)malloc(sizeof(Value));
   res->type = PIN;
-  res->p = v;
+  res->p = (Pin){ .item = v };
   return res;
 }
 
@@ -2011,7 +2015,7 @@ bool unwind(u64 depth) {
       return law_step(depth, false);
     }
     case PIN: {
-      Value *item = deref(x->p);
+      Value *item = deref(x->p.item);
       switch (TY(item)) {
         case NAT: {
           u64 arity = prim_arity(item);
