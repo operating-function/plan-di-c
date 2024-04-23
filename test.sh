@@ -330,6 +330,19 @@ check "(0 (0 %fn 1 544897400) 0 3 %LWORD)" "(<lexerTest> {xyz })"
 
 ################################################################################
 
+echo 'Parsing Rex (slow)'
+
+time ./plan <<EOF
+(<rexTrial>
+ (0 {= (Pin i)            | ##0 i}
+    {= (Law n a b)        | ##1 n a b}
+    {= (Inc m)            | ##2 m}
+    {= (Case p l a z m o) | ##3 p l a z m o}
+    {= (Die x)            | ##die x  ; Calling a primop above 3 is a crash.}))
+EOF
+
+################################################################################
+
 if [[ "$FAILED" -eq 0 ]]; then
   echo "all tests passed!"
 elif [[ "$FAILED" -eq 1 ]]; then
