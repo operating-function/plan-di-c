@@ -1853,8 +1853,8 @@ void eval_law(Law l) {
   return slide(maxRef+1);       // .. bodyWhnf
 }
 
-bool jet_dispatch(Value *self, u64 ar) {
-  assert (TY(self) == PIN);
+void run_law(Value *self, u64 ar) {
+  if (TY(self) != PIN) goto no_jet;
 
   switch (self->p.jet) {
 
@@ -1862,36 +1862,36 @@ bool jet_dispatch(Value *self, u64 ar) {
     to_nat(0);
     to_nat(1);
     Add();
-    return true;
+    return;
 
   case J_SUB:
     to_nat(0);
     to_nat(1);
     Sub();
-    return true;
+    return;
 
   case J_MUL:
     to_nat(0);
     to_nat(1);
     Mul();
-    return true;
+    return;
 
   case J_DIV:
     to_nat(0);
     to_nat(1);
     Div();
-    return true;
+    return;
 
   case J_MOD:
     to_nat(0);
     to_nat(1);
     Mod();
-    return true;
+    return;
 
   case J_DEC:
     eval_update(0);
     Dec();
-    return true;
+    return;
 
   case J_TRACE:
     push(0);                        // .. body msg msg
@@ -1900,11 +1900,16 @@ bool jet_dispatch(Value *self, u64 ar) {
     fprintf_value(stdout, msg);
     fprintf(stdout, "\n");
     eval();                         // .. *body
-    return true;
+    return;
 
   default:
-    return false;
+    break;
   }
+
+ no_jet:
+  push_val(self);
+  flip_stack(ar+1);
+  eval_law(FUNC(self));
 }
 
 JetTag jet_match(Value *item) {
@@ -1939,7 +1944,7 @@ JetTag jet_match(Value *item) {
 }
 
 // returns true if it eval-ed
-bool law_step(u64 depth, bool should_jet) {
+bool law_step(u64 depth) {
   #if ENABLE_GRAPHVIZ
   char lab[40];
   sprintf(lab, "law_step %lu", depth);
@@ -1972,16 +1977,7 @@ bool law_step(u64 depth, bool should_jet) {
     if (!is_direct(AR(self))) crash("impossible: called law with huge arity");
     u64 ar = get_direct(AR(self));
 
-    if (should_jet && jet_dispatch(self, ar)) {
-      // if we should jet, we call jet_dispatch. it tells us if it fired a jet,
-      // in which case the stack will no longer have arguments and will have the
-      // jet's return value at its top.
-    } else {
-      // if no match, perform regular law evaluation
-      push_val(self);
-      flip_stack(ar+1);
-      eval_law(FUNC(self));
-    }
+    run_law(self, ar);
 
     if (TRACE_CALLS) {
       call_depth--;
@@ -2075,7 +2071,7 @@ bool unwind(u64 depth) {
       goto again;
     }
     case LAW: {
-      return law_step(depth, false);
+      return law_step(depth);
     }
     case PIN: {
       Value *item = deref(x->p.item);
@@ -2113,7 +2109,7 @@ bool unwind(u64 depth) {
           goto again;
         }
         case LAW: {
-          return law_step(depth, true);
+          return law_step(depth);
         }
         case HOL: {
           crash("unwind: <loop>");
