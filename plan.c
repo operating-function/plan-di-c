@@ -116,23 +116,27 @@ void write_dot(char *);
 
 Value *normalize (Value*);
 JetTag jet_match(Value*);
-void mk_app();
-void write_dot_extra(char*, char*, Value*);
-void clone();
-static inline Value *direct(u64);
+
+static Value *direct(u64);
+
+static void mk_app();
+static void clone();
+static Value *pop();
+static Value *get();
+static Value *get_deref();
+static Value *pop_deref();
+static void slide(u64);
+static void update(u64);
+static void push(u64);
+static void push_val(Value*);
+static Value **get_ptr(u64);
+
 void BigPlusDirect(u64, u64);
-Value *pop();
 void force();
-Value *get();
-Value *get_deref();
-Value *pop_deref();
-void slide(u64);
-void update(u64);
-void push(u64);
-void push_val(Value*);
 bool eval();
 void eval_update(int);
-Value **get_ptr(u64);
+
+void write_dot_extra(char*, char*, Value*);
 
 void frag_load(Value**, u64, int*, u64*, u64**);
 Value *read_exp();
@@ -165,7 +169,7 @@ Value *direct_zero = (Value*) 9223372036854775808ull;
 Value *direct_one  = (Value*) 9223372036854775809ull;
 Value *direct_two  = (Value*) 9223372036854775810ull;
 
-bool is_direct(Value *x) {
+static inline bool is_direct(Value *x) {
   return (((u64) x) & ptr_nat_mask) != 0;
 }
 
@@ -178,7 +182,7 @@ static inline u64 get_direct(Value *x) {
 
 #define CHECK_TAGS 1
 
-Value *deref(Value *x);
+static Value *deref(Value *x);
 
 static inline void ck_pin(char *fn_nm, Value *x) {
   char s[14];
@@ -968,7 +972,7 @@ typedef struct Jet {
   JetTag tag;
 } Jet;
 
-void to_nat(int i) {
+static inline void to_nat(int i) {
   eval_update(i);
   Value **p = get_ptr(i);
   if (!IS_NAT(*p)) { *p = direct(0); }
@@ -1196,33 +1200,33 @@ u64 *load_seed_file (const char *filename, u64 *sizeOut) {
 ////////////////////////////////////////////////////////////////////////////////
 //  Interpreter stack fns
 
-Value *deref(Value *x) {
+static inline Value *deref(Value *x) {
   while (TY(x) == IND) {
     x = IN(x);
   }
   return x;
 }
 
-Value *pop() {
+static inline Value *pop() {
   if (sp == 0) crash("pop: empty stack");
   sp--;
   return stack[sp];
 }
 
-Value *pop_deref() {
+static inline Value *pop_deref() {
   return deref(pop());
 }
 
-Value **get_ptr(u64 idx) {
+static inline Value **get_ptr(u64 idx) {
   if (idx >= sp) crash("get: indexed off stack");
   return &stack[(sp-1)-idx];
 }
 
-Value *get(u64 idx) {
+static inline Value *get(u64 idx) {
   return *get_ptr(idx);
 }
 
-Value *get_deref(u64 idx) {
+static inline Value *get_deref(u64 idx) {
   return deref(get(idx));
 }
 
@@ -1406,7 +1410,7 @@ void write_dot(char *label) {
 ////////////////////////////////////////////////////////////////////////////////
 //  Interpreter
 
-void update(u64 idx) {
+static void update(u64 idx) {
   #if ENABLE_GRAPHVIZ
   char lab[20];
   sprintf(lab, "update %lu", idx);
@@ -1423,7 +1427,7 @@ void update(u64 idx) {
   pop();
 }
 
-inline void push_val(Value *x) {
+static inline void push_val(Value *x) {
   #if ENABLE_GRAPHVIZ
   char extra[50];
   char *x_p = p_ptr(x);
@@ -1437,7 +1441,7 @@ inline void push_val(Value *x) {
   sp++;
 }
 
-inline void push(u64 idx) {
+static inline void push(u64 idx) {
   #if ENABLE_GRAPHVIZ
   char lab[20];
   sprintf(lab, "push %lu", idx);
@@ -1447,7 +1451,7 @@ inline void push(u64 idx) {
   push_val(get_deref(idx));
 }
 
-inline void clone() {
+static inline void clone() {
   #if ENABLE_GRAPHVIZ
   write_dot("clone");
   # endif
@@ -1457,7 +1461,7 @@ inline void clone() {
 
 // before: ..rest f x
 // after:  ..rest (f x)
-void mk_app() {
+static inline void mk_app() {
   #if ENABLE_GRAPHVIZ
   write_dot("mk_app");
   #endif
@@ -1470,7 +1474,7 @@ void mk_app() {
 
 // before: ..rest x f
 // after:  ..rest (f x)
-void mk_app_rev() {
+static inline void mk_app_rev() {
   #if ENABLE_GRAPHVIZ
   write_dot("mk_app_rev");
   #endif
@@ -1483,7 +1487,7 @@ void mk_app_rev() {
 
 // before: ..rest x y
 // after:  ..rest y x
-void swap() {
+static inline void swap() {
   Value *n1 = pop();
   Value *n2 = pop();
   push_val(n1);
