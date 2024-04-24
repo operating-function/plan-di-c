@@ -1827,8 +1827,9 @@ void eval_law(Law l) {
 
     // Compute the graph of each let, and fill the corresponding hole.
     for (u64 i = 0; i < lets; i++) {
-      Value *next       = deref(TL(b));
-      Value *exp        = deref(TL(HD(b)));
+      // (1 exp next)
+      Value *next       = TL(b);
+      Value *exp        = TL(HD(b));
       b                 = next;
       Value *gr         = kal(maxRef, &mem.apps, exp);
       mem.holes[i].type = IND;
