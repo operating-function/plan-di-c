@@ -312,11 +312,15 @@ void check_nat(Value *v) {
   if (n.size == 0) crash("check_nat: bignat zero");
 
   if (n.size == 1) {
-    if (n.buf[0] < ptr_nat_mask) crash("check_nat: direct atom encoded as bignat");
+    if (n.buf[0] < ptr_nat_mask) {
+      crash("check_nat: direct atom encoded as bignat");
+    }
     return;
   }
 
-  if (n.buf[n.size - 1] == 0) crash("check_nat: bad size (high word is zero)");
+  if (n.buf[n.size - 1] == 0) {
+    crash("check_nat: bad size (high word is zero)");
+  }
 }
 
 void check_value(Value *v) {
