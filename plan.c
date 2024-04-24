@@ -225,7 +225,7 @@ static inline bool IS_NAT(Value *x) {
 
 static inline Value *IT(Value *x) {
   x = deref(x);
-  #ifdef CHECK_TAGS
+  #if CHECK_TAGS
   ck_pin("IT", x);
   #endif
   return x->p.item;
@@ -233,7 +233,7 @@ static inline Value *IT(Value *x) {
 
 static inline Value *NM(Value *x) {
   x = deref(x);
-  #ifdef CHECK_TAGS
+  #if CHECK_TAGS
   ck_law("NM", x);
   #endif
   if (x->type == PIN) return NM(x->i);
@@ -242,7 +242,7 @@ static inline Value *NM(Value *x) {
 
 static inline Value *AR(Value *x) {
   x = deref(x);
-  #ifdef CHECK_TAGS
+  #if CHECK_TAGS
   ck_law("AR", x);
   #endif
   if (x->type == PIN) return AR(x->i);
@@ -251,7 +251,7 @@ static inline Value *AR(Value *x) {
 
 static inline Value *BD(Value *x) {
   x = deref(x);
-  #ifdef CHECK_TAGS
+  #if CHECK_TAGS
   ck_law("BD", x);
   #endif
   if (x->type == PIN) return BD(x->i);
@@ -266,7 +266,7 @@ static inline Law FUNC(Value *x) {
 
 static inline Value *HD(Value *x) {
   x = deref(x);
-  #ifdef CHECK_TAGS
+  #if CHECK_TAGS
   ck_app("HD", x);
   #endif
   return x->a.f;
@@ -274,7 +274,7 @@ static inline Value *HD(Value *x) {
 
 static inline Value *TL(Value *x) {
   x = deref(x);
-  #ifdef CHECK_TAGS
+  #if CHECK_TAGS
   ck_app("TL", x);
   #endif
   return x->a.g;
@@ -283,14 +283,14 @@ static inline Value *TL(Value *x) {
 static inline BigNat BN(Value *x) {
   if (is_direct(x)) crash("BN: got direct");
   x = deref(x);
-  #ifdef CHECK_TAGS
+  #if CHECK_TAGS
   ck_nat("BN", x);
   #endif
   return x->n;
 };
 
 static inline Value *IN(Value *x) {
-  #ifdef CHECK_TAGS
+  #if CHECK_TAGS
   ck_ind("IN", x);
   #endif
   return x->i;
@@ -1679,20 +1679,20 @@ Value *kal(u64 maxRef, Value **pool, Value *x) {
 
   if (x->type != APP) return x;                  // unquoted constant
 
-  Value *hx = deref(HD(x));
+  Value *hx = HD(x);
 
-  if (EQZ(hx)) return deref(TL(x));              // quoted constant
+  if (EQZ(hx)) return TL(x);                     // quoted constant
 
   if (TY(hx) != APP) return x;                   // unquoted constant
 
-  Value *hhx = deref(HD(hx));
+  Value *hhx = HD(hx);
 
   if (!EQZ(hhx)) return x;                       // unquoted constant
 
   // (0 f g) is a call.
 
-  Value *f = deref(TL(hx));
-  Value *g = deref(TL(x));
+  Value *f = TL(hx);
+  Value *g = TL(x);
 
   Value *this_call = (*pool)++;                  // allocte (type is preset)
   this_call->a.f = kal(maxRef, pool, f);
