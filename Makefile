@@ -20,4 +20,4 @@ plan: bsdnt/build/nn.o bsdnt/build/zz0.o bsdnt/build/nn_linear.o bsdnt/build/nn_
 	gcc $(CFLAGS) $^ -o $@ -lm
 
 plan_debug: bsdnt/build/nn.o bsdnt/build/zz0.o bsdnt/build/nn_linear.o bsdnt/build/nn_quadratic.o bsdnt/build/nn_subquadratic.o bsdnt/build/helper.o linked_list.o plan.c
-	gcc -g -O0 $^ -o $@ -lm
+	gcc -pg -g -O0 $^ -o $@ -lm

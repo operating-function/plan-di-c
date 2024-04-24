@@ -51,7 +51,7 @@ void *realloc(void *ptr, size_t sz) {
 void *slow_malloc(size_t bytes) {
   if (bytes % 8) bytes += (8 - (bytes % 8));
  again:
-  // fprintf(stderr, "malloc(%lu, heap_used=%lu, heap_size=%lu)\n", bytes, heap_used, heap_size);
+  // fprintf(stderr, "malloc(%lu, heap=%p, heap_used=%lu, heap_size=%lu)\n", bytes, heap, heap_used, heap_size);
   if (heap_used + bytes > heap_size) {
     if ((void*)(-1) == sbrk(HEAP_CHUNK))
       crash("sbrk failed");
@@ -83,9 +83,24 @@ void *reallocarray(void *ptr, size_t nmemb, size_t size) {
   crash("reallocarray(): not implemented");
 }
 
-void *calloc(size_t nmemb, size_t size) { return our_calloc(nmemb, size); }
-void *malloc(size_t bytes)              { return slow_malloc(bytes); }
 void free(void *ptr)                    { return; }
+
+void heap_init () {
+  heap = sbrk(0);
+  heap_size = HEAP_CHUNK;
+  heap_used = 0;
+  sbrk(HEAP_CHUNK);
+}
+
+void *calloc(size_t nmemb, size_t size) {
+  if (heap == NULL) heap_init();
+  return our_calloc(nmemb, size);
+}
+
+void *malloc(size_t bytes) {
+  if (heap == NULL) heap_init();
+  return slow_malloc(bytes);
+}
 
 static inline void *our_nn_init(size_t n_words) {
   return our_malloc_words(n_words * 8);
@@ -2410,10 +2425,7 @@ Value *read_exp_top() {
 }
 
 int main (void) {
-  heap = sbrk(0);
-  heap_size = HEAP_CHUNK;
-  heap_used = 0;
-  sbrk(HEAP_CHUNK);
+  if (heap == NULL) { heap_init(); }
 
   // Value *x = direct(UINT64_MAX);
   // Value *y = direct(3);
