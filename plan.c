@@ -169,10 +169,11 @@ struct Value {
 
 int call_depth = 0;
 
-#define TRACE_JET_MATCHES 0
-#define TRACE_CALLS       0
-#define TRACE_LAWS        0
-#define ENABLE_GRAPHVIZ   0
+#define TRACE_JET_MATCHES  0
+#define TRACE_CALLS        0
+#define TRACE_LAWS         0
+#define ENABLE_GRAPHVIZ    0
+#define STACK_BOUNDS_CHECK 1
 
 static bool enable_graphviz = 0;
 
@@ -1492,7 +1493,9 @@ static inline void push_val(Value *x) {
   write_dot_extra("push_val", extra, x);
   #endif
 
+  #if STACK_BOUNDS_CHECK
   if ((sp+1) > STACK_SIZE) crash("push_val: stack overflow");
+  #endif
   stack[sp] = x;
   sp++;
 }
@@ -1875,7 +1878,9 @@ void eval_law(Law l) {
   if (lets) {
     // Add a black hole per let.
     for (u64 i = 0; i < lets; i++) stack[sp++] = mem.holes+i;
+    #if STACK_BOUNDS_CHECK
     if (sp > STACK_SIZE) crash("eval_law: stack overflow");
+    #endif
 
     #if ENABLE_GRAPHVIZ
     write_dot("added holes for lets");
