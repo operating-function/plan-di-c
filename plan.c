@@ -189,6 +189,7 @@ int call_depth = 0;
 #define TRACE_LAWS         0
 #define ENABLE_GRAPHVIZ    0
 #define STACK_BOUNDS_CHECK 1
+#define CHECK_TAGS         0
 
 static bool enable_graphviz = 0;
 
@@ -251,8 +252,6 @@ static inline u64 get_direct(Value *x) {
 
 ////////////////////////////////////////////////////////////////////////////////
 //  Accessors
-
-#define CHECK_TAGS 1
 
 static Value *deref(Value *x);
 
