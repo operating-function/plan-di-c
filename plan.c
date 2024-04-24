@@ -113,6 +113,7 @@ static bool enable_graphviz = 0;
 
 void write_dot(char *);
 
+Value *normalize (Value*);
 JetTag jet_match(Value*);
 void mk_app();
 void write_dot_extra(char*, char*, Value*);
@@ -1482,36 +1483,49 @@ void mk_pin() {
   write_dot("mk_pin");
   Value *top = pop_deref();
   if (TY(top) == HOL) crash("mk_pin: hol");
-  Value *p = a_Pin(top);
+  Value *p = a_Pin(normalize(top));
   push_val(p);
 }
 
-// TODO: When constructing law bodies, remove all indirections, and then
-// skip all of the derefs here.
 void weigh_law(bool on_spine, LawWeight *out, Value *x) {
  again:
   if (TY(x) != APP) return;                       // neither a let nor a call
-  Value *car = deref(HD(x));
+  Value *car = HD(x);
 
   if (TY(car) != APP) return;                     // neither a let nor a call
-  Value *caar = deref(HD(car));
+  Value *caar = HD(car);
 
   if (on_spine && EQ1(caar)) {                    // ((1 x) b)
     out->n_lets++;                                // this is a let
-    weigh_law(0, out, deref(TL(car)));            // weigh the let expr
-    x = deref(TL(x));                             // weigh the let body
+    weigh_law(0, out, TL(car));                   // weigh the let expr
+    x = TL(x);                                    // weigh the let body
     goto again;
   }
 
   if (EQZ(caar)) {                                // ((0 f) x)
     out->n_calls++;                               // this is a call
     on_spine = false;                             // no more lets
-    weigh_law(0, out, deref(TL(car)));            // weigh the call function
-    x = deref(TL(x));                             // weigh the call argument
+    weigh_law(0, out, TL(car));                   // weigh the call function
+    x = TL(x);                                    // weigh the call argument
     goto again;
   }
 
   return;                                         // neither a let nor a call
+}
+
+Value *normalize (Value *v) {
+ again:
+  if (is_direct(v)) return v;
+  switch (v->type) {
+  case HOL: crash("plan_case: HOL");
+  case IND: v = IN(v); goto again;
+  case APP:
+    v->a.f = normalize(v->a.f);
+    v->a.g = normalize(v->a.g);
+    return v;
+  default: // P/L/N: already normalized
+    return v;
+  }
 }
 
 void mk_law() {
@@ -1521,7 +1535,7 @@ void mk_law() {
 
   to_nat(1); // a
   to_nat(2); // n
-  Value *b = pop_deref();
+  Value *b = normalize(pop_deref());
   Value *a = pop_deref();
   Value *n = pop_deref();
 
