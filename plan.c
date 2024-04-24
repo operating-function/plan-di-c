@@ -106,8 +106,9 @@ struct Value {
 int call_depth = 0;
 
 #define TRACE_JET_MATCHES 0
-#define TRACE_CALLS 0
-#define TRACE_LAWS 0
+#define TRACE_CALLS       0
+#define TRACE_LAWS        0
+#define ENABLE_GRAPHVIZ   0
 
 static bool enable_graphviz = 0;
 
@@ -741,7 +742,9 @@ void BigMinusDirect(Value *big, u64 direct) {
 }
 
 void Dec() {
+  #if ENABLE_GRAPHVIZ
   write_dot_extra("<Dec>", "", NULL);
+  #endif
 
   Value *v = pop_deref(0);
 
@@ -754,7 +757,9 @@ void Dec() {
   BigMinusDirect(v, 1);
 
  end:
+  #if ENABLE_GRAPHVIZ
   write_dot_extra("</Dec>", "", NULL);
+  #endif
 }
 
 void Sub() {
@@ -987,7 +992,9 @@ void after_eval(int i) {
 void eval_update(int i) {
   Value **p = get_ptr(i);
  again:
+  #if ENABLE_GRAPHVIZ
   write_dot_extra("<eval_update>", "", NULL);
+  #endif
   if (is_direct(*p)) return;
   switch ((**p).type) {
   case IND:
@@ -1079,9 +1086,11 @@ void frag_load(Value **tab, u64 tabSz, int *use, u64 *acc, u64 **mor) {
 }
 
 void stack_grow(u64 count) {
+  #if ENABLE_GRAPHVIZ
   char lab[20];
   sprintf(lab, "stack_grow %lu", count);
   write_dot(lab);
+  #endif
   for (u64 i = 0; i < count; i++) {
     push_val(NULL);
   }
@@ -1148,11 +1157,9 @@ void seed_load(u64 *buf) {
   u64 *more = &buf[used+1];
 
   for (int i=0; i<n_frags; i++) {
-    write_dot("<frag>");
     u64 tabSz = (next_ref - tab);
     frag_load_cell(tab, tabSz, &use, &acc, &more);
     *next_ref++ = pop();
-    write_dot("</frag>");
   }
 
   // The top-most entry is the result
@@ -1396,10 +1403,12 @@ void write_dot(char *label) {
 //  Interpreter
 
 void update(u64 idx) {
+  #if ENABLE_GRAPHVIZ
   char lab[20];
   sprintf(lab, "update %lu", idx);
   write_dot(lab);
-  //
+  #endif
+
   Value *head = get_deref(0);
   Value *v    = get_deref(idx);
   if (head != v) {
@@ -1410,35 +1419,44 @@ void update(u64 idx) {
   pop();
 }
 
-void push_val(Value *x) {
+inline void push_val(Value *x) {
+  #if ENABLE_GRAPHVIZ
   char extra[50];
   char *x_p = p_ptr(x);
   sprintf(extra, "i[color=red];\ni -> %s", x_p);
   free(x_p);
   write_dot_extra("push_val", extra, x);
+  #endif
+
   if ((sp+1) > STACK_SIZE) crash("push_val: stack overflow");
   stack[sp] = x;
   sp++;
 }
 
-void push(u64 idx) {
+inline void push(u64 idx) {
+  #if ENABLE_GRAPHVIZ
   char lab[20];
   sprintf(lab, "push %lu", idx);
   write_dot(lab);
-  //
+  #endif
+
   push_val(get_deref(idx));
 }
 
-void clone() {
+inline void clone() {
+  #if ENABLE_GRAPHVIZ
   write_dot("clone");
-  //
+  # endif
+
   push_val(get_deref(0));
 }
 
 // before: ..rest f x
 // after:  ..rest (f x)
 void mk_app() {
+  #if ENABLE_GRAPHVIZ
   write_dot("mk_app");
+  #endif
   //
   Value *x = pop();
   Value *f = pop();
@@ -1449,7 +1467,9 @@ void mk_app() {
 // before: ..rest x f
 // after:  ..rest (f x)
 void mk_app_rev() {
+  #if ENABLE_GRAPHVIZ
   write_dot("mk_app_rev");
+  #endif
   //
   Value *f = pop();
   Value *x = pop();
@@ -1467,20 +1487,27 @@ void swap() {
 }
 
 void slide(u64 count) {
+  #if ENABLE_GRAPHVIZ
   char lab[20];
   sprintf(lab, "slide %lu", count);
   write_dot(lab);
+  #endif
   //
   Value *top = get_deref(0);
   sp -= count;
   stack[sp-1] = top;
   //
+  #if ENABLE_GRAPHVIZ
   sprintf(lab, "post slide %lu", count);
   write_dot(lab);
+  #endif
 }
 
 void mk_pin() {
+  #if ENABLE_GRAPHVIZ
   write_dot("mk_pin");
+  #endif
+
   Value *top = pop_deref();
   if (TY(top) == HOL) crash("mk_pin: hol");
   Value *p = a_Pin(normalize(top));
@@ -1529,7 +1556,9 @@ Value *normalize (Value *v) {
 }
 
 void mk_law() {
+  #if ENABLE_GRAPHVIZ
   write_dot("mk_law");
+  #endif
 
   Value *res = (Value *)malloc(sizeof(Value));
 
@@ -1554,7 +1583,10 @@ void mk_law() {
 }
 
 void incr() {
+  #if ENABLE_GRAPHVIZ
   write_dot("incr");
+  #endif
+
   Value *x = pop_deref();
 
   if (is_direct(x)) {
@@ -1572,7 +1604,10 @@ void incr() {
 }
 
 void prim_case() {
+  #if ENABLE_GRAPHVIZ
   write_dot("prim_case");
+  #endif
+
   Value *o = pop_deref();
   Value *m = pop_deref();
   Value *z = pop_deref();
@@ -1618,10 +1653,12 @@ void prim_case() {
 }
 
 void setup_call(u64 depth) {
+  #if ENABLE_GRAPHVIZ
   char lab[20];
   sprintf(lab, "setup_call %lu", depth);
   write_dot(lab);
-  //
+  #endif
+
   // setup the call by pulling the TLs out of all apps which we have
   // unwound.
   for (u64 i = 0; i < depth; i++) {
@@ -1630,9 +1667,11 @@ void setup_call(u64 depth) {
 }
 
 void flip_stack(u64 depth) {
+  #if ENABLE_GRAPHVIZ
   char lab[20];
   sprintf(lab, "flip_stack %lu", depth);
   write_dot(lab);
+  #endif
   //
   if (depth == 0) return;
   Value *tmp;
@@ -1645,9 +1684,11 @@ void flip_stack(u64 depth) {
 }
 
 void handle_oversaturated_application(u64 count) {
+  #if ENABLE_GRAPHVIZ
   char lab[50];
   sprintf(lab, "handle_oversaturated_application %lu", count);
   write_dot(lab);
+  #endif
   //
   // if our application is oversaturated, `depth` will exceed the arity. in this
   // case, we want to re-assemble the apps, and eval the result.
@@ -1658,9 +1699,11 @@ void handle_oversaturated_application(u64 count) {
 }
 
 void backout(u64 depth) {
+  #if ENABLE_GRAPHVIZ
   char lab[20];
   sprintf(lab, "backout %lu", depth);
   write_dot(lab);
+  #endif
   //
   // pop stack of unwound apps.
   for (u64 i = 0; i < depth; i++) {
@@ -1749,24 +1792,30 @@ void eval_law(Law l) {
   u64 lets = l.w.n_lets;
   int maxRef = args + lets;
 
+  #if ENABLE_GRAPHVIZ
   {
     char lab[40];
     sprintf(lab, "eval_law(arity=%lu, lets=%lu)", args, lets);
     write_dot(lab);
   }
+  #endif
 
   push_val(l.b);                  // save (law body)
   GrMem mem = law_alloc_graph(l); // gc
   Value *b = pop();               // restore (law body)
 
+  #if ENABLE_GRAPHVIZ
   write_dot("starting graph construction");
+  #endif
 
   if (lets) {
     // Add a black hole per let.
     for (u64 i = 0; i < lets; i++) stack[sp++] = mem.holes+i;
     if (sp > STACK_SIZE) crash("eval_law: stack overflow");
 
+    #if ENABLE_GRAPHVIZ
     write_dot("added holes for lets");
+    #endif
 
     // Compute the graph of each let, and fill the corresponding hole.
     for (u64 i = 0; i < lets; i++) {
@@ -1776,16 +1825,20 @@ void eval_law(Law l) {
       Value *gr         = kal(maxRef, &mem.apps, exp);
       mem.holes[i].type = IND;
       mem.holes[i].i    = gr;
+
+      #if ENABLE_GRAPHVIZ
       write_dot("filled one");
+      #endif
     }
 
   }
 
+  #if ENABLE_GRAPHVIZ
   write_dot("constructing body graph");
+  #endif
 
   Value *gr = kal(maxRef, &mem.apps, b);
   push_val(gr);                 // .. self args slots bodyGr
-  write_dot("result");
   before_eval(0);
   eval();                       // .. self args slots bodyWhnf
   after_eval(0);
@@ -1879,15 +1932,19 @@ JetTag jet_match(Value *item) {
 
 // returns true if it eval-ed
 bool law_step(u64 depth, bool should_jet) {
+  #if ENABLE_GRAPHVIZ
   char lab[40];
   sprintf(lab, "law_step %lu", depth);
   write_dot(lab);
+  #endif
   //
   Value *self = pop_deref();
   if (GT(AR(self), direct(depth))) {
     // unsaturated application. this is a little weird, but works?
     if (depth <= 1) {
+      #if ENABLE_GRAPHVIZ
       write_dot("unsaturated / 0-backout");
+      #endif
       return false;
     }
     backout(depth-1);
@@ -1944,12 +2001,15 @@ u64 prim_arity(Value *op) {
 // this assumes there are sufficient stack args to saturate whichever primop
 // we run.
 void do_prim(Value *op) {
+  #if ENABLE_GRAPHVIZ
   char lab[40];
   write_dot(lab);
+  #endif
   //
   if (!is_direct(op)) goto exception_case;
 
-  sprintf(lab, "do_prim: %lu", get_direct(op));
+  // char lob[40];
+  // sprintf(lob, "do_prim: %lu", get_direct(op));
 
   switch (get_direct(op)) {
     case 0: { // mk_pin
@@ -1993,9 +2053,11 @@ exception_case:
 
 bool unwind(u64 depth) {
  again:
+  #if ENABLE_GRAPHVIZ
   char lab[20];
   sprintf(lab, "unwind %lu", depth);
   write_dot(lab);
+  #endif
   //
   Value *x = get_deref(0);
   switch (TY(x)) {
@@ -2069,7 +2131,9 @@ bool unwind(u64 depth) {
 
 // returns true if we eval-ed
 bool eval() {
+  #if ENABLE_GRAPHVIZ
   write_dot("eval");
+  #endif
   //
   Value *x = get_deref(0);
   switch (TY(x)) {
@@ -2086,7 +2150,9 @@ bool eval() {
 }
 
 void force_whnf() {
+  #if ENABLE_GRAPHVIZ
   write_dot("force_whnf");
+  #endif
   //
   Value *top = pop_deref(0);
   if (TY(top) == APP) {
@@ -2098,7 +2164,9 @@ void force_whnf() {
 }
 
 void force() {
+  #if ENABLE_GRAPHVIZ
   write_dot("force");
+  #endif
   //
   Value *top = get_deref(0);
   if (TY(top) == APP) {
@@ -2303,7 +2371,10 @@ int main (void) {
     clone();
     force();
 
+    #if ENABLE_GRAPHVIZ
     write_dot("main final");
+    #endif
+
     Value *res = pop_deref();
     fprintf_value(stdout, res);
     printf("\n");
