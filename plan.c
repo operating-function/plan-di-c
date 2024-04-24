@@ -2229,6 +2229,7 @@ Value *read_atom() {
   nn_zero(nat_buf, nat_len);
   len_t actual_len;
   nn_set_str(nat_buf, &actual_len, str);
+  free(str);
   BigNat big = { .size = nat_len, .buf = nat_buf };
   return a_Big(big);
 }
@@ -2261,7 +2262,7 @@ Value *read_app(Value *f) {
   }
 }
 
-Value *utf8_nat (char *str) {
+Value *utf8_nat(char *str) {
   long byteSz = strlen(str);
   long wordSz = (7 + byteSz) / 8;
   nn_t buf = nn_init(wordSz);
@@ -2274,7 +2275,9 @@ Value *read_sym() {
   char *str = read_str_input(true);
   int len = strlen(str);
   if (!len)    crash("Empty symbol");
-  return utf8_nat(str);
+  Value *ret = utf8_nat(str);
+  free(str);
+  return ret;
 }
 
 Value *read_exp() {
