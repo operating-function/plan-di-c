@@ -170,6 +170,8 @@ check "(5 5)" "($MkLaw %ex 2 (1 4 (1 5 (0 3 4))) 777 888)"
 check "(5 5)" "($MkLaw %ex 2 (1 5 (1 3 (0 3 4))) 777 888)"
 check "(5 6)" "($MkLaw %ex 2 (1 5 (1 6 (0 3 4))) 777 888)"
 
+check "((1 2 3) 5)" "(($MkLaw %foo 2) (1 (1 2 3) (1 4 (0 3 5))) 7 9)"
+
 echo "nat arith"
 check "3" "($ToNat 3)"
 check "4" "($ToNat 4)"

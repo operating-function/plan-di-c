@@ -1488,29 +1488,30 @@ void mk_pin() {
 
 // TODO: When constructing law bodies, remove all indirections, and then
 // skip all of the derefs here.
-void weigh_law(bool in_let_section, LawWeight *out, Value *x) {
-  while (true) {
-    if (TY(x) != APP) return;                    // neither a let nor a call
-    Value *car = deref(HD(x));
+void weigh_law(bool on_spine, LawWeight *out, Value *x) {
+ again:
+  if (TY(x) != APP) return;                       // neither a let nor a call
+  Value *car = deref(HD(x));
 
-    if (TY(car) != APP) return;                  // neither a let nor a call
-    Value *caar = deref(HD(car));
+  if (TY(car) != APP) return;                     // neither a let nor a call
+  Value *caar = deref(HD(car));
 
-    if (in_let_section && EQ1(caar)) {           // ((0 x) b)
-      out->n_lets++;                             // this is a let
-      weigh_law(0, out, deref(TL(car)));         // weight the let expr
-      x = deref(TL(x));                          // weight the let body
-      continue;
-    }
-
-    if (!EQZ(caar)) return;                      // neither a let nor a call
-
-    out->n_calls++;                              // this is a call
-    in_let_section = false;                      // no more lets
-    weigh_law(0, out, deref(TL(car)));           // weight the call function
-    x = deref(TL(x));                            // weight the call argument
-    continue;
+  if (on_spine && EQ1(caar)) {                    // ((1 x) b)
+    out->n_lets++;                                // this is a let
+    weigh_law(0, out, deref(TL(car)));            // weigh the let expr
+    x = deref(TL(x));                             // weigh the let body
+    goto again;
   }
+
+  if (EQZ(caar)) {                                // ((0 f) x)
+    out->n_calls++;                               // this is a call
+    on_spine = false;                             // no more lets
+    weigh_law(0, out, deref(TL(car)));            // weigh the call function
+    x = deref(TL(x));                             // weigh the call argument
+    goto again;
+  }
+
+  return;                                         // neither a let nor a call
 }
 
 void mk_law() {
