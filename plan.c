@@ -208,7 +208,7 @@ Value *read_exp();
 ////////////////////////////////////////////////////////////////////////////////
 //  Globals
 
-#define STACK_SIZE 4096000
+#define STACK_SIZE 65536
 Value *stack[STACK_SIZE];
 u64 sp = 0;
 
