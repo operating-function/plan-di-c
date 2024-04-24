@@ -23,6 +23,9 @@
 #include <inttypes.h>
 #include <unistd.h>
 #include <stdnoreturn.h>
+#if MALLOC_STATS
+#include <malloc.h>
+#endif
 
 #include "bsdnt/nn.h"
 
@@ -109,6 +112,7 @@ int call_depth = 0;
 #define TRACE_CALLS       0
 #define TRACE_LAWS        0
 #define ENABLE_GRAPHVIZ   0
+#define MALLOC_STATS      0
 
 static bool enable_graphviz = 0;
 
@@ -2372,7 +2376,12 @@ int main (void) {
   again:
     if (isInteractive) printf(">> ");
     Value *v = read_exp_top();
-    if (!v) return 0;
+    if (!v) {
+      #if MALLOC_STATS
+      malloc_stats();
+      #endif
+      return 0;
+    }
 
     fprintf(stderr, "\n");
     push_val(v);
@@ -2388,5 +2397,4 @@ int main (void) {
     printf("\n");
 
     goto again;
-    return 0;
 }
