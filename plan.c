@@ -2339,14 +2339,23 @@ bool read_exp() {
   }
   case '{': {
     char buf[1234] = {0};
+    int depth = 1;
     for (int i=0; i<1234; i++) {
         buf[i] = getchar();
         if (feof(stdin)) { crash("Unexpected EOF"); }
-        if (buf[i] == '}') {
-            buf[i] = 0;
-            if (i == 0) { push_val(DIRECT_ZERO); return true; }
-            utf8_nat(buf);
-            return true;
+        switch (buf[i]) {
+        case '{':
+          depth++;
+          continue;
+        case '}':
+          depth--;
+          if (depth) continue;
+          buf[i] = 0;
+          if (i == 0) push_val(DIRECT_ZERO);
+          else utf8_nat(buf);
+          return true;
+        default:
+          continue;
         }
     }
     crash("string too big");

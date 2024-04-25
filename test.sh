@@ -98,6 +98,12 @@ check() {
   fi
 }
 
+echo "syntax"
+check "3"     "3"
+check "0"     "{}"
+check "%a"    "{a}"
+check "32123" "{{}}"
+
 echo "primop inc"
 check "3" "(#2 2)"
 check "(3 4)" "(#2 2 4)"
