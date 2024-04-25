@@ -1319,6 +1319,7 @@ char *p_ptr(Value *x) {
   return buf;
 }
 
+// TODO turn `Node *` into `Value *` tree of APPs
 void fprintf_heap(FILE *f, Node *input, Node *seen) {
  again:
   // empty input - done
