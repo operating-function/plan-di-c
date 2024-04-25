@@ -222,7 +222,7 @@ static void force_in_place();
 void write_dot_extra(char*, char*, Value*);
 
 void frag_load(Value**, u64, int*, u64*, u64**);
-Value *read_exp();
+bool read_exp();
 
 ////////////////////////////////////////////////////////////////////////////////
 //  Globals
@@ -2248,7 +2248,7 @@ void read_str_input(bool is_sym) {
   ungetc(c,stdin);
 }
 
-Value *read_atom() {
+void read_atom() {
   read_str_input(false);
   //
   // y : # of bits required to store
@@ -2264,8 +2264,7 @@ Value *read_atom() {
   nn_zero(nat_buf, nat_len);
   len_t actual_len;
   nn_set_str(nat_buf, &actual_len, str_buf);
-  BigNat big = { .size = nat_len, .buf = nat_buf };
-  return a_Big(big);
+  push_big((BigNat){ .size = nat_len, .buf = nat_buf });
 }
 
 void eat_spaces() {
@@ -2274,7 +2273,8 @@ void eat_spaces() {
   ungetc(c, stdin);
 }
 
-Value *read_app(Value *f) {
+// We take the already-read head of the app on the PLAN stack.
+void read_app() {
   while (true) {
     char c = getchar();
     switch (c) {
@@ -2284,51 +2284,53 @@ Value *read_app(Value *f) {
       case ' ':
         eat_spaces();
         c = getchar();
-        if (c == ')') return f;
+        if (c == ')') return;
         ungetc(c, stdin);
-        f = a_App(f,read_exp());
+        read_exp();
+        mk_app();
         continue;
       case ')':
-        return f;
+        return;
       default:
         crash("expecting space or )");
     }
   }
 }
 
-Value *utf8_nat(char *str) {
+void utf8_nat(char *str) {
   long byteSz = strlen(str);
   long wordSz = (7 + byteSz) / 8;
   nn_t buf = our_nn_init(wordSz);
   nn_zero(buf, wordSz);
   memcpy(buf, str, byteSz);
-  return a_Big((BigNat){ .size = wordSz, .buf = buf });
+  push_val(a_Big((BigNat){ .size = wordSz, .buf = buf }));
 }
 
-Value *read_sym() {
+void read_sym() {
   read_str_input(true);
   int len = strlen(str_buf);
   if (!len) crash("Empty symbol");
-  Value *ret = utf8_nat(str_buf);
-  return ret;
+  utf8_nat(str_buf);
 }
 
-Value *read_exp() {
+bool read_exp() {
   char c = getchar();
-  if (!c) return NULL;
+  if (!c) return false;
   switch (c) {
   case '%':
-      return read_sym();
+    read_sym();
+    return true;
 
   case '#': {
     char n = getchar();
     if (isdigit(n)) {
           ungetc(n, stdin);
-          return a_Pin(read_atom());
+          read_atom();
+          mk_pin();
+          return true;
       }
       fprintf(stderr, "Unexpected: '%c'\n", n);
       exit(2);
-      return NULL;
   }
   case '{': {
     char buf[1234] = {0};
@@ -2337,8 +2339,9 @@ Value *read_exp() {
         if (feof(stdin)) { crash("Unexpected EOF"); }
         if (buf[i] == '}') {
             buf[i] = 0;
-            if (i == 0) { return DIRECT_ZERO; }
-            return utf8_nat(buf);
+            if (i == 0) { push_val(DIRECT_ZERO); return true; }
+            utf8_nat(buf);
+            return true;
         }
     }
     crash("string too big");
@@ -2357,34 +2360,33 @@ Value *read_exp() {
             seed_load(words);
             check_value(get(0));
             force_in_place(0);
-            Value *loaded = get(0);
-            check_value(loaded);
-            // enable_graphviz=1;
-            return loaded;
+            check_value(get(0));
+            return true;
         }
     }
     crash("load files");
-    return NULL;
   }
   case '(':
       eat_spaces();
-      Value *f = read_exp();
-      return read_app(f);
+      bool ret = read_exp();
+      if (!ret) return false;
+      read_app();
+      return true;
 
   default:
     if (isdigit(c)) {
         ungetc(c, stdin);
-        return read_atom();
+        read_atom();
+        return true;
     }
     fprintf(stderr, "Unexpected: '%c'\n", c);
     exit(2);
-    return NULL;
   }
 }
 
-Value *read_exp_top() {
+bool read_exp_top() {
   eat_spaces();
-  if (feof(stdin)) return NULL;
+  if (feof(stdin)) return false;
   return read_exp();
 }
 
@@ -2405,13 +2407,9 @@ int main (void) {
   bool isInteractive = isatty(fileno(stdin));
   again:
     if (isInteractive) printf(">> ");
-    Value *v = read_exp_top();
-    if (!v) {
-      return 0;
-    }
+    if (!read_exp_top()) return 0;
 
     fprintf(stderr, "\n");
-    push_val(v);
     force_in_place(0);
 
     #if ENABLE_GRAPHVIZ
