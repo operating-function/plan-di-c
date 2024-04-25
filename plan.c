@@ -215,6 +215,7 @@ void BigPlusDirect(u64, u64);
 void force();
 bool eval();
 void eval_update(int);
+static void force_in_place();
 
 void write_dot_extra(char*, char*, Value*);
 
@@ -1055,6 +1056,13 @@ void after_eval(int i) {
   fprintf(stderr, "=> ");
   fprintf_value(stderr, get_deref(i));
   fprintf(stderr, "\n");
+}
+
+static inline void force_in_place(int i) {
+  push(i);
+  force();
+  Value **p = get_ptr(i);
+  *p = deref(*p);
 }
 
 // causes a stack slot to be updated (and dereferenced) in place,
@@ -1946,13 +1954,12 @@ void run_law(Value *self, u64 ar) {
     Dec();
     return;
 
-  case J_TRACE:
-    push(0);                        // .. body msg msg
-    force();                        // .. body MSG
-    Value *msg = pop_deref();       // .. body
+  case J_TRACE:                   // .. body msg
+    force_in_place(0);            // .. body msg
+    Value *msg = pop();           // .. body
     fprintf_value(stdout, msg);
     fprintf(stdout, "\n");
-    eval();                         // .. *body
+    eval();                       // .. *body
     return;
 
   default:
@@ -2071,12 +2078,12 @@ void do_prim(Value *op) {
   switch (get_direct(op)) {
     case 0: { // mk_pin
       pop();
-      push(0); force();
+      force_in_place(0);
       return mk_pin();
     }
     case 1: { // mk_law
       pop();
-      push(0); force();           // b
+      force_in_place(0);          // b
       eval_update(1);             // a
       eval_update(2);             // n
       return mk_law();
@@ -2098,8 +2105,7 @@ void do_prim(Value *op) {
     }
   }
 exception_case:
-  push(1); // param
-  force();
+  force_in_place(1); // param
   fprintf(stderr, "Exception: ");
   fprintf_value(stderr, get_deref(0));
   fprintf(stderr, "\n\n\t");
@@ -2360,8 +2366,7 @@ Value *read_exp() {
             u64 *words = load_seed_file(buf, &seedSz);
             seed_load(words);
             check_value(get(0));
-            push(0);
-            force();
+            force_in_place(0);
             Value *loaded = get(0);
             check_value(loaded);
             // enable_graphviz=1;
@@ -2417,8 +2422,7 @@ int main (void) {
 
     fprintf(stderr, "\n");
     push_val(v);
-    clone();
-    force();
+    force_in_place(0);
 
     #if ENABLE_GRAPHVIZ
     write_dot("main final");
