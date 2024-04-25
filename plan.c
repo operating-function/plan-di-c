@@ -2102,12 +2102,12 @@ void do_prim(Value *op) {
   }
 exception_case:
   force_in_place(1); // param
-  fprintf(stderr, "Exception: ");
-  fprintf_value(stderr, get_deref(0));
-  fprintf(stderr, "\n\n\t");
-  fprintf_value(stderr, get_deref(1));
-  fprintf(stderr, "\n");
-  exit(1);
+  fprintf(stdout, "Exception(");
+  fprintf_value(stdout, get_deref(0));
+  fprintf(stdout, "): ");
+  fprintf_value(stdout, get_deref(1));
+  fprintf(stdout, "\n");
+  exit(0);
 }
 
 bool unwind(u64 depth) {
