@@ -183,6 +183,8 @@ struct Value {
 
 int call_depth = 0;
 
+char dot_lab[1024];
+
 #define TRACE_JET_MATCHES  0
 #define TRACE_CALLS        0
 #define TRACE_LAWS         0
@@ -1165,9 +1167,8 @@ void frag_load(Value **tab, u64 tabSz, int *use, u64 *acc, u64 **mor) {
 
 void stack_grow(u64 count) {
   #if ENABLE_GRAPHVIZ
-  char lab[20];
-  sprintf(lab, "stack_grow %lu", count);
-  write_dot(lab);
+  snprintf(dot_lab, 1024, "stack_grow %lu", count);
+  write_dot(dot_lab);
   #endif
   for (u64 i = 0; i < count; i++) {
     push_val(NULL);
@@ -1476,9 +1477,8 @@ void write_dot(char *label) {
 
 static void update(u64 idx) {
   #if ENABLE_GRAPHVIZ
-  char lab[20];
-  sprintf(lab, "update %lu", idx);
-  write_dot(lab);
+  snprintf(dot_lab, 1024, "update %lu", idx);
+  write_dot(dot_lab);
   #endif
 
   Value *head = get_deref(0);
@@ -1509,9 +1509,8 @@ static inline void push_val(Value *x) {
 
 static inline void push(u64 idx) {
   #if ENABLE_GRAPHVIZ
-  char lab[20];
-  sprintf(lab, "push %lu", idx);
-  write_dot(lab);
+  snprintf(dot_lab, 1024, "push %lu", idx);
+  write_dot(dot_lab);
   #endif
 
   push_val(get_deref(idx));
@@ -1562,9 +1561,8 @@ static inline void swap() {
 
 void slide(u64 count) {
   #if ENABLE_GRAPHVIZ
-  char lab[20];
-  sprintf(lab, "slide %lu", count);
-  write_dot(lab);
+  snprintf(dot_lab, 1024, "slide %lu", count);
+  write_dot(dot_lab);
   #endif
   //
   Value *top = get_deref(0);
@@ -1572,8 +1570,8 @@ void slide(u64 count) {
   stack[sp-1] = top;
   //
   #if ENABLE_GRAPHVIZ
-  sprintf(lab, "post slide %lu", count);
-  write_dot(lab);
+  snprintf(dot_lab, 1024, "post slide %lu", count);
+  write_dot(dot_lab);
   #endif
 }
 
@@ -1725,9 +1723,8 @@ void prim_case() {
 
 void setup_call(u64 depth) {
   #if ENABLE_GRAPHVIZ
-  char lab[20];
-  sprintf(lab, "setup_call %lu", depth);
-  write_dot(lab);
+  snprintf(dot_lab, 1024, "setup_call %lu", depth);
+  write_dot(dot_lab);
   #endif
 
   // setup the call by pulling the TLs out of all apps which we have
@@ -1739,9 +1736,8 @@ void setup_call(u64 depth) {
 
 void flip_stack(u64 depth) {
   #if ENABLE_GRAPHVIZ
-  char lab[20];
-  sprintf(lab, "flip_stack %lu", depth);
-  write_dot(lab);
+  snprintf(dot_lab, 1024, "flip_stack %lu", depth);
+  write_dot(dot_lab);
   #endif
   //
   if (depth == 0) return;
@@ -1756,9 +1752,8 @@ void flip_stack(u64 depth) {
 
 void handle_oversaturated_application(u64 count) {
   #if ENABLE_GRAPHVIZ
-  char lab[50];
-  sprintf(lab, "handle_oversaturated_application %lu", count);
-  write_dot(lab);
+  snprintf(dot_lab, 1024, "handle_oversaturated_application %lu", count);
+  write_dot(dot_lab);
   #endif
   //
   // if our application is oversaturated, `depth` will exceed the arity. in this
@@ -1771,9 +1766,8 @@ void handle_oversaturated_application(u64 count) {
 
 void backout(u64 depth) {
   #if ENABLE_GRAPHVIZ
-  char lab[20];
-  sprintf(lab, "backout %lu", depth);
-  write_dot(lab);
+  snprintf(dot_lab, 1024, "backout %lu", depth);
+  write_dot(dot_lab);
   #endif
   //
   // pop stack of unwound apps.
@@ -1847,9 +1841,8 @@ void eval_law(Law l) {
 
   #if ENABLE_GRAPHVIZ
   {
-    char lab[40];
-    sprintf(lab, "eval_law(arity=%lu, lets=%lu)", args, lets);
-    write_dot(lab);
+    snprintf(dot_lab, 1024, "eval_law(arity=%lu, lets=%lu)", args, lets);
+    write_dot(dot_lab);
   }
   #endif
 
@@ -2006,9 +1999,8 @@ JetTag jet_match(Value *item) {
 // returns true if it eval-ed
 bool law_step(u64 depth) {
   #if ENABLE_GRAPHVIZ
-  char lab[40];
-  sprintf(lab, "law_step %lu", depth);
-  write_dot(lab);
+  snprintf(dot_lab, 1024, "law_step %lu", depth);
+  write_dot(dot_lab);
   #endif
   //
   Value *self = pop_deref();
@@ -2066,8 +2058,7 @@ u64 prim_arity(Value *op) {
 // we run.
 void do_prim(Value *op) {
   #if ENABLE_GRAPHVIZ
-  char lab[40];
-  write_dot(lab);
+  write_dot(dot_lab);
   #endif
   //
   if (!is_direct(op)) goto exception_case;
@@ -2117,9 +2108,8 @@ exception_case:
 bool unwind(u64 depth) {
  again:
   #if ENABLE_GRAPHVIZ
-  char lab[20];
-  sprintf(lab, "unwind %lu", depth);
-  write_dot(lab);
+  snprintf(dot_lab, 1024, "unwind %lu", depth);
+  write_dot(dot_lab);
   #endif
   //
   Value *x = get_deref(0);
