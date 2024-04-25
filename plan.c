@@ -639,7 +639,7 @@ static inline Value *direct(u64 x) {
   return a_Big((BigNat){ .size = 1, .buf = x_nat });
 }
 
-Value *a_Pin(Value *item) {
+static inline Value *a_Pin(Value *item) {
   Value *res = (Value *)our_malloc_words(sizeof(Value));
   res->type = PIN;
   JetTag jet = jet_match(item);
@@ -647,7 +647,7 @@ Value *a_Pin(Value *item) {
   return res;
 }
 
-Value *a_App(Value *f, Value *g) {
+static inline Value *a_App(Value *f, Value *g) {
   Value *res = (Value *)our_malloc_words(sizeof(Value));
   res->type = APP;
   res->a.f = f;
@@ -1320,19 +1320,16 @@ char *p_ptr(Value *x) {
 }
 
 void fprintf_heap(FILE *f, Node *input, Node *seen) {
+ again:
   // empty input - done
-  if (null_list(input)) {
-    free_list(seen, false);
-    return;
-  }
-  Node *tmp = input;
+  if (null_list(input)) return;
+  //
   Value *v = (Value *)input->ptr;
   input = input->next;
-  free(tmp);
   //
   // if NULL or seen, recur on tail of input
   if ((v == NULL) || (member_list((void *)v, seen))) {
-    return fprintf_heap(f, input, seen);
+    goto again;
   }
   //
   // non-seen Value. print it, add `v` to `seen`, add any discovered addresses
@@ -1409,7 +1406,7 @@ void fprintf_heap(FILE *f, Node *input, Node *seen) {
     }
   }
   seen = cons((void *)v, seen);
-  return fprintf_heap(f, input, seen);
+  goto again;
 }
 
 void fprintf_stack(FILE *f) {
@@ -1457,11 +1454,13 @@ void write_dot_extra(char *label, char *extra, Value *v) {
   fprintf(f, "\n// stack\n");
   fprintf_stack(f);
   fprintf(f, "\n// heap\n");
+
   Node *heap_input = stack_to_list_heap_only();
   if (v != NULL) {
     heap_input = cons((void *)v, heap_input);
   }
   fprintf_heap(f, heap_input, NULL);
+
   fprintf(f, "\n// extra\n");
   fprintf(f, "%s\n", extra);
   fprintf(f, "}\n");
@@ -1503,6 +1502,7 @@ static inline void push_val(Value *x) {
   #if STACK_BOUNDS_CHECK
   if ((sp+1) > STACK_SIZE) crash("push_val: stack overflow");
   #endif
+
   stack[sp] = x;
   sp++;
 }
