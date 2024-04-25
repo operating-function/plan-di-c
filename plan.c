@@ -2360,25 +2360,19 @@ bool read_exp() {
     }
     crash("string too big");
   }
-  case '<': {
+  case '@': {
+    read_str_input(true);
+    int len = strlen(str_buf);
+    if (!len) crash("Empty seed");
     char buf[1234] = "./seed/";
-    for (int i=7; i<1234; i++) {
-        buf[i] = getchar();
-        if (feof(stdin)) {
-            crash("Unexpected EOF");
-        }
-        if (buf[i] == '>') {
-            buf[i] = 0;
-            u64 seedSz;
-            u64 *words = load_seed_file(buf, &seedSz);
-            seed_load(words);
-            check_value(get(0));
-            force_in_place(0);
-            check_value(get(0));
-            return true;
-        }
-    }
-    crash("load files");
+    strcpy(buf+7, str_buf);
+    u64 seedSz;
+    u64 *words = load_seed_file(buf, &seedSz);
+    seed_load(words);
+    check_value(get(0));
+    force_in_place(0);
+    check_value(get(0));
+    return true;
   }
   case '(':
       eat_spaces();

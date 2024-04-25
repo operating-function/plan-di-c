@@ -9,14 +9,14 @@ try () {
 # # Haskell runtime to be able to generate new ones.
 # try '(3 0)'
 # try '(3 99)'
-# try '(<isNat.seed> 0)'
-# try '(<isNat.seed> 1)'
-# try '(<cmp.seed> 0 1)'
-# try '(<cmp.seed> 1 0)'
-# try '(<cmp.seed> 1 1)'
-# try '(<cmp.seed> (0 0) 1)'
-# try '(<cmp.seed> (0 0) (1 1))'
-# try '(<mul.seed> 3 4)'
+# try '(@isNat 0)'
+# try '(@isNat 1)'
+# try '(@cmp 0 1)'
+# try '(@cmp 1 0)'
+# try '(@cmp 1 1)'
+# try '(@cmp (0 0) 1)'
+# try '(@cmp (0 0) (1 1))'
+# try '(@mul 3 4)'
 
 MkPin="#0"
 MkLaw="#1"
@@ -313,35 +313,35 @@ else
 fi
 
 echo "seed tests"
-check "1" "(<Sub> 2 1)"
-check "6" "(<Mul> 2 3)"
-check "0" "(<Cmp> 0 2)"
-check "1" "(<Cmp> 2 2)"
-check "2" "(<Cmp> 4 2)"
+check "1" "(@Sub 2 1)"
+check "6" "(@Mul 2 3)"
+check "0" "(@Cmp 0 2)"
+check "1" "(@Cmp 2 2)"
+check "2" "(@Cmp 4 2)"
 
-check "2" "(<Cmp> #2 2)"
-check "1" "(<Cmp> #2 #2)"
-check "0" "(<Cmp> #2 (0 1))"
+check "2" "(@Cmp #2 2)"
+check "1" "(@Cmp #2 #2)"
+check "0" "(@Cmp #2 (0 1))"
 
-check "(0 7 7 1 2 7 7)" "(<Splice> 2 (0 1 2) (0 7 7 7 7))"
+check "(0 7 7 1 2 7 7)" "(@Splice 2 (0 1 2) (0 7 7 7 7))"
 
-check "1" "(<strFindIndexOff> (<Neq> 32) 0 { x y })"
-check "1" "(<strFindIndexOff> (<Neq> 32) 1 { x y })"
-check "3" "(<strFindIndexOff> (<Neq> 32) 2 { x y })"
-check "3" "(<strFindIndexOff> (<Neq> 32) 3 { x y })"
-check "5" "(<strFindIndexOff> (<Neq> 32) 4 { x y })"
-check "5" "(<strFindIndexOff> (<Neq> 32) 5 { x y })"
-check "5" "(<strFindIndexOff> (<Neq> 32) 6 { x y })"
+check "1" "(@strFindIndexOff (@Neq 32) 0 { x y })"
+check "1" "(@strFindIndexOff (@Neq 32) 1 { x y })"
+check "3" "(@strFindIndexOff (@Neq 32) 2 { x y })"
+check "3" "(@strFindIndexOff (@Neq 32) 3 { x y })"
+check "5" "(@strFindIndexOff (@Neq 32) 4 { x y })"
+check "5" "(@strFindIndexOff (@Neq 32) 5 { x y })"
+check "5" "(@strFindIndexOff (@Neq 32) 6 { x y })"
 
-check "(0 (0 %fn 1 %x) 0 1 %LWORD)"        "(<lexerTest> %x)"
-check "(0 (0 %fn 1 544897400) 0 3 %LWORD)" "(<lexerTest> {xyz })"
+check "(0 (0 %fn 1 %x) 0 1 %LWORD)"        "(@lexerTest %x)"
+check "(0 (0 %fn 1 544897400) 0 3 %LWORD)" "(@lexerTest {xyz })"
 
 check \
   "(0 (0 %REPL 3 %WOODS) (0 (0 1 (%OPEN <%rex> 61 (0 (%NEST <%rex> 124 (0 (%WORD <%rex> %Pin 0) (%WORD <%rex> %i 0)) 0) 0) (%OPEN <%rex> 61 (0 (%NEST <%rex> 124 (0 (%WORD <%rex> %Inc 0) (%WORD <%rex> %m 0)) 0) 0) 0)))))" \
-  "(<rexTrial> (0 {= (Pin i) | ##0 i} {= (Inc m) | ##2 m}))"
+  "(@rexTrial (0 {= (Pin i) | ##0 i} {= (Inc m) | ##2 m}))"
 
 check '(0 (%A (%K <2>) (%K 3)))' \
-      '(<sireTrial> (0 {| ##2} {| 3}))'
+      '(@sireTrial (0 {| ##2} {| 3}))'
 
 
 
@@ -350,7 +350,7 @@ check '(0 (%A (%K <2>) (%K 3)))' \
 echo 'Parsing Rex (slow)'
 
 time ./plan <<EOF
-(<rexTrial>
+(@rexTrial
  (0 {= (Pin i)            | ##0 i}
     {= (Law n a b)        | ##1 n a b}
     {= (Inc m)            | ##2 m}
