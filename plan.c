@@ -188,7 +188,7 @@ int call_depth = 0;
 #define TRACE_CALLS        0
 #define TRACE_LAWS         0
 #define ENABLE_GRAPHVIZ    0
-#define STACK_BOUNDS_CHECK 1
+#define STACK_BOUNDS_CHECK 0
 #define CHECK_TAGS         0
 
 static bool enable_graphviz = 0;
@@ -237,17 +237,17 @@ u64 sp = 0;
 // their high bit.
 
 // 2^63 - high bit
-u64 ptr_nat_mask   =          9223372036854775808ull;
-Value *direct_zero = (Value*) 9223372036854775808ull;
-Value *direct_one  = (Value*) 9223372036854775809ull;
-Value *direct_two  = (Value*) 9223372036854775810ull;
+# define PTR_NAT_MASK          9223372036854775808ull
+# define DIRECT_ZERO  ((Value*)9223372036854775808ull)
+# define DIRECT_ONE   ((Value*)9223372036854775809ull)
+# define DIRECT_TWO   ((Value*)9223372036854775810ull)
 
 static inline bool is_direct(Value *x) {
-  return (((u64) x) & ptr_nat_mask) != 0;
+  return (((u64) x) & PTR_NAT_MASK);
 }
 
 static inline u64 get_direct(Value *x) {
-  return (u64) (((u64) x) & ~ptr_nat_mask);
+  return (u64) (((u64) x) & ~PTR_NAT_MASK);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -387,7 +387,7 @@ void check_nat(Value *v) {
   if (n.size == 0) crash("check_nat: bignat zero");
 
   if (n.size == 1) {
-    if (n.buf[0] < ptr_nat_mask) {
+    if (n.buf[0] < PTR_NAT_MASK) {
       crash("check_nat: direct atom encoded as bignat");
     }
     return;
@@ -633,7 +633,10 @@ void push_big(BigNat n) {
 }
 
 static inline Value *direct(u64 x) {
-  if (!(x >> 63)) return (Value *) (x | ptr_nat_mask);
+  if (!(x & PTR_NAT_MASK)) {
+    return (Value *) (x | PTR_NAT_MASK);
+  }
+
   nn_t x_nat = our_nn_init(1);
   x_nat[0] = x;
   return a_Big((BigNat){ .size = 1, .buf = x_nat });
@@ -728,15 +731,15 @@ static inline bool NEQ(Value *a, Value *b) {
 }
 
 static inline bool EQZ(Value *x) {
-   return (x == direct_zero);
+   return (x == DIRECT_ZERO);
 }
 
 static inline bool EQ1(Value *x) {
-  return (x == direct_one);
+  return (x == DIRECT_ONE);
 }
 
 static inline bool EQ2(Value *x) {
-  return (x == direct_two);
+  return (x == DIRECT_TWO);
 }
 
 static inline void *realloc_(void *ptr, size_t sz) {
@@ -829,7 +832,7 @@ void Dec() {
 
   if (is_direct(v)) {
     u64 n = get_direct(v);
-    push_val( (n == 0) ? direct_zero : direct(n - 1) );
+    push_val( (n == 0) ? DIRECT_ZERO : direct(n - 1) );
     goto end;
   }
 
@@ -851,13 +854,13 @@ void Sub() {
   if (is_direct(a)) {
     if (is_direct(b)) {
       if (bSmall >= aSmall) {
-        push_val(direct_zero);
+        push_val(DIRECT_ZERO);
         return;
       }
       push_val(direct(aSmall - bSmall));
       return;
     }
-    push_val(direct_zero);
+    push_val(DIRECT_ZERO);
     return;
   }
 
@@ -870,7 +873,7 @@ void Sub() {
   u64 bSz = BN(b).size;
 
   if (aSz < bSz) {
-    push_val(direct_zero);
+    push_val(DIRECT_ZERO);
     return;
   }
 
@@ -885,7 +888,7 @@ void Sub() {
   BigNat bBig = BN(pop_deref());
   word_t borrow = nn_sub_c(buf, aBig.buf, aBig.size, bBig.buf, bBig.size, 0);
   if (borrow) {
-    push_val(direct_zero);
+    push_val(DIRECT_ZERO);
   } else {
     push_big((BigNat) { .size = aSz, .buf = buf });
   }
@@ -893,7 +896,7 @@ void Sub() {
 
 void DirectTimesDirect(u64 a, u64 b) {
   if (a==0 || b==0) {
-    push_val(direct_zero);
+    push_val(DIRECT_ZERO);
     return;
   }
 
@@ -961,8 +964,8 @@ void DivModDirectDirect(u64 a, u64 b) {
 void DivModBigDirect(Value *a, u64 b) {
   if (b == 0) {
     // we could crash here instead
-    push_val(direct_zero); // mod
-    push_val(direct_zero); // div
+    push_val(DIRECT_ZERO); // mod
+    push_val(DIRECT_ZERO); // div
     return;
   }
   BigNat aBig = BN(a);
@@ -983,7 +986,7 @@ void DivModBigBig(Value *a, Value *b) {
   BigNat bBig = BN(b);
   if (aBig.size < bBig.size) {
     push_val(a);           // mod
-    push_val(direct_zero); // div
+    push_val(DIRECT_ZERO); // div
     return;
   }
   long sz = aBig.size - bBig.size + 1;
@@ -1011,7 +1014,7 @@ void DivMod() {
     if (is_direct(b)) DivModDirectDirect(aSmall, bSmall);
     else {
       push_val(a);           // mod
-      push_val(direct_zero); // div
+      push_val(DIRECT_ZERO); // div
     }
     return;
   }
@@ -1676,7 +1679,7 @@ void incr() {
   }
 
   if (x->type != NAT) {
-    push_val(direct_one);
+    push_val(DIRECT_ONE);
     return;
   }
 
@@ -1819,8 +1822,9 @@ Value *kal(u64 maxRef, Value **pool, Value *x) {
   Value *g = TL(x);
 
   Value *this_call = (*pool)++;                  // allocte (type is preset)
-  this_call->a.f = kal(maxRef, pool, f);
-  this_call->a.g = kal(maxRef, pool, g);
+  this_call->type = APP;
+  this_call->a.f  = kal(maxRef, pool, f);
+  this_call->a.g  = kal(maxRef, pool, g);
   return this_call;
 }
 
@@ -1848,22 +1852,19 @@ typedef struct GrMem {
   Value *apps;
 } GrMem;
 
-GrMem law_alloc_graph(Law l) {
+static inline GrMem law_alloc_graph(Law l) {
   int n_lets = l.w.n_lets;
   int n_kals = l.w.n_calls;
   int n_vals = n_lets + n_kals;
 
   Value *mem  = our_malloc_words(sizeof(Value) * n_vals);
-  Value *iter = mem;
 
-  for (int i=0; i<n_lets; i++, iter++)
-    iter->type = HOL;
+  // initialize letrec slots, since they might be referenced before they
+  // are filled in.
 
-  for (int j=0; j<n_kals; j++, iter++) {
-    iter->type = APP;
-    iter->a.f = direct_zero;
-    iter->a.g = direct_zero;
-  }
+  for (int i=0; i<n_lets; i++) mem[i].type = HOL;
+
+  // leave APPs uninitialized.  KAL will initialize.
 
   return (GrMem){ .holes = mem, .apps = mem + n_lets };
 }
@@ -2371,7 +2372,7 @@ Value *read_exp() {
         if (feof(stdin)) { crash("Unexpected EOF"); }
         if (buf[i] == '}') {
             buf[i] = 0;
-            if (i == 0) { return direct_zero; }
+            if (i == 0) { return DIRECT_ZERO; }
             return utf8_nat(buf);
         }
     }
