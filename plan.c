@@ -2272,14 +2272,9 @@ void read_atom() {
   push_big((BigNat){ .size = nat_len, .buf = nat_buf });
 }
 
-void eat_spaces() {
-  char c;
-  while (isspace(c = getchar()));
-  ungetc(c, stdin);
-}
-
 // We take the already-read head of the app on the PLAN stack.
 void read_app() {
+  bool saw_space = false;
   while (true) {
     char c = getchar();
     switch (c) {
@@ -2287,17 +2282,18 @@ void read_app() {
       case '\n':
       case '\t':
       case ' ':
-        eat_spaces();
-        c = getchar();
-        if (c == ')') return;
+        saw_space = true;
+        continue;
+
+      case ')':
+        return;
+
+      default:
+        if (!saw_space) crash("expecting space or )");
         ungetc(c, stdin);
         read_exp();
         mk_app();
         continue;
-      case ')':
-        return;
-      default:
-        crash("expecting space or )");
     }
   }
 }
@@ -2319,12 +2315,35 @@ void read_sym() {
 }
 
 bool read_exp() {
+again:
   char c = getchar();
-  if (!c) return false;
+
+  if (feof(stdin)) return false;
+
   switch (c) {
+  case 0:
+    return false;
+
   case '%':
     read_sym();
     return true;
+
+  case ' ':
+  case '\r':
+  case '\n':
+  case '\t':
+    goto again;
+
+  case ';':
+    while (1) {
+      char c = getchar();
+      if (feof(stdin)) return false;
+      switch (c) {
+      case 0:    return false;
+      case '\n': goto again;
+      default:   continue;
+      }
+    }
 
   case '#': {
     char n = getchar();
@@ -2337,6 +2356,7 @@ bool read_exp() {
       fprintf(stderr, "Unexpected: '%c'\n", n);
       exit(2);
   }
+
   case '{': {
     char buf[1234] = {0};
     int depth = 1;
@@ -2360,6 +2380,7 @@ bool read_exp() {
     }
     crash("string too big");
   }
+
   case '@': {
     read_str_input(true);
     int len = strlen(str_buf);
@@ -2374,8 +2395,8 @@ bool read_exp() {
     check_value(get(0));
     return true;
   }
+
   case '(':
-      eat_spaces();
       bool ret = read_exp();
       if (!ret) return false;
       read_app();
@@ -2390,12 +2411,6 @@ bool read_exp() {
     fprintf(stderr, "Unexpected: '%c'\n", c);
     exit(2);
   }
-}
-
-bool read_exp_top() {
-  eat_spaces();
-  if (feof(stdin)) return false;
-  return read_exp();
 }
 
 int main (void) {
@@ -2415,7 +2430,7 @@ int main (void) {
   bool isInteractive = isatty(fileno(stdin));
   again:
     if (isInteractive) printf(">> ");
-    if (!read_exp_top()) return 0;
+    if (!read_exp()) return 0;
 
     fprintf(stderr, "\n");
     force_in_place(0);
