@@ -10,6 +10,10 @@
 // - copy live stuff from old heap to new heap
 // - free old heap
 
+// TODO: Do we even need black holes?  We do no evaluation during law
+// execution, so the intermediate state where uninitialized let-bindings
+// are black-holes is not observable, right?
+
 #include <stdint.h>
 #define __STDC_WANT_LIB_EXT2__  1
 #include <stdio.h>
@@ -1852,26 +1856,10 @@ typedef struct GrMem {
   Value *apps;
 } GrMem;
 
-static inline GrMem law_alloc_graph(Law l) {
-  int n_lets = l.w.n_lets;
-  int n_kals = l.w.n_calls;
-  int n_vals = n_lets + n_kals;
-
-  Value *mem  = our_malloc_words(sizeof(Value) * n_vals);
-
-  // initialize letrec slots, since they might be referenced before they
-  // are filled in.
-
-  for (int i=0; i<n_lets; i++) mem[i].type = HOL;
-
-  // leave APPs uninitialized.  KAL will initialize.
-
-  return (GrMem){ .holes = mem, .apps = mem + n_lets };
-}
-
 void eval_law(Law l) {
   u64 args = get_direct(l.a); // this code is unreachable with bignat arity
   u64 lets = l.w.n_lets;
+  u64 kals = l.w.n_calls;
   int maxRef = args + lets;
 
   #if ENABLE_GRAPHVIZ
@@ -1882,9 +1870,17 @@ void eval_law(Law l) {
   }
   #endif
 
-  push_val(l.b);                  // save (law body)
-  GrMem mem = law_alloc_graph(l); // gc
-  Value *b = pop();               // restore (law body)
+  const size_t bytes = sizeof(Value) * (lets + kals);
+
+  push_val(l.b);                         // save (law body)
+  Value *mem  = our_malloc_words(bytes); // gc
+  Value *b = pop();                      // restore (law body)
+
+  // initialize letrec slots, since they might be referenced before they
+  // are filled in, but leave APPs uninitialized.  KAL will initialize.
+
+  Value *holes = mem;
+  Value *apps  = mem + lets;
 
   #if ENABLE_GRAPHVIZ
   write_dot("starting graph construction");
@@ -1892,24 +1888,26 @@ void eval_law(Law l) {
 
   if (lets) {
     // Add a black hole per let.
-    for (u64 i = 0; i < lets; i++) stack[sp++] = mem.holes+i;
+    for (u64 i = 0; i < lets; i++) stack[sp++] = holes+i;
+
     #if STACK_BOUNDS_CHECK
     if (sp > STACK_SIZE) crash("eval_law: stack overflow");
     #endif
 
     #if ENABLE_GRAPHVIZ
+    for (u64 i = 0; i < lets; i++) holes[i].type = HOL;
     write_dot("added holes for lets");
     #endif
 
     // Compute the graph of each let, and fill the corresponding hole.
     for (u64 i = 0; i < lets; i++) {
       // (1 exp next)
-      Value *next       = TL(b);
-      Value *exp        = TL(HD(b));
-      b                 = next;
-      Value *gr         = kal(maxRef, &mem.apps, exp);
-      mem.holes[i].type = IND;
-      mem.holes[i].i    = gr;
+      Value *next   = TL(b);
+      Value *exp    = TL(HD(b));
+      b             = next;
+      Value *gr     = kal(maxRef, &apps, exp);
+      holes[i].type = IND;
+      holes[i].i    = gr;
 
       #if ENABLE_GRAPHVIZ
       write_dot("filled one");
@@ -1922,7 +1920,7 @@ void eval_law(Law l) {
   write_dot("constructing body graph");
   #endif
 
-  Value *gr = kal(maxRef, &mem.apps, b);
+  Value *gr = kal(maxRef, &apps, b);
   push_val(gr);                 // .. self args slots bodyGr
   before_eval(0);
   eval();                       // .. self args slots bodyWhnf
