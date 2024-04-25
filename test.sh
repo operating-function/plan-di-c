@@ -327,8 +327,17 @@ check "5" "(<strFindIndexOff> (<Neq> 32) 4 { x y })"
 check "5" "(<strFindIndexOff> (<Neq> 32) 5 { x y })"
 check "5" "(<strFindIndexOff> (<Neq> 32) 6 { x y })"
 
-check "(0 (0 %fn 1 %x) 0 1 %LWORD)"      "(<lexerTest> %x)"
+check "(0 (0 %fn 1 %x) 0 1 %LWORD)"        "(<lexerTest> %x)"
 check "(0 (0 %fn 1 544897400) 0 3 %LWORD)" "(<lexerTest> {xyz })"
+
+check \
+  "(0 (0 %REPL 3 %WOODS) (0 (0 1 (%OPEN <%rex> 61 (0 (%NEST <%rex> 124 (0 (%WORD <%rex> %Pin 0) (%WORD <%rex> %i 0)) 0) 0) (%OPEN <%rex> 61 (0 (%NEST <%rex> 124 (0 (%WORD <%rex> %Inc 0) (%WORD <%rex> %m 0)) 0) 0) 0)))))" \
+  "(<rexTrial> (0 {= (Pin i) | ##0 i} {= (Inc m) | ##2 m}))"
+
+check '(0 (%A (%K <2>) (%K 3)))' \
+      '(<sireTrial> (0 {| ##2} {| 3}))'
+
+
 
 ################################################################################
 
