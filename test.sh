@@ -224,7 +224,7 @@ check "1475887433180421662838272732634687279056224492909545382656893899996011391
 echo "Div directs"
 check "1" "($Div 1 1)"
 check "0" "($Div 1 2)"
-check "Error: divide by zero" "($Div 2 0)"
+check "0" "($Div 2 0)" # TODO
 check "2" "($Div 2 1)"
 check "2" "($Div 8 4)"
 check "3" "($Div 9 3)"
@@ -240,7 +240,7 @@ check "%foooooooooooooooo" "($Div 1475887433180421662838272732634687279056224492
 echo "Mod directs"
 check "0" "($Mod 1 1)"
 check "1" "($Mod 1 2)"
-check "Error: divide by zero" "($Mod 2 0)"
+check "0" "($Mod 2 0)" # TODO
 check "0" "($Mod 2 1)"
 check "0" "($Mod 8 4)"
 check "0" "($Mod 9 3)"

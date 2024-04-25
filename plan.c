@@ -945,8 +945,12 @@ void Mul() {
 }
 
 void DivModDirectDirect(u64 a, u64 b) {
-  if (b == 0)
-    crash("divide by zero");
+  if (b == 0) {
+    // we could crash here instead
+    push_val(DIRECT_ZERO); // mod
+    push_val(DIRECT_ZERO); // div
+    return;
+  }
 
   push_val(direct(a % b)); // mod
   push_val(direct(a / b)); // div
