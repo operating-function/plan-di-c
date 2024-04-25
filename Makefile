@@ -1,4 +1,4 @@
-CFLAGS = -O3 -Wall
+CFLAGS = -O3 -Wall -Werror
 
 all: plan
 
