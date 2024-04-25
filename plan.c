@@ -10,10 +10,6 @@
 // - copy live stuff from old heap to new heap
 // - free old heap
 
-// TODO: Do we even need black holes?  We do no evaluation during law
-// execution, so the intermediate state where uninitialized let-bindings
-// are black-holes is not observable, right?
-
 #include <stdint.h>
 #define __STDC_WANT_LIB_EXT2__  1
 #include <stdio.h>
@@ -122,7 +118,6 @@ typedef enum Type {
   APP,
   NAT,
   IND,
-  HOL
 } Type;
 
 typedef enum NatType {
@@ -423,8 +418,6 @@ void check_value(Value *v) {
     case NAT:
       check_nat(v);
       break;
-    case HOL:
-      break;
     case IND:
       check_value(IN(v));
       break;
@@ -536,9 +529,6 @@ void fprintf_value_internal(FILE *f, Value *v, int recur) {
       break;
     case NAT:
       fprintf_nat(f, v);
-      break;
-    case HOL:
-      fprintf(f, "<>");
       break;
     case IND:
       crash("fprintf_value_internal: got IND");
@@ -659,12 +649,6 @@ Value *a_App(Value *f, Value *g) {
   res->type = APP;
   res->a.f = f;
   res->a.g = g;
-  return res;
-}
-
-Value *a_Hol() {
-  Value *res = (Value *)our_malloc_words(sizeof(Value));
-  res->type = HOL;
   return res;
 }
 
@@ -1414,12 +1398,6 @@ void fprintf_heap(FILE *f, Node *input, Node *seen) {
       input = cons((void *)IN(v), input);
       break;
     }
-    case HOL: {
-      char *v_p = p_ptr(v);
-      fprintf(f, "%s [label=hole];\n", v_p);
-      free(v_p);
-      break;
-    }
   }
   seen = cons((void *)v, seen);
   return fprintf_heap(f, input, seen);
@@ -1597,7 +1575,6 @@ void mk_pin() {
   #endif
 
   Value *top = pop_deref();
-  if (TY(top) == HOL) crash("mk_pin: hol");
   Value *p = a_Pin(normalize(top));
   push_val(p);
 }
@@ -1632,7 +1609,6 @@ Value *normalize (Value *v) {
  again:
   if (is_direct(v)) return v;
   switch (v->type) {
-  case HOL: crash("plan_case: HOL");
   case IND: v = IN(v); goto again;
   case APP:
     v->a.f = normalize(v->a.f);
@@ -1735,7 +1711,6 @@ void prim_case() {
       mk_app_rev(); // (m d)
       return;
     }
-    case HOL: crash("plan_case: HOL");
     case IND: crash("plan_case: IND: impossible");
   }
 }
@@ -1895,7 +1870,10 @@ void eval_law(Law l) {
     #endif
 
     #if ENABLE_GRAPHVIZ
-    for (u64 i = 0; i < lets; i++) holes[i].type = HOL;
+    for (u64 i = 0; i < lets; i++) {
+      holes[i].type = IND;
+      holes[i].i = NULL;
+    }
     write_dot("added holes for lets");
     #endif
 
@@ -2186,9 +2164,6 @@ bool unwind(u64 depth) {
         case LAW: {
           return law_step(depth);
         }
-        case HOL: {
-          crash("unwind: <loop>");
-        }
         case IND: {
           crash("unwind: bad deref");
         }
@@ -2197,9 +2172,6 @@ bool unwind(u64 depth) {
     case NAT: {
       backout(depth);
       return false;
-    }
-    case HOL: {
-      crash("unwind: <loop>");
     }
     case IND: {
       crash("unwind: bad deref");
@@ -2222,7 +2194,6 @@ bool eval() {
     case LAW:
     case NAT:
       return false;
-    case HOL: crash("eval: HOL");
     case IND: crash("eval: IND");
     default:  crash("eval: bad tag");
   }
