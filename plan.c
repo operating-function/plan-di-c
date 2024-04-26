@@ -1276,7 +1276,10 @@ void seed_load(u64 *buf) {
 u64 *load_seed_file (const char *filename, u64 *sizeOut) {
   FILE *f = fopen (filename, "rb");
 
-  if (!f) crash("seed file does not exist");
+  if (!f) {
+    fprintf(stderr, "\n%s\n", filename);
+    crash("seed file does not exist");
+  }
 
   fseek(f, 0, SEEK_END);
   u64 szBytes = ftell(f);
