@@ -81,7 +81,7 @@ Inf1s="($MkLaw 99 1 (1 (0 1 2) 2) 1)"
 FAILED=0
 
 check() {
-  rm -r ./dot
+  rm -rf ./dot
   echo -n "TEST: $1 == [./plan] $2 ... "
   diff <(echo -e "$1") <(echo "$2" | ./plan)
   EXIT_CODE=$?
@@ -103,6 +103,8 @@ check "3"     "3"
 check "0"     "{}"
 check "%a"    "{a}"
 check "32123" "{{}}"
+
+check "(1 2 3)" "=x 1 =y 3 (x 2 y)"
 
 echo "primop inc"
 check "3" "(#2 2)"

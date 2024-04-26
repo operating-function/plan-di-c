@@ -2341,11 +2341,46 @@ void read_sym() {
   utf8_nat(str_buf);
 }
 
+Value **symbol_table;
+
+void bind_symbol(Value *nm, Value *v) {
+    push_val(v);
+    push_val(nm);
+    push_val(*symbol_table);
+    mk_app_rev();
+    mk_app_rev();
+    *symbol_table = pop();
+}
+
+void lookup_symbol() {
+  Value *nm = pop();
+  Value *x = *symbol_table;
+  // fprintf(stderr, "TABLE: ");
+  // fprintf_value(stderr, x);
+  // fprintf(stderr, "\n");
+  while (!is_direct(x)) {
+    Value *hx = HD(x);
+    Value *v  = TL(x);
+    Value *k  = TL(hx);
+    x=HD(hx);
+    if (EQ(nm, k)) { push_val(v); return; }
+  }
+  fprintf_value(stderr, nm);
+  crash("symbol not found");
+}
+
 bool read_exp() {
 again:
   char c = getchar();
 
   if (feof(stdin)) return false;
+
+  if (isalpha(c)) {
+    ungetc(c, stdin);
+    read_sym();
+    lookup_symbol();
+    return true;
+  }
 
   switch (c) {
   case 0:
@@ -2440,8 +2475,86 @@ again:
   }
 }
 
+void repl () {
+  bool isInteractive = isatty(fileno(stdin));
+
+ next_input:
+  if (isInteractive) printf(">> ");
+
+ loop:
+  char c = getchar();
+
+  if (feof(stdin)) return;
+
+  switch (c) {
+  case '\t':
+  case '\n':
+  case '\r':
+  case ' ':
+    goto loop;
+
+  case ';':
+    while (1) {
+      char c = getchar();
+      if (feof(stdin)) return;
+      switch (c) {
+      case 0:    return;
+      case '\n': goto next_input;
+      default:   continue;
+      }
+    }
+
+  case '!':
+    if (!read_exp()) { crash("no value"); }
+    if (!read_exp()) { crash("no value"); }
+    force_in_place(0);
+    force_in_place(1);
+    Value *y = pop();
+    Value *x = pop();
+
+    if (NEQ(x,y)) {
+      fprintf(stderr, "! ");
+      fprintf_value(stderr, x);
+      fprintf(stderr, " ");
+      fprintf_value(stderr, y);
+      fprintf(stderr, "\n");
+      crash("assertion failed");
+    }
+
+    fprintf(stderr, "! ");
+    fprintf_value(stderr, x);
+    fprintf(stderr, "\n");
+    goto next_input;
+
+
+  case '=':
+    read_sym();
+    if (!read_exp()) { crash("no value"); }
+    Value *val = pop();
+    Value *nm  = pop();
+    bind_symbol(nm, val);
+    fprintf(stderr, "=(");
+    fprintf_value(stderr, nm);
+    fprintf(stderr, ") ");
+    fprintf_value(stderr, val);
+    fprintf(stderr, "\n");
+    goto next_input;
+
+  default:
+    ungetc(c, stdin);
+    if (!read_exp()) return;
+    force_in_place(0);
+    fprintf_value(stdout, pop_deref());
+    printf("\n");
+    goto next_input;
+  }
+}
+
 int main (void) {
   if (heap == NULL) { heap_init(); }
+
+  push_val(DIRECT_ZERO);
+  symbol_table = get_ptr(0);
 
   // Value *x = direct(UINT64_MAX);
   // Value *y = direct(3);
@@ -2450,25 +2563,16 @@ int main (void) {
   // fprintf_value(stdout, res);
   // printf("\n");
 
+  #if ENABLE_GRAPHVIZ
   struct stat st = {0};
   if (stat(dot_dir_path, &st) == -1) {
     mkdir(dot_dir_path, 0700);
   }
-  bool isInteractive = isatty(fileno(stdin));
-  again:
-    if (isInteractive) printf(">> ");
-    if (!read_exp()) return 0;
+  #endif
 
-    fprintf(stderr, "\n");
-    force_in_place(0);
+  repl();
 
-    #if ENABLE_GRAPHVIZ
-    write_dot("main final");
-    #endif
-
-    Value *res = pop_deref();
-    fprintf_value(stdout, res);
-    printf("\n");
-
-    goto again;
+  #if ENABLE_GRAPHVIZ
+  write_dot("main final");
+  #endif
 }

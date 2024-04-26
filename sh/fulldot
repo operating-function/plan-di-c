@@ -5,7 +5,7 @@ set -ex
 [ -n "$1" ]
 
 make plan
-rm -r ./dot
+rm -rf ./dot
 ./plan <<<"$1" || true
 sh/dotify # risky if many .dot files
 read
