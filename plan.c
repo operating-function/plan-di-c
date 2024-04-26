@@ -679,6 +679,8 @@ int big_cmp(BigNat a, BigNat b) {
 }
 
 int cmp(Value *a, Value *b) {
+ tail_recur:
+  a=deref(a), b=deref(b);
 
   if (is_direct(a)) {
     if (!is_direct(b)) return less;
@@ -694,7 +696,29 @@ int cmp(Value *a, Value *b) {
 
   if (b->type == NAT) return greater;
 
-  crash("make cmp support recursion");
+  if (a->type == PIN) {
+    if (b->type != PIN) return less;
+    a=IT(a); b=IT(b); goto tail_recur;
+  }
+
+  if (a->type == PIN) return greater;
+
+  if (b->type == LAW) {
+    int ord;
+    if (b->type != LAW) return less;
+    ord = cmp(NM(a), NM(b));
+    if (ord != 1) return ord;
+    ord = cmp(AR(a), AR(b));
+    if (ord != 1) return ord;
+    a=BD(a); b=BD(b); goto tail_recur;
+  }
+
+  if (a->type == LAW) return greater;
+
+  int ord = cmp(HD(a), HD(b));
+  if (ord != 1) return ord;
+
+  a=TL(a); b=TL(b); goto tail_recur;
 }
 
 static inline bool LT(Value *a, Value *b) {
