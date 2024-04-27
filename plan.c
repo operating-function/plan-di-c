@@ -118,6 +118,7 @@ typedef enum Type {
   APP,
   NAT,
   IND,
+  MOV,
 } Type;
 
 typedef enum NatType {
@@ -644,6 +645,12 @@ static inline Value *a_Pin(Value *item) {
   res->type = PIN;
   JetTag jet = jet_match(item);
   res->p = (Pin){ .item = item, .jet = jet };
+  return res;
+}
+
+static inline Value *a_Law(Law l) {
+  Value *res = (Value *)our_malloc_words(sizeof(Value));
+  *res = (Value){ .type = LAW, .l = l };
   return res;
 }
 
@@ -1333,6 +1340,71 @@ static inline Value *get_deref(u64 idx) {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+//  GC
+
+// TODO this is linear in stack depth, which could cause overflow.  Use
+// Cheney's algorithm.
+//
+// returns the moved pointer in the new heap
+Value *gc_copy(Value *x) {
+  if (x == NULL) return NULL;
+
+  if (is_direct(x)) return x;
+
+  if (x->type == MOV) return x->i;
+
+  if (x->type == APP) {
+    Value *f   = x->a.f;
+    Value *g   = x->a.g;
+    Value *res = a_App(NULL, NULL);
+    x->type    = MOV;
+    x->i       = res;
+    res->a.f   = gc_copy(f);
+    res->a.g   = gc_copy(g);
+    return res;
+  }
+
+  Value *ret = our_malloc_words(sizeof(Value));
+
+  switch (x->type) {
+    case IND:
+      if (x->i == x) { // trivial self-loop
+        Value *res = our_malloc_words(sizeof(Value));
+        res->type = IND;
+        res->i    = res;
+        return res;
+      }
+      ret = gc_copy(x->i);
+      break;
+    case PIN: {
+      Value *it = gc_copy(IT(x));
+      ret = a_Pin(it);
+      break;
+    }
+    case LAW: {
+      Value *nm = gc_copy(NM(x));
+      Value *ar = gc_copy(AR(x));
+      Value *bd = gc_copy(BD(x));
+      ret = a_Law((Law){nm, ar, bd, x->l.w});
+      break;
+    case NAT:
+      ret = a_Big(BN(x));
+    }
+    default:
+      crash("gc_copy: impossible");
+  }
+  x->type = MOV;
+  x->i = ret;
+  return ret;
+}
+
+void gc() {
+  for (u64 i = 0; i < sp; i++) {
+    *get_ptr(i) = gc_copy(get(i));
+  }
+}
+
+////////////////////////////////////////////////////////////////////////////////
 //  DOT printing
 
 int dot_count = 0;
@@ -1436,6 +1508,8 @@ void fprintf_heap(FILE *f, Node *input, Node *seen) {
       input = cons((void *)IN(v), input);
       break;
     }
+    case MOV:
+      crash("MOV escaped GC");
   }
   seen = cons((void *)v, seen);
   goto again;
@@ -1662,8 +1736,6 @@ void mk_law() {
   write_dot("mk_law");
   #endif
 
-  Value *res = (Value *)our_malloc_words(sizeof(Value));
-
   to_nat(1); // a
   to_nat(2); // n
   Value *b = normalize(pop_deref());
@@ -1680,8 +1752,7 @@ void mk_law() {
     fprintf(stderr, ",\t{lets=%lu, calls=%lu}\n", l.w.n_lets, l.w.n_calls);
   }
 
-  *res = (Value){ .type = LAW, .l = l };
-  push_val(res);
+  push_val(a_Law(l));
 }
 
 void incr() {
@@ -1750,6 +1821,8 @@ void prim_case() {
       return;
     }
     case IND: crash("plan_case: IND: impossible");
+    case MOV:
+      crash("MOV escaped GC");
   }
 }
 
@@ -1905,7 +1978,7 @@ void eval_law(Law l) {
     #if ENABLE_GRAPHVIZ
     for (u64 i = 0; i < lets; i++) {
       holes[i].type = IND;
-      holes[i].i = NULL;
+      holes[i].i    = NULL;
     }
     write_dot("added holes for lets");
     #endif
@@ -2195,6 +2268,8 @@ bool unwind(u64 depth) {
         case IND: {
           crash("unwind: bad deref");
         }
+        case MOV:
+          crash("MOV escaped GC");
       }
     }
     case NAT: {
@@ -2204,6 +2279,8 @@ bool unwind(u64 depth) {
     case IND: {
       crash("unwind: bad deref");
     }
+    case MOV:
+      crash("MOV escaped GC");
   }
   crash("this should never happen");
 }
@@ -2524,6 +2601,9 @@ void repl () {
     fprintf(stderr, "! ");
     fprintf_value(stderr, x);
     fprintf(stderr, "\n");
+
+    gc();
+
     goto next_input;
 
 
