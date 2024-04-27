@@ -397,7 +397,16 @@
 ! (0 (0 %fn 1 %x) 0 1 %LWORD)        (@lexerTest %x)
 ! (0 (0 %fn 1 544897400) 0 3 %LWORD) (@lexerTest {xyz })
 
-=rex (Pin %rex)
+! (0
+   (0 %REPL 2 %WOODS)
+   (0
+    (0 1 (%OPEN #rex 61 (0 (%NEST #rex 124 (0 (%WORD #rex %Pin 0)
+                                              (%WORD #rex %i 0))
+                            0)
+                         0)
+          0))))
+  (@rexTrial
+   (0 {= (Pin i)            | ##0 i}))
 
 (@rexTrial
  (0 {= (Pin i)            | ##0 i}

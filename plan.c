@@ -2510,14 +2510,19 @@ again:
 
   case '#': {
     char n = getchar();
+    ungetc(n, stdin);
+    if (isalpha(n)) {
+      read_sym();
+      mk_pin();
+      return true;
+    }
     if (isdigit(n)) {
-          ungetc(n, stdin);
-          read_atom();
-          mk_pin();
-          return true;
-      }
-      fprintf(stderr, "Unexpected: '%c'\n", n);
-      exit(2);
+      read_atom();
+      mk_pin();
+      return true;
+    }
+    fprintf(stderr, "Unexpected: '%c'\n", n);
+    exit(2);
   }
 
   case '{': {
