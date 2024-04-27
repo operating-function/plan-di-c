@@ -23,6 +23,7 @@
 #include <unistd.h>
 #include <stdnoreturn.h>
 #include "bsdnt/nn.h"
+#include <sys/mman.h>
 
 #include "linked_list.h"
 
@@ -38,73 +39,46 @@ noreturn void crash(char *s) {
 
 // Heap ////////////////////////////////////////////////////////////////////////
 
-#define HEAP_CHUNK 8192
+#define BLOCK 4096
 
-char *heap = NULL;
-size_t heap_used = 0;
-size_t heap_size = 0;
+static char *heap_start = NULL;
+static char *heap_end   = NULL;
+static char *hp         = NULL;
 
-void *realloc(void *ptr, size_t sz) {
-  crash("realloc(): not implemented");
-}
+void grow () {
+  int excess_bytes  = hp - heap_end;
+  int excess_chunks = excess_bytes / BLOCK;
+  int growth        = (excess_chunks+1) * BLOCK;
 
-void *slow_malloc(size_t bytes) {
-  if (bytes % 8) bytes += (8 - (bytes % 8));
- again:
-  // fprintf(stderr, "malloc(%lu, heap=%p, heap_used=%lu, heap_size=%lu)\n", bytes, heap, heap_used, heap_size);
-  if (heap_used + bytes > heap_size) {
-    if ((void*)(-1) == sbrk(HEAP_CHUNK))
-      crash("sbrk failed");
-    heap_size += HEAP_CHUNK;
-    goto again;
+  int prot   = PROT_READ | PROT_WRITE;
+  int flags  = MAP_FIXED | MAP_PRIVATE | MAP_ANON;
+
+  // printf("old_start=%p\n", heap_start);
+  // printf("old_end=%p\n", heap_end);
+  // printf("hp=%p\n", hp);
+  // printf("growth=%d\n", growth);
+
+  if (MAP_FAILED == mmap(heap_end, growth, prot, flags, -1, 0)) {
+    perror("grow: mmap");
+    exit(1);
   }
-  char *result = heap + heap_used;
-  heap_used += bytes;
-  return result;
+
+  heap_end = heap_end + growth;
+
+  // printf("new_end=%p\n", heap_end);
+
+  fprintf(stderr, "new heap size = %ld\n", heap_end - heap_start);
 }
 
-static inline void *our_malloc_words(size_t bytes) {
-  if (heap_used + bytes > heap_size) {
-    return slow_malloc(bytes);
-  }
-  char *result = heap + heap_used;
-  heap_used += bytes;
-  return result;
+// argument is in bytes, but must be a multiple of 8.
+static inline void *alloc(size_t bytes) {
+  char *res = hp;
+  hp += bytes;
+  if (hp >= heap_end) grow();
+  return res;
 }
 
-static inline void *our_calloc(size_t nmemb, size_t size) {
-  size_t sz = nmemb * size;
-  char *res = slow_malloc(sz);
-  memset(res, 0, sz);
-  return (void*) res;
-}
-
-void *reallocarray(void *ptr, size_t nmemb, size_t size) {
-  crash("reallocarray(): not implemented");
-}
-
-void free(void *ptr)                    { return; }
-
-void heap_init () {
-  heap = sbrk(0);
-  heap_size = HEAP_CHUNK;
-  heap_used = 0;
-  sbrk(HEAP_CHUNK);
-}
-
-void *calloc(size_t nmemb, size_t size) {
-  if (heap == NULL) heap_init();
-  return our_calloc(nmemb, size);
-}
-
-void *malloc(size_t bytes) {
-  if (heap == NULL) heap_init();
-  return slow_malloc(bytes);
-}
-
-static inline void *our_nn_init(size_t n_words) {
-  return our_malloc_words(n_words * 8);
-}
+#define alloc_words(w) alloc(w*8)
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -624,7 +598,7 @@ Value *a_Big(BigNat n) {
     return direct(n.buf[0]);
   }
 
-  Value *res = (Value *)our_malloc_words(sizeof(Value));
+  Value *res = (Value *)alloc(sizeof(Value));
   *res = (Value){ .type = NAT, .n = n };
   return res;
 }
@@ -638,13 +612,13 @@ static inline Value *direct(u64 x) {
     return (Value *) (x | PTR_NAT_MASK);
   }
 
-  nn_t x_nat = our_nn_init(1);
+  nn_t x_nat = alloc_words(1);
   x_nat[0] = x;
   return a_Big((BigNat){ .size = 1, .buf = x_nat });
 }
 
 static inline Value *a_Pin(Value *item) {
-  Value *res = (Value *)our_malloc_words(sizeof(Value));
+  Value *res = (Value *)alloc(sizeof(Value));
   res->type = PIN;
   JetTag jet = jet_match(item);
   res->p = (Pin){ .item = item, .jet = jet };
@@ -652,13 +626,13 @@ static inline Value *a_Pin(Value *item) {
 }
 
 static inline Value *a_Law(Law l) {
-  Value *res = (Value *)our_malloc_words(sizeof(Value));
+  Value *res = (Value *)alloc(sizeof(Value));
   *res = (Value){ .type = LAW, .l = l };
   return res;
 }
 
 static inline Value *a_App(Value *f, Value *g) {
-  Value *res = (Value *)our_malloc_words(sizeof(Value));
+  Value *res = (Value *)alloc(sizeof(Value));
   res->type = APP;
   res->a.f = f;
   res->a.g = g;
@@ -796,7 +770,7 @@ BigNat bigify(u64 *x) {
 // stack after:  ..rest (a+b)
 void BigPlusBig(u64 aSize, u64 bSize) {
   long new_size = MAX(aSize, bSize) + 1;
-  nn_t buf = our_nn_init(new_size); // gc
+  nn_t buf = alloc_words(new_size); // gc
   BigNat a = BN(pop_deref());
   BigNat b = BN(pop_deref());
   word_t c = nn_add_c(buf, a.buf, a.size, b.buf, b.size, 0);
@@ -806,7 +780,7 @@ void BigPlusBig(u64 aSize, u64 bSize) {
 
 void BigPlusDirect(u64 direct, u64 bigSz) {
   u64 newSz = bigSz + 1;
-  nn_t buf = our_nn_init(newSz); // gc
+  nn_t buf = alloc_words(newSz); // gc
   BigNat big = BN(pop());
   word_t carry = nn_add1(buf, big.buf, bigSz, direct);
   buf[bigSz] = carry;
@@ -846,7 +820,7 @@ void Add() {
 void BigMinusDirect(Value *big, u64 direct) {
   u64 bigSz = BN(big).size;
   push_val(big);                 // save
-  nn_t buf = our_nn_init(bigSz); // gc
+  nn_t buf = alloc_words(bigSz); // gc
   BigNat n = BN(pop_deref());    // reload
   word_t c = nn_sub1(buf, n.buf, bigSz, direct);
   // a positive borrow (nonzero `c`) should only be possible if we
@@ -915,7 +889,7 @@ void Sub() {
   push_val(b);
   push_val(a);
 
-  nn_t buf = our_nn_init(aSz); // gc
+  nn_t buf = alloc_words(aSz); // gc
 
   BigNat aBig = BN(pop_deref());
   BigNat bBig = BN(pop_deref());
@@ -941,7 +915,7 @@ void DirectTimesDirect(u64 a, u64 b) {
     return;
   }
 
-  nn_t buf = our_nn_init(2);
+  nn_t buf = alloc_words(2);
   buf[1] = nn_mul1(buf, &a, 1, b);
   push_big((BigNat) { .size = 2, .buf = buf });
 }
@@ -949,7 +923,7 @@ void DirectTimesDirect(u64 a, u64 b) {
 void BigTimesDirect(u64 small, Value *big) {
   u64 newSz = BN(big).size + 1;
   push_val(big);                 // save pointer to stack
-  nn_t buf = our_nn_init(newSz); // gc
+  nn_t buf = alloc_words(newSz); // gc
   nn_zero(buf, newSz);           //
   BigNat nat = BN(pop(0));       // reload pointer
   nn_mul1(buf, nat.buf, nat.size, small);
@@ -960,7 +934,7 @@ void BigTimesBig(Value *a, Value *b) {
   long new_size = BN(a).size + BN(b).size;
   push_val(a);
   push_val(b);
-  nn_t buf = our_nn_init(new_size); // gc
+  nn_t buf = alloc_words(new_size); // gc
   nn_zero(buf, new_size);           //
   b = pop(); a = pop();             // reload pointer
   BigNat aBig = BN(a);
@@ -1008,8 +982,8 @@ void DivModBigDirect(Value *a, u64 b) {
   BigNat aBig = BN(a);
   long sz = aBig.size;
   push_val(a);                        // save a
-  nn_t a_buf_clone = our_nn_init(sz); // gc
-  nn_t buf = our_nn_init(sz);         // gc
+  nn_t a_buf_clone = alloc_words(sz); // gc
+  nn_t buf = alloc_words(sz);         // gc
   nn_zero(buf, sz);
   aBig = BN(pop());                   // restore a
   nn_copy(a_buf_clone, aBig.buf, sz); // copy a's buf (it will be mutated)
@@ -1028,9 +1002,9 @@ void DivModBigBig(Value *a, Value *b) {
   }
   long sz = aBig.size - bBig.size + 1;
   push_val(b);                               // save b
-  nn_t a_buf_clone = our_nn_init(aBig.size); // gc
+  nn_t a_buf_clone = alloc_words(aBig.size); // gc
   nn_copy(a_buf_clone, aBig.buf, aBig.size);
-  nn_t buf = our_nn_init(sz);                // gc
+  nn_t buf = alloc_words(sz);                // gc
   nn_zero(buf, sz);
   bBig = BN(pop());                          // restore b
   nn_divrem(buf, a_buf_clone, aBig.size, bBig.buf, bBig.size);
@@ -1377,12 +1351,12 @@ Value *gc_copy(Value *x) {
     return res;
   }
 
-  Value *ret = our_malloc_words(sizeof(Value));
+  Value *ret = alloc(sizeof(Value));
 
   switch (x->type) {
     case IND:
       if (x->i == x) { // trivial self-loop
-        Value *res = our_malloc_words(sizeof(Value));
+        Value *res = alloc(sizeof(Value));
         res->type = IND;
         res->i    = res;
         return res;
@@ -1424,7 +1398,7 @@ int dot_count = 0;
 char *dot_dir_path = "./dot";
 
 char *p_ptr(Value *x) {
-  char *buf = our_malloc_words(48);
+  char *buf = alloc(48);
   if (x == NULL) {
     sprintf(buf, "N_null");
   } else if (is_direct(x)) {
@@ -1966,9 +1940,9 @@ void eval_law(Law l) {
 
   const size_t bytes = sizeof(Value) * (lets + kals);
 
-  push_val(l.b);                         // save (law body)
-  Value *mem  = our_malloc_words(bytes); // gc
-  Value *b = pop();                      // restore (law body)
+  push_val(l.b);              // save (law body)
+  Value *mem  = alloc(bytes); // gc
+  Value *b = pop();           // restore (law body)
 
   // initialize letrec slots, since they might be referenced before they
   // are filled in, but leave APPs uninitialized.  KAL will initialize.
@@ -2393,7 +2367,7 @@ void read_atom() {
   long nat_len = bit_len / word_bits;
   if ((bit_len % word_bits) > 0) nat_len++; // round up.
   //
-  nn_t nat_buf = our_nn_init(nat_len);
+  nn_t nat_buf = alloc_words(nat_len);
   nn_zero(nat_buf, nat_len);
   len_t actual_len;
   nn_set_str(nat_buf, &actual_len, str_buf);
@@ -2429,7 +2403,7 @@ void read_app() {
 void utf8_nat(char *str) {
   long byteSz = strlen(str);
   long wordSz = (7 + byteSz) / 8;
-  nn_t buf = our_nn_init(wordSz);
+  nn_t buf = alloc_words(wordSz);
   nn_zero(buf, wordSz);
   memcpy(buf, str, byteSz);
   push_val(a_Big((BigNat){ .size = wordSz, .buf = buf }));
@@ -2659,8 +2633,19 @@ void repl () {
   }
 }
 
+
 int main (void) {
-  if (heap == NULL) { heap_init(); }
+  int prot   = PROT_READ | PROT_WRITE;
+  int flags  = MAP_FIXED | MAP_PRIVATE | MAP_ANON;
+  heap_start = mmap((void*) 0x010000000000, BLOCK, prot, flags, -1, 0);
+  hp         = heap_start;
+  heap_end   = heap_start + BLOCK;
+
+  if (heap_start == MAP_FAILED) { perror("heap_init(): mmap"); exit(1); }
+
+  // printf("heap_start=%p\n", heap_start);
+  // printf("hp=%p\n", hp);
+  // printf("heap_end=%p\n", heap_end);
 
   push_val(DIRECT_ZERO);
   symbol_table = get_ptr(0);
