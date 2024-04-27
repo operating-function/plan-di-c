@@ -112,11 +112,13 @@ static inline void *our_nn_init(size_t n_words) {
 
 typedef uint64_t u64;
 
+// Note that underlying enum number for NAT, PIN, LAW, APP are in
+// sort-order.
 typedef enum Type {
+  NAT,
   PIN,
   LAW,
   APP,
-  NAT,
   IND,
   MOV,
 } Type;
@@ -142,6 +144,7 @@ typedef enum JetTag {
   J_DIV,
   J_MOD,
   J_DEC,
+  J_CMP,
   J_TRACE,
   J_NONE,
 } JetTag;
@@ -667,13 +670,13 @@ static inline Value *a_App(Value *f, Value *g) {
 
 int less=0, equals=1, greater=2;
 
-int cmp_direct(u64 a, u64 b) {
+static inline int cmp_direct(u64 a, u64 b) {
   if (a == b) return equals;
   if (a < b) return less;
   return greater;
 }
 
-int big_cmp(BigNat a, BigNat b) {
+static inline int big_cmp(BigNat a, BigNat b) {
   if (a.size != b.size) {
     return (a.size < b.size) ? less : greater;
   }
@@ -685,71 +688,79 @@ int big_cmp(BigNat a, BigNat b) {
   return greater;
 }
 
-int cmp(Value *a, Value *b) {
+int cmp_recur(Value *a, Value *b) {
  tail_recur:
   a=deref(a), b=deref(b);
 
-  if (is_direct(a)) {
-    if (!is_direct(b)) return less;
-    return cmp_direct(get_direct(a), get_direct(b));
-  }
+  if (is_direct(a))
+    return (!is_direct(b))
+             ? less
+             : cmp_direct(get_direct(a), get_direct(b));
 
   if (is_direct(b)) return greater;
 
-  if (a->type == NAT) {
-    if (b->type != NAT) return less;
+  if (a->type < b->type) return less;
+  if (a->type > b->type) return greater;
+
+  switch (a->type) {
+  case NAT:
     return big_cmp(a->n, b->n);
-  }
 
-  if (b->type == NAT) return greater;
-
-  if (a->type == PIN) {
-    if (b->type != PIN) return less;
+  case PIN:
     a=IT(a); b=IT(b); goto tail_recur;
+
+  case LAW:
+    {
+      int ord;
+      if (b->type != LAW) return less;
+      ord = cmp_recur(NM(a), NM(b));
+      if (ord != 1) return ord;
+      ord = cmp_recur(AR(a), AR(b));
+      if (ord != 1) return ord;
+      a=BD(a); b=BD(b); goto tail_recur;
+    }
+
+  case APP:
+    {
+      int ord = cmp_recur(HD(a), HD(b));
+      if (ord != 1) return ord;
+      a=TL(a); b=TL(b); goto tail_recur;
+    }
+  default:
+    crash("cmp: impossible");
   }
+}
 
-  if (a->type == PIN) return greater;
+// fast path for direct atoms, fallback to full cmp routine.
+static inline int cmp_normalized(Value *a, Value *b) {
+  if (is_direct(a) && is_direct(b))
+    return cmp_direct(get_direct(a), get_direct(b));
 
-  if (b->type == LAW) {
-    int ord;
-    if (b->type != LAW) return less;
-    ord = cmp(NM(a), NM(b));
-    if (ord != 1) return ord;
-    ord = cmp(AR(a), AR(b));
-    if (ord != 1) return ord;
-    a=BD(a); b=BD(b); goto tail_recur;
-  }
-
-  if (a->type == LAW) return greater;
-
-  int ord = cmp(HD(a), HD(b));
-  if (ord != 1) return ord;
-
-  a=TL(a); b=TL(b); goto tail_recur;
+  return cmp_recur(a,b);
 }
 
 static inline bool LT(Value *a, Value *b) {
-  return cmp(a,b) == 0;
+  return cmp_normalized(a,b) == 0;
 }
 
 static inline bool GT(Value *a, Value *b) {
-  return cmp(a,b) == 2;
+  return cmp_normalized(a,b) == 2;
 }
 
 static inline bool LTE(Value *a, Value *b) {
-  return cmp(a,b) != 2;
+  return cmp_normalized(a,b) != 2;
 }
 
 static inline bool GTE(Value *a, Value *b) {
-  return cmp(a,b) != 0;
+  return cmp_normalized(a,b) != 0;
 }
 
 static inline bool EQ(Value *a, Value *b) {
-  return cmp(a,b) == 1;
+  return cmp_normalized(a,b) == 1;
 }
 
 static inline bool NEQ(Value *a, Value *b) {
-  return cmp(a,b) != 1;
+  return cmp_normalized(a,b) != 1;
 }
 
 static inline bool EQZ(Value *x) {
@@ -1136,9 +1147,10 @@ void eval_update(int i) {
 #define DIV   (Value*)9223372036862536004ULL
 #define MOD   (Value*)9223372036861357901ULL
 #define DEC   (Value*)9223372036861289796ULL
+#define CMP   (Value*)9223372036862143811ULL
 #define TRACE (Value*)9223372472313803348ULL
 
-#define NUM_JETS 7
+#define NUM_JETS 8
 Jet jet_table[NUM_JETS] =
   { (Jet) { .name = ADD,   .arity = 2, .tag = J_ADD   }
   , (Jet) { .name = SUB,   .arity = 2, .tag = J_SUB   }
@@ -1146,6 +1158,7 @@ Jet jet_table[NUM_JETS] =
   , (Jet) { .name = DIV,   .arity = 2, .tag = J_DIV   }
   , (Jet) { .name = MOD,   .arity = 2, .tag = J_MOD   }
   , (Jet) { .name = DEC,   .arity = 1, .tag = J_DEC   }
+  , (Jet) { .name = CMP,   .arity = 2, .tag = J_CMP   }
   , (Jet) { .name = TRACE, .arity = 2, .tag = J_TRACE }
   };
 
@@ -2050,6 +2063,17 @@ void run_law(Value *self, u64 ar) {
   case J_DEC:
     eval_update(0);
     Dec();
+    return;
+
+  case J_CMP:
+    // TODO: cmp should only eval as much as needed in order to find
+    // a difference.  These force calls are wrong.
+    force_in_place(0);
+    force_in_place(1);
+    Value *a = pop();
+    Value *b = pop();
+    int ord = cmp_normalized(a, b);
+    push_val(direct(ord));
     return;
 
   case J_TRACE:                   // .. body msg
