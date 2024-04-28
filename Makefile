@@ -1,4 +1,4 @@
-CFLAGS = -O3 -Wall -Werror
+CFLAGS = -O3 -Wall -Werror -fdiagnostics-color=always
 
 all: plan
 
