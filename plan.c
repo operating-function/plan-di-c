@@ -1328,69 +1328,77 @@ static inline Value *get_deref(u64 idx) {
 ////////////////////////////////////////////////////////////////////////////////
 //  GC
 
-// TODO this is linear in stack depth, which could cause overflow.  Use
-// Cheney's algorithm.
-//
-// returns the moved pointer in the new heap
-Value *gc_copy(Value *x) {
-  if (x == NULL) return NULL;
+static char *new_heap_start = NULL;
 
-  if (is_direct(x)) return x;
+static inline size_t alloc_size(Value *x) {
+  if (x->type == NAT) return (8 * (2 + WID(x)));
+  return sizeof(Value);
+}
+
+Value *gc_copy(Value *x) {
+  if (x == NULL || is_direct(x)) return x;
+
+  if ((char*)x >= new_heap_start) return x;
 
   if (x->type == MOV) return x->i;
 
-  if (x->type == APP) {
-    Value *f   = x->a.f;
-    Value *g   = x->a.g;
-    Value *res = a_App(NULL, NULL);
-    x->type    = MOV;
-    x->i       = res;
-    res->a.f   = gc_copy(f);
-    res->a.g   = gc_copy(g);
-    return res;
-  }
+  size_t sz = alloc_size(x);
 
-  Value *ret = alloc(sizeof(Value));
+  // copy + bump heap size
+  Value *res = (Value*) hp;
+  memcpy(hp, x, sz);
+  hp += sz;
 
-  switch (x->type) {
-    case IND:
-      if (x->i == x) { // trivial self-loop
-        Value *res = alloc(sizeof(Value));
-        res->type = IND;
-        res->i    = res;
-        return res;
-      }
-      ret = gc_copy(x->i);
-      break;
-    case PIN: {
-      Value *it = gc_copy(IT(x));
-      ret = a_Pin(it);
-      break;
-    }
-    case LAW: {
-      Value *nm = gc_copy(NM(x));
-      Value *ar = gc_copy(AR(x));
-      Value *bd = gc_copy(BD(x));
-      ret = a_Law((Law){nm, ar, bd, x->l.w});
-      break;
-    case NAT:
-      ret = start_bignat_alloc(WID(x));
-      memcpy(BUF(ret), BUF(x), 8 * WID(x));
-      // no need for end_bignat_alloc because input is always valid.
-      break;
-    }
-    default:
-      crash("gc_copy: impossible");
-  }
+  // tell further references where to find the new pointer.
   x->type = MOV;
-  x->i = ret;
-  return ret;
+  x->i = res;
+
+  return res;
 }
 
+// Input is always a heap object, so never direct and never null.
+static inline void gc_copy_refs(Value *x) {
+  switch (x->type) {
+  case PIN:
+    x->p.item = gc_copy(x->p.item);
+    break;
+  case LAW:
+    x->l.n = gc_copy(x->l.n);
+    x->l.a = gc_copy(x->l.a);
+    x->l.b = gc_copy(x->l.b);
+    break;
+  case APP:
+    x->a.f = gc_copy(x->a.f);
+    x->a.g = gc_copy(x->a.g);
+    break;
+  case NAT:
+    break;
+  case IND:
+    x->i = gc_copy(x->i);
+    break;
+  default:
+    crash("gc_copy_refs: impossible");
+  }
+}
+
+// Cheney's algorithm
 void gc() {
+  new_heap_start = hp;
+
+  // copy roots to new heap.
   for (u64 i = 0; i < sp; i++) {
     *get_ptr(i) = gc_copy(get(i));
   }
+
+  // copy all references from the new heap to the old heap
+  for (char *iter = new_heap_start; iter <= hp;) {
+    Value *v = (Value*)iter;
+    gc_copy_refs(v);
+    iter += alloc_size(v);
+  }
+
+  // wipe old heap (just for testing purposes)
+  memset(heap_start, 0, new_heap_start - heap_start);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
