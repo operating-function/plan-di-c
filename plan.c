@@ -1,14 +1,9 @@
-// TODO
-//
-// GC:
-// - copy system malloc code
-// - define malloc in terms of system-malloc
-// - global heap ptr
-// - global heap size
-// - on each alloc, GC
-// - system-malloc new heap
-// - copy live stuff from old heap to new heap
-// - free old heap
+// - TODO Use Cheney's algorithm to avoid large stack req during GC
+// - TODO Actually (throw away + reuse) old heaps after GC.
+// - TODO Separate "pinspace" gc generation (not collected / moved).
+// - TODO pinspace backed by file.
+// - TODO resume from pinspace snapshots + log
+// - TODO WASM
 
 #include <stdint.h>
 #define __STDC_WANT_LIB_EXT2__  1
@@ -49,8 +44,6 @@ static inline void *alloc(size_t bytes) {
   return res;
 }
 
-#define alloc_words(w) alloc(w*8)
-
 
 ////////////////////////////////////////////////////////////////////////////////
 //  Typedefs
@@ -73,10 +66,7 @@ typedef enum NatType {
   BIG
 } NatType;
 
-typedef struct BigNat {
-  len_t size;
-  nn_t buf;
-} BigNat;
+typedef struct BigNat { len_t size; } BigNat;
 
 struct Value;
 
@@ -150,12 +140,13 @@ JetTag jet_match(Value*);
 
 static Value *direct(u64);
 
-static void mk_app();
-static void clone();
-static Value *pop();
-static Value *get();
-static Value *get_deref();
-static Value *pop_deref();
+static void swap(void);
+static void mk_app(void);
+static void clone(void);
+static Value *pop(void);
+static Value *get(u64);
+static Value *get_deref(u64);
+static Value *pop_deref(void);
 static void slide(u64);
 static void update(u64);
 static void push(u64);
@@ -307,21 +298,21 @@ static inline Value *TL(Value *x) {
   return x->a.g;
 };
 
-static inline BigNat BN(Value *x) {
-  if (is_direct(x)) crash("BN: got direct");
-  x = deref(x);
-  #if CHECK_TAGS
-  ck_nat("BN", x);
-  #endif
-  return x->n;
-};
-
 static inline Value *IN(Value *x) {
   #if CHECK_TAGS
   ck_ind("IN", x);
   #endif
   return x->i;
 };
+
+static inline len_t WID(Value *v) {
+  return v->n.size;
+}
+
+static inline word_t *BUF(Value *v) {
+  return (void*) (&(v->n.size) + 1);
+}
+
 
 ////////////////////////////////////////////////////////////////////////////////
 //  Printing
@@ -333,18 +324,18 @@ void check_nat(Value *v) {
 
   if (v->type != NAT) crash("check_nat: not nat");
 
-  BigNat n = BN(v);
+  word_t sz = v->n.size;
 
-  if (n.size == 0) crash("check_nat: bignat zero");
+  if (sz == 0) crash("check_nat: bignat zero");
 
-  if (n.size == 1) {
-    if (n.buf[0] < PTR_NAT_MASK) {
+  if (sz == 1) {
+    if (BUF(v)[0] < PTR_NAT_MASK) {
       crash("check_nat: direct atom encoded as bignat");
     }
     return;
   }
 
-  if (n.buf[n.size - 1] == 0) {
+  if (BUF(v)[sz - 1] == 0) {
     crash("check_nat: bad size (high word is zero)");
   }
 }
@@ -401,12 +392,10 @@ void fprintf_func_name (FILE *f, Value *law, int recur) {
     return;
   }
 
-  BigNat n = BN(nm);
-
   {
-    long num_chars = n.size *sizeof(word_t);
+    long num_chars = nm->n.size * sizeof(word_t);
     char nat_str[num_chars+1];
-    memcpy(nat_str, n.buf, num_chars);
+    memcpy(nat_str, BUF(nm), num_chars);
     nat_str[num_chars] = 0;
 
     if (!is_symbol(nat_str)) { goto fallback; }
@@ -522,11 +511,10 @@ void fprintf_nat(FILE *f, Value *v) {
     return;
   }
 
-  BigNat n = BN(v);
-
-  long num_chars = n.size *sizeof(word_t);
+  long num_chars = v->n.size * sizeof(word_t);
+  // TODO: print string directly, instead of copying to the stack.
   char nat_str[num_chars+1];
-  memcpy(nat_str, n.buf, num_chars);
+  memcpy(nat_str, BUF(v), num_chars);
   nat_str[num_chars] = 0;
 
   if (is_symbol(nat_str)) {
@@ -534,7 +522,7 @@ void fprintf_nat(FILE *f, Value *v) {
     fprintf(f, "%%%s", nat_str);
   } else {
     // non-symbolic, so we use bsdnt to print as decimal
-    char *tmp = nn_get_str(n.buf, n.size);
+    char *tmp = nn_get_str(BUF(v), v->n.size);
     fprintf(f, "%s", tmp);
     free(tmp);
   }
@@ -559,23 +547,43 @@ void show_direct_nat(char *buf, Value *v) {
 ////////////////////////////////////////////////////////////////////////////////
 //  Construction
 
-Value *a_Big(BigNat n) {
-  while (n.size && n.buf[n.size - 1] == 0) n.size--;
-
-  if (n.size == 0)
-    return direct(0);
-
-  if (n.size == 1 && 0 == (n.buf[0] >> 63)) {
-    return direct(n.buf[0]);
-  }
-
-  Value *res = (Value *)alloc(sizeof(Value));
-  *res = (Value){ .type = NAT, .n = n };
+// just allocates the space. caller must fill buf.
+Value *start_bignat_alloc(size_t num_words) {
+  // tag size words..
+  Value *res = (Value *)alloc(8 * (2 + num_words));
+  res->type   = NAT;
+  res->n.size = num_words;
   return res;
 }
 
-void push_big(BigNat n) {
-  push_val(a_Big(n));
+static inline void abort_bignat_alloc(Value *v) {
+  hp -= ((2 + v->n.size) * 8);
+}
+
+// shrinks a "candidate" bignat and DECREASES THE SIZE OF THE HEAP so
+// that the next thing will be allocated in the right place.
+Value *end_bignat_alloc(Value *v) {
+  size_t old_sz = v->n.size;
+  size_t sz     = old_sz;
+  word_t *buf   = BUF(v);
+
+  while (sz && buf[sz - 1] == 0) sz--;
+
+  if (sz == 0) {
+    abort_bignat_alloc(v);
+    return DIRECT_ZERO;
+  }
+
+  if (sz == 1 && 0 == (buf[0] >> 63)) {
+    abort_bignat_alloc(v);
+    return direct(buf[0]);
+  }
+
+  if (sz == old_sz) return v;
+
+  v->n.size = sz;            // shrink size
+  hp -= (8 * (old_sz - sz)); // shrink heap
+  return v;
 }
 
 static inline Value *direct(u64 x) {
@@ -583,9 +591,9 @@ static inline Value *direct(u64 x) {
     return (Value *) (x | PTR_NAT_MASK);
   }
 
-  nn_t x_nat = alloc_words(1);
-  x_nat[0] = x;
-  return a_Big((BigNat){ .size = 1, .buf = x_nat });
+  Value *res = start_bignat_alloc(1);
+  BUF(res)[0] = x;
+  return res; // always correct, no need to shrink.
 }
 
 static inline Value *a_Pin(Value *item) {
@@ -621,12 +629,12 @@ static inline int cmp_direct(u64 a, u64 b) {
   return greater;
 }
 
-static inline int big_cmp(BigNat a, BigNat b) {
-  if (a.size != b.size) {
-    return (a.size < b.size) ? less : greater;
+static inline int big_cmp(Value *a, Value *b) {
+  if (WID(a) != WID(b)) {
+    return (WID(a) < WID(b)) ? less : greater;
   }
 
-  int nnres = nn_cmp_m(a.buf, b.buf, a.size);
+  int nnres = nn_cmp_m(BUF(a), BUF(b), WID(a));
 
   if (nnres < 0) return less;
   if (nnres == 0) return equals;
@@ -649,7 +657,7 @@ int cmp_recur(Value *a, Value *b) {
 
   switch (a->type) {
   case NAT:
-    return big_cmp(a->n, b->n);
+    return big_cmp(a, b);
 
   case PIN:
     a=IT(a); b=IT(b); goto tail_recur;
@@ -729,11 +737,6 @@ static inline void *realloc_(void *ptr, size_t sz) {
   return res;
 }
 
-BigNat bigify(u64 *x) {
-  u64 sz = (*x == 0) ? 0 : 1;
-  return (BigNat){ .size = sz, .buf = x };
-}
-
 // TODO change to `Value *` arg style of Mul/DivMod/etc
 //
 // invariant: a.size >= b.size
@@ -741,21 +744,22 @@ BigNat bigify(u64 *x) {
 // stack after:  ..rest (a+b)
 void BigPlusBig(u64 aSize, u64 bSize) {
   long new_size = MAX(aSize, bSize) + 1;
-  nn_t buf = alloc_words(new_size); // gc
-  BigNat a = BN(pop_deref());
-  BigNat b = BN(pop_deref());
-  word_t c = nn_add_c(buf, a.buf, a.size, b.buf, b.size, 0);
+  Value *res = start_bignat_alloc(new_size);
+  word_t *buf = BUF(res);
+  Value *a = pop_deref();
+  Value *b = pop_deref();
+  word_t c = nn_add_c(buf, BUF(a), a->n.size, BUF(b), b->n.size, 0);
   buf[new_size - 1] = c;
-  push_big((BigNat) { .size = new_size, .buf = buf });
+  push_val(end_bignat_alloc(res));
 }
 
-void BigPlusDirect(u64 direct, u64 bigSz) {
-  u64 newSz = bigSz + 1;
-  nn_t buf = alloc_words(newSz); // gc
-  BigNat big = BN(pop());
-  word_t carry = nn_add1(buf, big.buf, bigSz, direct);
-  buf[bigSz] = carry;
-  push_big((BigNat) { .size = newSz, .buf = buf });
+void BigPlusDirect(u64 small, u64 bigSz) {
+  u64 newSz       = bigSz + 1;
+  Value *res      = start_bignat_alloc(newSz); // gc
+  Value *big      = pop();
+  word_t carry    = nn_add1(BUF(res), BUF(big), bigSz, small);
+  BUF(res)[bigSz] = carry;
+  push_val(end_bignat_alloc(res));
 }
 
 // arguments must both have already been evaluated and coerced into nats.
@@ -773,32 +777,33 @@ void Add() {
     }
 
     push_val(b);
-    BigPlusDirect(aSmall, BN(b).size);
+    BigPlusDirect(aSmall, b->n.size);
     return;
   }
 
   if (is_direct(b)) {
     push_val(a);
-    BigPlusDirect(bSmall, BN(a).size);
+    BigPlusDirect(bSmall, a->n.size);
     return;
   }
 
   push_val(b);
   push_val(a);
-  BigPlusBig(BN(a).size, BN(b).size);
+  BigPlusBig(a->n.size, b->n.size);
 }
 
 void BigMinusDirect(Value *big, u64 direct) {
-  u64 bigSz = BN(big).size;
-  push_val(big);                 // save
-  nn_t buf = alloc_words(bigSz); // gc
-  BigNat n = BN(pop_deref());    // reload
-  word_t c = nn_sub1(buf, n.buf, bigSz, direct);
+  u64 bigSz = big->n.size;
+  push_val(big);                           // save
+  Value *res  = start_bignat_alloc(bigSz); // gc
+  word_t *buf = BUF(res);
+  big         = pop_deref();               // reload
+  word_t c = nn_sub1(buf, BUF(big), bigSz, direct);
   // a positive borrow (nonzero `c`) should only be possible if we
   // underflowed a single u64. our invariant is to convert to SMALL when we
   // reach 1 u64, so we should never encounter this case.
   assert (c == 0);
-  push_big((BigNat){ .size = bigSz, .buf = buf });
+  push_val(end_bignat_alloc(res));
 }
 
 void Dec() {
@@ -806,7 +811,7 @@ void Dec() {
   write_dot_extra("<Dec>", "", NULL);
   #endif
 
-  Value *v = pop_deref(0);
+  Value *v = pop_deref();
 
   if (is_direct(v)) {
     u64 n = get_direct(v);
@@ -847,8 +852,8 @@ void Sub() {
     return;
   }
 
-  u64 aSz = BN(a).size;
-  u64 bSz = BN(b).size;
+  u64 aSz = a->n.size;
+  u64 bSz = a->n.size;
 
   if (aSz < bSz) {
     push_val(DIRECT_ZERO);
@@ -860,15 +865,17 @@ void Sub() {
   push_val(b);
   push_val(a);
 
-  nn_t buf = alloc_words(aSz); // gc
+  Value *res  = start_bignat_alloc(aSz); // gc
+  word_t *buf = BUF(res);
 
-  BigNat aBig = BN(pop_deref());
-  BigNat bBig = BN(pop_deref());
-  word_t borrow = nn_sub_c(buf, aBig.buf, aBig.size, bBig.buf, bBig.size, 0);
+  a = pop_deref();
+  b = pop_deref();
+  word_t borrow = nn_sub_c(buf, BUF(a), a->n.size, BUF(b), b->n.size, 0);
   if (borrow) {
+    abort_bignat_alloc(res);
     push_val(DIRECT_ZERO);
   } else {
-    push_big((BigNat) { .size = aSz, .buf = buf });
+    push_val(end_bignat_alloc(res));
   }
 }
 
@@ -886,32 +893,39 @@ void DirectTimesDirect(u64 a, u64 b) {
     return;
   }
 
-  nn_t buf = alloc_words(2);
+  Value *ret  = start_bignat_alloc(2); // gc
+  word_t *buf = BUF(ret);
   buf[1] = nn_mul1(buf, &a, 1, b);
-  push_big((BigNat) { .size = 2, .buf = buf });
+  push_val(end_bignat_alloc(ret));
 }
 
+// call alloc to reserve words
+// fill in data
+// truncate
+// decrease hp.
+
 void BigTimesDirect(u64 small, Value *big) {
-  u64 newSz = BN(big).size + 1;
-  push_val(big);                 // save pointer to stack
-  nn_t buf = alloc_words(newSz); // gc
-  nn_zero(buf, newSz);           //
-  BigNat nat = BN(pop(0));       // reload pointer
-  nn_mul1(buf, nat.buf, nat.size, small);
-  push_big((BigNat){ .size = newSz, .buf = buf });
+  u64 newSz = big->n.size + 1;
+  push_val(big);                          // save pointer to stack
+  Value *res = start_bignat_alloc(newSz); // gc
+  big = pop();                            // reload pointer
+  word_t *buf = BUF(res);
+  nn_zero(buf, newSz);
+  nn_mul1(buf, BUF(big), big->n.size, small);
+  push_val(end_bignat_alloc(res));
 }
 
 void BigTimesBig(Value *a, Value *b) {
-  long new_size = BN(a).size + BN(b).size;
-  push_val(a);
-  push_val(b);
-  nn_t buf = alloc_words(new_size); // gc
-  nn_zero(buf, new_size);           //
-  b = pop(); a = pop();             // reload pointer
-  BigNat aBig = BN(a);
-  BigNat bBig = BN(b);
-  nn_mul_classical(buf, aBig.buf, aBig.size, bBig.buf, bBig.size);
-  push_big((BigNat){ .size = new_size, .buf = buf });
+  long new_size = a->n.size + b->n.size;
+  push_val(a);                               // save pointer
+  push_val(b);                               // save pointer
+  Value *res = start_bignat_alloc(new_size); // gc
+  b = pop();                                 // reload pointer
+  a = pop();                                 // reload pointer
+  word_t *buf = BUF(res);
+  nn_zero(buf, new_size);
+  nn_mul_classical(buf, BUF(a), a->n.size, BUF(b), b->n.size);
+  push_val(end_bignat_alloc(res));
 }
 
 void Mul() {
@@ -950,37 +964,52 @@ void DivModBigDirect(Value *a, u64 b) {
     push_val(DIRECT_ZERO); // div
     return;
   }
-  BigNat aBig = BN(a);
-  long sz = aBig.size;
-  push_val(a);                        // save a
-  nn_t a_buf_clone = alloc_words(sz); // gc
-  nn_t buf = alloc_words(sz);         // gc
+  long sz = a->n.size;
+
+  push_val(a);                         // save a
+  Value *res = start_bignat_alloc(sz); // gc
+  a = pop();                           // restore a
+
+  word_t *buf = BUF(res);
   nn_zero(buf, sz);
-  aBig = BN(pop());                   // restore a
-  nn_copy(a_buf_clone, aBig.buf, sz); // copy a's buf (it will be mutated)
-  word_t mod = nn_divrem1_simple(buf, a_buf_clone, sz, b);
-  push_val(direct(mod));                        // mod
-  push_big((BigNat){ .size = sz, .buf = buf }); // div
+  word_t mod = nn_divrem1_simple(buf, BUF(a), sz, b);
+  push_val(direct(mod));           // mod
+  push_val(end_bignat_alloc(res)); // div
 }
 
 void DivModBigBig(Value *a, Value *b) {
-  BigNat aBig = BN(a);
-  BigNat bBig = BN(b);
-  if (aBig.size < bBig.size) {
+  long aSz = WID(a);
+  long bSz = WID(b);
+
+  if (aSz < bSz) {
     push_val(a);           // mod
     push_val(DIRECT_ZERO); // div
     return;
   }
-  long sz = aBig.size - bBig.size + 1;
-  push_val(b);                               // save b
-  nn_t a_buf_clone = alloc_words(aBig.size); // gc
-  nn_copy(a_buf_clone, aBig.buf, aBig.size);
-  nn_t buf = alloc_words(sz);                // gc
+
+  // Copy a's words into a working buffer (which will be mutated by
+  // `nn_divrem`).  TODO HACK: can stack overflow.
+  word_t tmp[aSz];
+  nn_copy(tmp, BUF(a), aSz);
+
+  long sz = aSz - bSz + 1;
+
+  push_val(b);                            // save
+  Value *divres = start_bignat_alloc(sz); // gc
+  b = pop();                              // restore
+
+  word_t *buf = BUF(divres);
   nn_zero(buf, sz);
-  bBig = BN(pop());                          // restore b
-  nn_divrem(buf, a_buf_clone, aBig.size, bBig.buf, bBig.size);
-  push_big((BigNat){ .size = bBig.size, .buf = a_buf_clone }); // mod
-  push_big((BigNat){ .size = sz,        .buf = buf });         // div
+
+  nn_divrem(buf, tmp, aSz, BUF(b), bSz);
+
+  push_val(end_bignat_alloc(divres));
+
+  Value *modres = start_bignat_alloc(bSz);
+  nn_copy(BUF(modres), tmp, bSz);
+  push_val(end_bignat_alloc(modres));
+
+  swap();
 }
 
 // stack before: ..rest b a
@@ -1168,12 +1197,12 @@ void stack_grow(u64 count) {
   }
 }
 
-void seed_load(u64 *buf) {
-  u64 n_holes = buf[0];
-  u64 n_bigs  = buf[1];
-  u64 n_words = buf[2];
-  u64 n_bytes = buf[3];
-  u64 n_frags = buf[4];
+void seed_load(u64 *inpbuf) {
+  u64 n_holes = inpbuf[0];
+  u64 n_bigs  = inpbuf[1];
+  u64 n_words = inpbuf[2];
+  u64 n_bytes = inpbuf[3];
+  u64 n_frags = inpbuf[4];
 
   if (n_holes > 1) {
     fprintf(stderr, "file is just one seed, expected seedpod\n");
@@ -1183,6 +1212,8 @@ void seed_load(u64 *buf) {
   u64 n_entries = n_bigs + n_words + n_bytes + n_frags + n_holes;
 
   if (n_entries == 0) crash("empty seed");
+
+  // clever: store working table on stack to make everything GC safe.
 
   stack_grow(n_entries);
   Value **tab = get_ptr(n_entries-1); // 0
@@ -1196,28 +1227,25 @@ void seed_load(u64 *buf) {
   // How big are the bignats?
   u64 bigwidths[n_bigs];
   for (int i=0; i<n_bigs; i++) {
-    bigwidths[i] = buf[5+i];
+    bigwidths[i] = inpbuf[5+i];
   }
 
   int used = 5 + n_bigs; // number of words used
 
   for (int i=0; i<n_bigs; i++) {
-    u64 wid  = bigwidths[i];
-
-    u64 *big_buf = calloc(wid, sizeof(u64));
-    big_buf = memcpy(big_buf, buf+used, wid*sizeof(u64));
-    BigNat big_nat = (BigNat){ .size=wid, .buf = big_buf } ;
-
-    *next_ref++ = a_Big(big_nat);
+    u64 wid       = bigwidths[i];
+    Value *bigres = start_bignat_alloc(wid);
+    memcpy(BUF(bigres), inpbuf+used, wid*sizeof(u64));
+    *next_ref++ = end_bignat_alloc(bigres);
     used += wid;
   }
 
   for (int i=0; i<n_words; i++) {
-    *next_ref++ = direct(buf[used++]);
+    *next_ref++ = direct(inpbuf[used++]);
   }
 
   {
-    uint8_t *byte_buf = (void*) (buf + used);
+    uint8_t *byte_buf = (void*) (inpbuf + used);
     for (int i=0; i<n_bytes; i++) {
       *next_ref++ = direct(byte_buf[i]);
     }
@@ -1225,8 +1253,8 @@ void seed_load(u64 *buf) {
   }
 
   int use = 8 * (n_bytes%8);
-  u64 acc = buf[used];
-  u64 *more = &buf[used+1];
+  u64 acc = inpbuf[used];
+  u64 *more = &inpbuf[used+1];
 
   for (int i=0; i<n_frags; i++) {
     u64 tabSz = (next_ref - tab);
@@ -1346,7 +1374,10 @@ Value *gc_copy(Value *x) {
       ret = a_Law((Law){nm, ar, bd, x->l.w});
       break;
     case NAT:
-      ret = a_Big(BN(x));
+      ret = start_bignat_alloc(WID(x));
+      memcpy(BUF(ret), BUF(x), 8 * WID(x));
+      // no need for end_bignat_alloc because input is always valid.
+      break;
     }
     default:
       crash("gc_copy: impossible");
@@ -1731,7 +1762,7 @@ void incr() {
   }
 
   push_val(x);
-  BigPlusDirect(1, BN(x).size);
+  BigPlusDirect(1, x->n.size);
 }
 
 void prim_case() {
@@ -2250,8 +2281,9 @@ bool unwind(u64 depth) {
     }
     case MOV:
       crash("MOV escaped GC");
+    default:
+      crash("unwind: this should never happen");
   }
-  crash("this should never happen");
 }
 
 // returns true if we eval-ed
@@ -2278,7 +2310,7 @@ void force_whnf() {
   write_dot("force_whnf");
   #endif
   //
-  Value *top = pop_deref(0);
+  Value *top = pop_deref();
   if (TY(top) == APP) {
     push_val(TL(top));
     push_val(HD(top));
@@ -2338,11 +2370,11 @@ void read_atom() {
   long nat_len = bit_len / word_bits;
   if ((bit_len % word_bits) > 0) nat_len++; // round up.
   //
-  nn_t nat_buf = alloc_words(nat_len);
-  nn_zero(nat_buf, nat_len);
-  len_t actual_len;
-  nn_set_str(nat_buf, &actual_len, str_buf);
-  push_big((BigNat){ .size = nat_len, .buf = nat_buf });
+  Value *res = start_bignat_alloc(nat_len);
+  nn_zero(BUF(res), nat_len);
+  static len_t dummy_len;
+  nn_set_str(BUF(res), &dummy_len, str_buf);
+  push_val(end_bignat_alloc(res));
 }
 
 // We take the already-read head of the app on the PLAN stack.
@@ -2374,10 +2406,10 @@ void read_app() {
 void utf8_nat(char *str) {
   long byteSz = strlen(str);
   long wordSz = (7 + byteSz) / 8;
-  nn_t buf = alloc_words(wordSz);
-  nn_zero(buf, wordSz);
-  memcpy(buf, str, byteSz);
-  push_val(a_Big((BigNat){ .size = wordSz, .buf = buf }));
+  Value *res = start_bignat_alloc(wordSz);
+  nn_zero(BUF(res), wordSz);
+  memcpy(BUF(res), str, byteSz);
+  push_val(end_bignat_alloc(res));
 }
 
 void read_sym() {
@@ -2564,7 +2596,7 @@ void repl () {
     Value *x = pop();
 
     if (NEQ(x,y)) {
-      fprintf(stderr, "! ");
+      fprintf(stderr, "FAILED ");
       fprintf_value(stderr, x);
       fprintf(stderr, " ");
       fprintf_value(stderr, y);
@@ -2572,7 +2604,7 @@ void repl () {
       crash("assertion failed");
     }
 
-    fprintf(stderr, "! ");
+    fprintf(stderr, "PASSED ");
     fprintf_value(stderr, x);
     fprintf(stderr, "\n");
 
