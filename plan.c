@@ -2454,20 +2454,18 @@ void read_sym() {
 Value **symbol_table;
 
 void bind_symbol(Value *nm, Value *v) {
-    push_val(v);
-    push_val(nm);
-    push_val(*symbol_table);
-    mk_app_rev();
-    mk_app_rev();
-    *symbol_table = pop();
+  push_val(v);
+  push_val(nm);
+  push_val(*symbol_table);
+  mk_app_rev();
+  mk_app_rev();
+  *symbol_table = pop();
 }
 
 void lookup_symbol() {
   Value *nm = pop();
   Value *x = *symbol_table;
-  // fprintf(stderr, "TABLE: ");
-  // fprintf_value(stderr, x);
-  // fprintf(stderr, "\n");
+
   while (!is_direct(x)) {
     Value *hx = HD(x);
     Value *v  = TL(x);
@@ -2475,8 +2473,9 @@ void lookup_symbol() {
     x=HD(hx);
     if (EQ(nm, k)) { push_val(v); return; }
   }
+
   fprintf_value(stderr, nm);
-  crash("symbol not found");
+  crash(": symbol not found");
 }
 
 bool read_exp() {
@@ -2680,13 +2679,6 @@ int main (void) {
 
   push_val(DIRECT_ZERO);
   symbol_table = get_ptr(0);
-
-  // Value *x = direct(UINT64_MAX);
-  // Value *y = direct(3);
-  // Value *arr[2] = { x, y };
-  // Value *res = jet_table[0].jet_exec(arr);
-  // fprintf_value(stdout, res);
-  // printf("\n");
 
   #if ENABLE_GRAPHVIZ
   struct stat st = {0};
