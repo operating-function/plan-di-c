@@ -49,7 +49,7 @@
 
 ; TODO fix Div, this is wrong
 =Div (Pin (Law %Div 2 1))
-; Div=(Pin (Law %Div 2 (
+; Div=(Pin (Law %Div 2 ()))
 
 ; TODO fix Mod, this is wrong
 =Mod (Pin (Law %Mod 2 1))
@@ -413,7 +413,58 @@
     {= (Law n a b)        | ##1 n a b}
     {= (Inc m)            | ##2 m}
     {= (Case p l a z m o) | ##3 p l a z m o}
-    {= (Die x)            | ##die x  ; Calling a primop above 3 is a crash.}))
+    {= (Die x)            | ##die x  ; Calling a primop above 3 is a crash.}
+ ))
 
 ! (0 (%A (%K #2) (%K 3)))
   (@sireTrial (0 {| ##2} {| 3}))
+
+! (0 (%F (0 1 0 0 %Pin 1 (%K 0))))
+  (@sireTrial (0 {?? (Pin i)            | ##0 i}))
+
+; (WORD n)=(%WORD #rex n 0)
+=WORD (Pin (Law %WORD 1) (A (A (%WORD #rex) 1) (K 0)))
+
+! ; TODO the structure is correct, but the word-data from words deeper
+  ; into the line are zero'd out.  This must be a problem with ByteSlice
+  ; or similar.
+
+  (@rexTrial
+   (0 {?? (Case p l a z m o)}
+      { | ##3 p l a z m o}))
+
+  (0 (0 %REPL 3 %WOODS)
+    (0 (0 1 (%OPEN #rex {??}
+               (0 (%NEST #rex {|} (0 (WORD {Case})
+                                     (WORD 0)
+                                     (WORD 0)
+                                     (WORD 0)
+                                     (WORD 0)
+                                     (WORD 0)
+                                     (WORD 0))
+                   0))
+             (%OPEN #rex {|}
+                (0 (%PREF #rex {##} (0 (WORD {3})) 0)
+                   (WORD %p)
+                   (WORD 0)
+                   (WORD 0)
+                   (WORD 0)
+                   (WORD 0)
+                   (WORD 0))
+              0)))))
+
+; TODO: This crashes, probably because the above parsing logic is wrong.
+(@sireTrial
+  (0
+   {= Car}
+   {@ Case}
+   {  ?? (Case p l a z m o)}
+   {   | ##3 p l a z m o}
+   {@ PlanCase}
+   {   ?? (PlanCase p l a n x)}
+   {    | Case p l a n _&n x}
+   {@ Car}
+   {   ?? (Car x)}
+   {    | PlanCase _&(##0) (n a _)&(##1 n a) (h _)&h 0 x}
+   {Car}
+))
