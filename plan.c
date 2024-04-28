@@ -2606,7 +2606,7 @@ void repl () {
     if (NEQ(x,y)) {
       fprintf(stderr, "FAILED ");
       fprintf_value(stderr, x);
-      fprintf(stderr, " ");
+      fprintf(stderr, " != ");
       fprintf_value(stderr, y);
       fprintf(stderr, "\n");
       crash("assertion failed");
