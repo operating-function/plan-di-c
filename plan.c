@@ -483,6 +483,7 @@ static inline bool issym (char c) {
   return (c == '_' || isalnum(c));
 }
 
+// TODO: This is not safe for nats that contain zero bytes.
 bool is_symbol(const char *str) {
   if (str[0] == 0) return false;
   if (str[1] == 0) return isalpha(str[0]);
@@ -495,16 +496,37 @@ bool is_symbol(const char *str) {
   }
 }
 
+// TODO: This is not safe for nats that contain zero bytes.
+bool is_string(const char *str) {
+  if (!str[0]) return false;
+  if (!str[1]) return false;
+  int depth = 1;
+ again:
+  if (depth == 0) return false;
+  char c = *(str++);
+  switch (c) {
+  case 0:    return true;
+  case '{':  depth++; goto again;
+  case '}':  depth--; goto again;
+  case '\n':
+  case '\r': return false;
+  default:   if (!isprint(c)) return false;
+             else goto again;
+  }
+}
 
 void fprintf_nat(FILE *f, Value *v) {
   assert(TY(v) == NAT);
 
   if (is_direct(v)) {
     u64 w = get_direct(v);
+
     char tmp[9] = {0};
     ((u64*) tmp)[0] = w;
     if (is_symbol(tmp)) {
       fprintf(f, "%%%s", tmp);
+    } else if (is_string(tmp)) {
+      fprintf(f, "{%s}", tmp);
     } else {
       fprintf(f, "%" PRIu64, w);
     }
@@ -520,6 +542,8 @@ void fprintf_nat(FILE *f, Value *v) {
   if (is_symbol(nat_str)) {
     // symbolic, so we can print it as a string, with a leading `%`
     fprintf(f, "%%%s", nat_str);
+  } else if (is_string(nat_str)) {
+      fprintf(f, "{%s}", nat_str);
   } else {
     // non-symbolic, so we use bsdnt to print as decimal
     char *tmp = nn_get_str(BUF(v), v->n.size);
@@ -2619,7 +2643,6 @@ void repl () {
     gc();
 
     goto next_input;
-
 
   case '=':
     read_sym();
