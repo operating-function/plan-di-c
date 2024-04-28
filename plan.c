@@ -39,42 +39,13 @@ noreturn void crash(char *s) {
 
 // Heap ////////////////////////////////////////////////////////////////////////
 
-#define BLOCK 4096
-
 static char *heap_start = NULL;
-static char *heap_end   = NULL;
 static char *hp         = NULL;
-
-void grow () {
-  int excess_bytes  = hp - heap_end;
-  int excess_chunks = excess_bytes / BLOCK;
-  int growth        = (excess_chunks+1) * BLOCK;
-
-  int prot   = PROT_READ | PROT_WRITE;
-  int flags  = MAP_FIXED | MAP_PRIVATE | MAP_ANON;
-
-  // printf("old_start=%p\n", heap_start);
-  // printf("old_end=%p\n", heap_end);
-  // printf("hp=%p\n", hp);
-  // printf("growth=%d\n", growth);
-
-  if (MAP_FAILED == mmap(heap_end, growth, prot, flags, -1, 0)) {
-    perror("grow: mmap");
-    exit(1);
-  }
-
-  heap_end = heap_end + growth;
-
-  // printf("new_end=%p\n", heap_end);
-
-  fprintf(stderr, "new heap size = %ld\n", heap_end - heap_start);
-}
 
 // argument is in bytes, but must be a multiple of 8.
 static inline void *alloc(size_t bytes) {
   char *res = hp;
   hp += bytes;
-  if (hp >= heap_end) grow();
   return res;
 }
 
@@ -2633,19 +2604,16 @@ void repl () {
   }
 }
 
+#define HEAP_MAP_SZ (1ULL << 42) // 4 TB
+#define HEAP_LOCAL  (1ULL << 24)
 
 int main (void) {
   int prot   = PROT_READ | PROT_WRITE;
-  int flags  = MAP_FIXED | MAP_PRIVATE | MAP_ANON;
-  heap_start = mmap((void*) 0x010000000000, BLOCK, prot, flags, -1, 0);
+  int flags  = MAP_FIXED | MAP_PRIVATE | MAP_ANON | MAP_NORESERVE;
+  heap_start = mmap((void*) HEAP_LOCAL, HEAP_MAP_SZ, prot, flags, -1, 0);
   hp         = heap_start;
-  heap_end   = heap_start + BLOCK;
 
   if (heap_start == MAP_FAILED) { perror("heap_init(): mmap"); exit(1); }
-
-  // printf("heap_start=%p\n", heap_start);
-  // printf("hp=%p\n", hp);
-  // printf("heap_end=%p\n", heap_end);
 
   push_val(DIRECT_ZERO);
   symbol_table = get_ptr(0);
