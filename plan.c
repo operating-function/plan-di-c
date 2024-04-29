@@ -36,11 +36,11 @@ noreturn void crash(char *s) {
 
 #define HEAP_MAP_SZ (1ULL << 40) // 1 TB
 
-// this_heap and that_heap are swapped on every GC.
+// tospace and fromspace are swapped on every GC.
 
-static char *this_heap = (char*) (1ULL << 24);
+static char *tospace   = (char*) (1ULL << 24);
 static char *hp        = (char*) (1ULL << 24);
-static char *that_heap = (char*) (1ULL << 41);
+static char *fromspace = (char*) (1ULL << 41);
 
 // argument is in bytes, but must be a multiple of 8.
 static inline void *alloc(size_t bytes) {
@@ -1371,7 +1371,7 @@ Value *gc_copy(Value *x) {
     return x;
 
   // if this points into the tospace, we don't need to copy.
-  if ((char*)x >= this_heap && (char*)x < (this_heap + HEAP_MAP_SZ))
+  if ((char*)x >= tospace && (char*)x < (tospace + HEAP_MAP_SZ))
     return x;
 
   if (x->type == MOV) return x->i;
@@ -1420,10 +1420,10 @@ static inline void gc_copy_refs(Value *x) {
 void gc() {
   // swap the two heaps (with the new heap being empty).
   // char *that_heap_end = hp;
-  char *tmp = that_heap;
-  that_heap = this_heap;
-  this_heap = tmp;
-  hp = this_heap;
+  char *tmp = fromspace;
+  fromspace = tospace;
+  tospace = tmp;
+  hp = tospace;
 
   // copy roots to new heap.
   for (u64 i = 0; i < sp; i++) {
@@ -1431,7 +1431,7 @@ void gc() {
   }
 
   // copy all references from the new heap to the old heap
-  for (char *iter = this_heap; iter < hp; iter += alloc_size((Value*)iter)) {
+  for (char *iter = tospace; iter < hp; iter += alloc_size((Value*)iter)) {
     gc_copy_refs((Value*) iter);
   }
 }
@@ -2685,11 +2685,11 @@ int main (void) {
   int prot   = PROT_READ | PROT_WRITE;
   int flags  = MAP_FIXED | MAP_PRIVATE | MAP_ANON | MAP_NORESERVE;
 
-  if (this_heap != mmap((void*) this_heap, HEAP_MAP_SZ, prot, flags, -1, 0))
-      { perror("this_heap: mmap"); exit(1); }
+  if (tospace != mmap((void*) tospace, HEAP_MAP_SZ, prot, flags, -1, 0))
+      { perror("tospace: mmap"); exit(1); }
 
-  if (that_heap != mmap((void*) that_heap, HEAP_MAP_SZ, prot, flags, -1, 0))
-      { perror("that_heap: mmap"); exit(1); }
+  if (fromspace != mmap((void*) fromspace, HEAP_MAP_SZ, prot, flags, -1, 0))
+      { perror("fromspace: mmap"); exit(1); }
 
   push_val(DIRECT_ZERO);
   symbol_table = get_ptr(0);
