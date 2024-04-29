@@ -1328,7 +1328,10 @@ static inline Value *deref(Value *x) {
 }
 
 static inline Value *pop() {
+  #if STACK_BOUNDS_CHECK
   if (sp == 0) crash("pop: empty stack");
+  #endif
+
   sp--;
   return stack[sp];
 }
@@ -1692,7 +1695,11 @@ void slide(u64 count) {
   snprintf(dot_lab, 1024, "slide %lu", count);
   write_dot(dot_lab);
   #endif
-  //
+
+  #if STACK_BOUNDS_CHECK
+  if (count >= sp) crash("stack underflow");
+  #endif
+
   Value *top = get_deref(0);
   sp -= count;
   stack[sp-1] = top;
