@@ -471,6 +471,25 @@
                    (WORD %o))
               0)))))
 
+{Parsing very long lines}
+
+!
+(@Ix 1
+ (@rexTrial
+  (0
+   {   ?? (Car x)}
+   {    | PlanCase}
+   {      _&(##0)}
+   {      (n a _)&(##1 n a)}
+   {      (h _)&h}
+   {      0}
+   {      x})))
+(@Ix 1
+ (@rexTrial
+  (0
+   {   ?? (Car x)}
+   {    | PlanCase _&(##0) (n a _)&(##1 n a) (h _)&h 0 x})))
+
 (@sireTrial
   (0
    {@ Case}
