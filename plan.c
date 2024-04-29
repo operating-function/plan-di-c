@@ -1,5 +1,5 @@
-// - TODO Use Cheney's algorithm to avoid large stack req during GC
-// - TODO Actually (throw away + reuse) old heaps after GC.
+// - TODO GC at a certain size, not just after each assertion.
+// - TODO Place the two heaps in adjacent memory.
 // - TODO Separate "pinspace" gc generation (not collected / moved).
 // - TODO pinspace backed by file.
 // - TODO resume from pinspace snapshots + log
@@ -34,8 +34,13 @@ noreturn void crash(char *s) {
 
 // Heap ////////////////////////////////////////////////////////////////////////
 
-static char *heap_start = NULL;
-static char *hp         = NULL;
+#define HEAP_MAP_SZ (1ULL << 40) // 1 TB
+
+// this_heap and that_heap are swapped on every GC.
+
+static char *this_heap = (char*) (1ULL << 24);
+static char *hp        = (char*) (1ULL << 24);
+static char *that_heap = (char*) (1ULL << 41);
 
 // argument is in bytes, but must be a multiple of 8.
 static inline void *alloc(size_t bytes) {
@@ -1356,17 +1361,18 @@ static inline Value *get_deref(u64 idx) {
 ////////////////////////////////////////////////////////////////////////////////
 //  GC
 
-static char *new_heap_start = NULL;
-
 static inline size_t alloc_size(Value *x) {
   if (x->type == NAT) return (8 * (2 + WID(x)));
   return sizeof(Value);
 }
 
 Value *gc_copy(Value *x) {
-  if (x == NULL || is_direct(x)) return x;
+  if (x == NULL || is_direct(x))
+    return x;
 
-  if ((char*)x >= new_heap_start) return x;
+  // if this points into the tospace, we don't need to copy.
+  if ((char*)x >= this_heap && (char*)x < (this_heap + HEAP_MAP_SZ))
+    return x;
 
   if (x->type == MOV) return x->i;
 
@@ -1405,13 +1411,19 @@ static inline void gc_copy_refs(Value *x) {
     x->i = gc_copy(x->i);
     break;
   default:
+    fprintf(stderr, "gc_copy_refs: bad value: ptr=%p, tag=%d\n", x, x->type);
     crash("gc_copy_refs: impossible");
   }
 }
 
 // Cheney's algorithm
 void gc() {
-  new_heap_start = hp;
+  // swap the two heaps (with the new heap being empty).
+  // char *that_heap_end = hp;
+  char *tmp = that_heap;
+  that_heap = this_heap;
+  this_heap = tmp;
+  hp = this_heap;
 
   // copy roots to new heap.
   for (u64 i = 0; i < sp; i++) {
@@ -1419,14 +1431,9 @@ void gc() {
   }
 
   // copy all references from the new heap to the old heap
-  for (char *iter = new_heap_start; iter <= hp;) {
-    Value *v = (Value*)iter;
-    gc_copy_refs(v);
-    iter += alloc_size(v);
+  for (char *iter = this_heap; iter < hp; iter += alloc_size((Value*)iter)) {
+    gc_copy_refs((Value*) iter);
   }
-
-  // wipe old heap (just for testing purposes)
-  memset(heap_start, 0, new_heap_start - heap_start);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -2674,16 +2681,15 @@ void repl () {
   }
 }
 
-#define HEAP_MAP_SZ (1ULL << 42) // 4 TB
-#define HEAP_LOCAL  (1ULL << 24)
-
 int main (void) {
   int prot   = PROT_READ | PROT_WRITE;
   int flags  = MAP_FIXED | MAP_PRIVATE | MAP_ANON | MAP_NORESERVE;
-  heap_start = mmap((void*) HEAP_LOCAL, HEAP_MAP_SZ, prot, flags, -1, 0);
-  hp         = heap_start;
 
-  if (heap_start == MAP_FAILED) { perror("heap_init(): mmap"); exit(1); }
+  if (this_heap != mmap((void*) this_heap, HEAP_MAP_SZ, prot, flags, -1, 0))
+      { perror("this_heap: mmap"); exit(1); }
+
+  if (that_heap != mmap((void*) that_heap, HEAP_MAP_SZ, prot, flags, -1, 0))
+      { perror("that_heap: mmap"); exit(1); }
 
   push_val(DIRECT_ZERO);
   symbol_table = get_ptr(0);

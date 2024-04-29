@@ -8,7 +8,7 @@ clean:
 
 .PHONY: test
 test: plan
-	time ./plan < test.sexp
+	perf stat ./plan < test.sexp
 
 linked_list.o: linked_list.h linked_list.c
 	gcc $(CFLAGS) -c $^
