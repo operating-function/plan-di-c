@@ -935,7 +935,8 @@ void BigTimesDirect(u64 small, Value *big) {
   big = pop();                            // reload pointer
   word_t *buf = BUF(res);
   nn_zero(buf, newSz);
-  nn_mul1(buf, BUF(big), big->n.size, small);
+  word_t carry = nn_mul1(buf, BUF(big), big->n.size, small);
+  buf[big->n.size] = carry;
   push_val(end_bignat_alloc(res));
 }
 
