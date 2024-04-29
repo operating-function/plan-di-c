@@ -505,3 +505,23 @@
    {      x}
    {| Car (2 3)}
 ))
+
+! (0 3 4)
+(@runSire
+ (0 {= x 3}
+    {}
+    {y=4}
+    {}
+    {(0 x y)}))
+
+! (1 0 0)
+(@runSire
+ (0 {= (Pin i)            | ##0 i}
+    {= (Law n a b)        | ##1 n a b}
+    {= (Inc m)            | ##2 m}
+    {= (Case p l a z m o) | ##3 p l a z m o}
+    {= (Die x)            | ##die x  ; Calling a primop above 3 is a crash.}
+    {}
+    {= (Eqz x) | Case _&0 (_ _ _)&0 (_ _)&0 1 _&0 x}
+    {}
+    {(Eqz 0 Eqz-1 Eqz-Eqz)}))
