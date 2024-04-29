@@ -46,6 +46,8 @@
 =Mul    (Pin (Law %Mul 2 (0 (0 (0 Times (0 Add 1)) (0 0)) 2)))
 =SubLaw (Law %Sub 2 (0 (0 (Times Dec) (0 ToNat 1)) 2))
 =Sub    (Pin SubLaw)
+=Pow    (Pin (Law %Pow 2 (0 (0 (0 Times (0 Mul 1)) (K 1)) 2)))
+=Bex    (Pin (Law %Bex 1 (0 (Pow 2) 1)))
 
 ; TODO fix Div, this is wrong
 =Div (Pin (Law %Div 2 1))
@@ -242,6 +244,13 @@
 
 ! 1475887433180421662838272732634687279056224492909545382656893899996011391342627596
   (Mul %foooooooooooooooo %baaaaaaaaaaaaaaar)
+
+{Binary Exponent}
+
+! 4294967296           (Bex 32)
+! 9223372036854775808  (Bex 63)
+! 18446744073709551616 (Mul 2 9223372036854775808)
+! 18446744073709551616 (Bex 64)
 
 {Div directs}
 
