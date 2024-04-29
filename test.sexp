@@ -443,10 +443,7 @@
 ; (WORD n)=(%WORD #rex n 0)
 =WORD (Pin (Law %WORD 1) (A (A (%WORD #rex) 1) (K 0)))
 
-! ; TODO the structure is correct, but the word-data from words deeper
-  ; into the line are zero'd out.  This must be a problem with ByteSlice
-  ; or similar.
-
+!
   (@rexTrial
    (0 {?? (Case p l a z m o)}
       { | ##3 p l a z m o}))
