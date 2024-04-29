@@ -413,11 +413,16 @@
 ! (0
    (0 %REPL 2 %WOODS)
    (0
-    (0 1 (%OPEN #rex 61 (0 (%NEST #rex 124 (0 (%WORD #rex %Pin 0)
-                                              (%WORD #rex %i 0))
-                            0)
-                         0)
-          0))))
+    (0 1
+     (%OPEN #rex {=}
+        (0 (%NEST #rex {|} (0 (%WORD #rex %Pin 0)
+                              (%WORD #rex %i 0))
+            0)
+            (%OPEN #rex {|}
+               (0 (%PREF #rex {##} (0 (%WORD #rex 48 0)) 0)
+                  (%WORD #rex %i 0))
+             0))
+      0))))
   (@rexTrial
    (0 {= (Pin i)            | ##0 i}))
 
@@ -432,7 +437,7 @@
 ! (0 (%A (%K #2) (%K 3)))
   (@sireTrial (0 {| ##2} {| 3}))
 
-! (0 (%F (0 1 0 0 %Pin 1 (%K 0))))
+! (0 (%F (0 1 0 0 %Pin 1 (%A (%K #0) (%V 0)))))
   (@sireTrial (0 {?? (Pin i)            | ##0 i}))
 
 ; (WORD n)=(%WORD #rex n 0)
@@ -449,27 +454,25 @@
   (0 (0 %REPL 3 %WOODS)
     (0 (0 1 (%OPEN #rex {??}
                (0 (%NEST #rex {|} (0 (WORD {Case})
-                                     (WORD 0)
-                                     (WORD 0)
-                                     (WORD 0)
-                                     (WORD 0)
-                                     (WORD 0)
-                                     (WORD 0))
+                                     (WORD %p)
+                                     (WORD %l)
+                                     (WORD %a)
+                                     (WORD %z)
+                                     (WORD %m)
+                                     (WORD %o))
                    0))
              (%OPEN #rex {|}
                 (0 (%PREF #rex {##} (0 (WORD {3})) 0)
                    (WORD %p)
-                   (WORD 0)
-                   (WORD 0)
-                   (WORD 0)
-                   (WORD 0)
-                   (WORD 0))
+                   (WORD %l)
+                   (WORD %a)
+                   (WORD %z)
+                   (WORD %m)
+                   (WORD %o))
               0)))))
 
-; TODO: This crashes, probably because the above parsing logic is wrong.
 (@sireTrial
   (0
-   {= Car}
    {@ Case}
    {  ?? (Case p l a z m o)}
    {   | ##3 p l a z m o}
@@ -478,6 +481,11 @@
    {    | Case p l a n _&n x}
    {@ Car}
    {   ?? (Car x)}
-   {    | PlanCase _&(##0) (n a _)&(##1 n a) (h _)&h 0 x}
-   {Car}
+   {    | PlanCase}
+   {      _&(##0)}
+   {      (n a _)&(##1 n a)}
+   {      (h _)&h}
+   {      0}
+   {      x}
+   {| Car (2 3)}
 ))
