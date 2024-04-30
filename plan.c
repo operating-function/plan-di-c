@@ -135,6 +135,7 @@ char dot_lab[1024];
 #define ENABLE_GRAPHVIZ    0
 #define STACK_BOUNDS_CHECK 0
 #define CHECK_TAGS         0
+#define CHECK_DIRECT       0
 
 static bool enable_graphviz = 0;
 
@@ -143,7 +144,7 @@ void write_dot(char *);
 Value *normalize (Value*);
 JetTag jet_match(Value*);
 
-static Value *a_Word(u64);
+static void push_word(u64);
 static Value *DIRECT(u64);
 
 static void swap(void);
@@ -617,18 +618,24 @@ Value *end_bignat_alloc(Value *v) {
 }
 
 static inline Value *DIRECT(u64 x) {
+  #if CHECK_DIRECT
   if (x & PTR_NAT_MASK) crash("DIRECT: too big");
+  #endif
+
   return (Value *) (x | PTR_NAT_MASK);
 }
 
-static inline Value *a_Word(u64 x) {
+static inline void push_word(u64 x) {
   if (!(x & PTR_NAT_MASK)) {
-    return (Value *) (x | PTR_NAT_MASK);
+    push_val((Value *) (x | PTR_NAT_MASK));
+    return;
   }
 
-  Value *res = start_bignat_alloc(1);
+  Value *res = (Value *)alloc(24);
+  res->type   = NAT;
+  res->n.size = 1;
   BUF(res)[0] = x;
-  return res; // always correct, no need to shrink.
+  push_val(res);
 }
 
 static inline Value *a_Pin(Value *item) {
@@ -798,7 +805,8 @@ void Add() {
 
   if (is_direct(a)) {
     if (is_direct(b)) {
-      push_val(a_Word(aSmall + bSmall));
+      // no need to handle overflow, since u63 + u63 always fits in a u64.
+      push_word(aSmall + bSmall);
       return;
     }
 
@@ -868,7 +876,7 @@ void Sub() {
         push_val(DIRECT_ZERO);
         return;
       }
-      push_val(a_Word(aSmall - bSmall));
+      push_word(aSmall - bSmall);
       return;
     }
     push_val(DIRECT_ZERO);
@@ -917,7 +925,7 @@ void DirectTimesDirect(u64 a, u64 b) {
 
   // if no overflow
   if ((res / a) == b) { // TODO does this always work?
-    push_val(a_Word(res));
+    push_word(res);
     return;
   }
 
@@ -982,8 +990,8 @@ void DivModDirectDirect(u64 a, u64 b) {
     return;
   }
 
-  push_val(a_Word(a % b)); // mod
-  push_val(a_Word(a / b)); // div
+  push_word(a % b); // mod
+  push_word(a / b); // div
 }
 
 void DivModBigDirect(Value *a, u64 b) {
@@ -1002,7 +1010,7 @@ void DivModBigDirect(Value *a, u64 b) {
   word_t *buf = BUF(res);
   nn_zero(buf, sz);
   word_t mod = nn_divrem1_simple(buf, BUF(a), sz, b);
-  push_val(a_Word(mod));           // mod
+  push_word(mod);                  // mod
   push_val(end_bignat_alloc(res)); // div
 }
 
@@ -1270,13 +1278,15 @@ void seed_load(u64 *inpbuf) {
   }
 
   for (int i=0; i<n_words; i++) {
-    *next_ref++ = a_Word(inpbuf[used++]);
+    push_word(inpbuf[used++]);
+    *next_ref++ = pop();
   }
 
   {
     uint8_t *byte_buf = (void*) (inpbuf + used);
     for (int i=0; i<n_bytes; i++) {
-      *next_ref++ = a_Word(byte_buf[i]);
+      push_word(byte_buf[i]);
+      *next_ref++ = pop();
     }
     used += (n_bytes / 8);
   }
@@ -1800,7 +1810,9 @@ void incr() {
   Value *x = pop_deref();
 
   if (is_direct(x)) {
-    push_val(a_Word(get_direct(x) + 1));
+    // this doesn't need to deal with overflow because get_direct returns
+    // a u63, and push_word can handle a u64.
+    push_word(get_direct(x) + 1);
     return;
   }
 
@@ -1990,9 +2002,9 @@ void eval_law(Law l) {
 
   const size_t bytes = sizeof(Value) * (lets + kals);
 
-  push_val(l.b);              // save (law body)
-  Value *mem  = alloc(bytes); // gc
-  Value *b = pop();           // restore (law body)
+  push_val(l.b);                            // save (law body)
+  Value *mem = bytes ? alloc(bytes) : NULL; // gc
+  Value *b   = pop();                       // restore (law body)
 
   // initialize letrec slots, since they might be referenced before they
   // are filled in, but leave APPs uninitialized.  KAL will initialize.
@@ -2097,7 +2109,7 @@ void run_law(Value *self, u64 ar) {
     Value *a = pop();
     Value *b = pop();
     int ord = cmp_normalized(a, b);
-    push_val(a_Word(ord));
+    push_word(ord);
     return;
 
   case J_TRACE:                   // .. body msg
