@@ -626,7 +626,9 @@ static inline Value *direct(u64 x) {
 }
 
 static inline Value *a_Pin(Value *item) {
+  push_val(item);
   Value *res = (Value *)alloc(sizeof(Value));
+  item = pop();
   res->type = PIN;
   JetTag jet = jet_match(item);
   res->p = (Pin){ .item = item, .jet = jet };
@@ -634,16 +636,14 @@ static inline Value *a_Pin(Value *item) {
 }
 
 static inline Value *a_Law(Law l) {
+  push_val(l.n);
+  push_val(l.a);
+  push_val(l.b);
   Value *res = (Value *)alloc(sizeof(Value));
+  l.b = pop();
+  l.a = pop();
+  l.n = pop();
   *res = (Value){ .type = LAW, .l = l };
-  return res;
-}
-
-static inline Value *a_App(Value *f, Value *g) {
-  Value *res = (Value *)alloc(sizeof(Value));
-  res->type = APP;
-  res->a.f = f;
-  res->a.g = g;
   return res;
 }
 
@@ -755,15 +755,6 @@ static inline bool EQ1(Value *x) {
 
 static inline bool EQ2(Value *x) {
   return (x == DIRECT_TWO);
-}
-
-static inline void *realloc_(void *ptr, size_t sz) {
-  void *res = realloc(ptr, sz);
-  if (!res) {
-    perror("realloc");
-    exit(1);
-  }
-  return res;
 }
 
 // TODO change to `Value *` arg style of Mul/DivMod/etc
@@ -1668,11 +1659,12 @@ static inline void mk_app() {
   #if ENABLE_GRAPHVIZ
   write_dot("mk_app");
   #endif
-  //
-  Value *x = pop();
-  Value *f = pop();
-  Value *fx = a_App(f, x);
-  push_val(fx);
+
+  Value *res = (Value *)alloc(sizeof(Value));
+  res->type = APP;
+  res->a.g = pop();
+  res->a.f = pop();
+  push_val(res);
 }
 
 // before: ..rest x f
@@ -1681,11 +1673,12 @@ static inline void mk_app_rev() {
   #if ENABLE_GRAPHVIZ
   write_dot("mk_app_rev");
   #endif
-  //
-  Value *f = pop();
-  Value *x = pop();
-  Value *ap = a_App(f, x);
-  push_val(ap);
+
+  Value *res = (Value *)alloc(sizeof(Value));
+  res->type = APP;
+  res->a.f = pop();
+  res->a.g = pop();
+  push_val(res);
 }
 
 // before: ..rest x y
