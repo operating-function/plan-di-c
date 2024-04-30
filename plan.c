@@ -1434,7 +1434,7 @@ int dot_count = 0;
 char *dot_dir_path = "./dot";
 
 char *p_ptr(Value *x) {
-  char *buf = alloc(48);
+  char *buf = malloc(48);
   if (x == NULL) {
     sprintf(buf, "N_null");
   } else if (is_direct(x)) {
