@@ -35,17 +35,23 @@ noreturn void crash(char *s) {
 // Heap ////////////////////////////////////////////////////////////////////////
 
 #define HEAP_MAP_SZ (1ULL << 40) // 1 TB
+#define BLOCK_SZ    65536
 
 // tospace and fromspace are swapped on every GC.
 
-static char *tospace   = (char*) (1ULL << 24);
-static char *hp        = (char*) (1ULL << 24);
-static char *fromspace = (char*) (1ULL << 41);
+static char *tospace     = (char*) (1ULL << 24);
+static char *hp          = (char*) (1ULL << 24);
+static char *fromspace   = (char*) (1ULL << 41);
+static char *tospace_end = (char*) ((1ULL << 24) + BLOCK_SZ);
+
+static void gc();
 
 // argument is in bytes, but must be a multiple of 8.
 static inline void *alloc(size_t bytes) {
+ again:
   char *res = hp;
   hp += bytes;
+  if (hp > tospace_end) { gc(); goto again; }
   return res;
 }
 
@@ -352,6 +358,16 @@ void check_value(Value *v) {
 
   if (is_direct(v)) return;
 
+  if ((char*)v < tospace) {
+    fprintf(stderr, "check_value: %p is before the heap", v);
+    crash("check_value");
+  }
+
+  if ((char*)v >= tospace_end) {
+    fprintf(stderr, "check_value: %p is past the heap", v);
+    crash("check_value");
+  }
+
   switch (TY(v)) {
     case PIN:
       check_value(IT(v));
@@ -631,7 +647,7 @@ static inline void push_word(u64 x) {
     return;
   }
 
-  Value *res = (Value *)alloc(24);
+  Value *res = (Value *)alloc(3 * 8);
   res->type   = NAT;
   res->n.size = 1;
   BUF(res)[0] = x;
@@ -830,8 +846,8 @@ void BigMinusDirect(Value *big, u64 direct) {
   u64 bigSz = big->n.size;
   push_val(big);                           // save
   Value *res  = start_bignat_alloc(bigSz); // gc
+  big         = pop();                     // reload
   word_t *buf = BUF(res);
-  big         = pop_deref();               // reload
   word_t c = nn_sub1(buf, BUF(big), bigSz, direct);
   // a positive borrow (nonzero `c`) should only be possible if we
   // underflowed a single u64. our invariant is to convert to SMALL when we
@@ -900,12 +916,12 @@ void Sub() {
 
   push_val(b);
   push_val(a);
-
   Value *res  = start_bignat_alloc(aSz); // gc
+  a = pop();
+  b = pop();
+
   word_t *buf = BUF(res);
 
-  a = pop_deref();
-  b = pop_deref();
   word_t borrow = nn_sub_c(buf, BUF(a), a->n.size, BUF(b), b->n.size, 0);
   if (borrow) {
     abort_bignat_alloc(res);
@@ -1010,8 +1026,10 @@ void DivModBigDirect(Value *a, u64 b) {
   word_t *buf = BUF(res);
   nn_zero(buf, sz);
   word_t mod = nn_divrem1_simple(buf, BUF(a), sz, b);
-  push_word(mod);                  // mod
   push_val(end_bignat_alloc(res)); // div
+  push_word(mod);                  // mod
+  swap();
+  // need the swap() becuause push_word(mod) can invalidate
 }
 
 void DivModBigBig(Value *a, Value *b) {
@@ -1089,7 +1107,8 @@ void Mod() {
 //  Jets
 
 typedef struct Jet {
-  Value *name;
+  Value *name; // if this is ever not direct, a more complex solution
+               // will be required.
   u64 arity;
   JetTag tag;
 } Jet;
@@ -1426,9 +1445,8 @@ static inline void gc_copy_refs(Value *x) {
 }
 
 // Cheney's algorithm
-void gc() {
+static void gc() {
   // swap the two heaps (with the new heap being empty).
-  // char *that_heap_end = hp;
   char *tmp = fromspace;
   fromspace = tospace;
   tospace = tmp;
@@ -1443,6 +1461,11 @@ void gc() {
   for (char *iter = tospace; iter < hp; iter += alloc_size((Value*)iter)) {
     gc_copy_refs((Value*) iter);
   }
+
+  long used     = hp - tospace;
+  long new_size = BLOCK_SZ * (1 + (used/BLOCK_SZ));
+       new_size = new_size + (new_size / 2);
+  tospace_end   = tospace + new_size;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1863,10 +1886,10 @@ void prim_case() {
         push_val(z);
         return;
       }
-      push_val(o);  // o
-      Dec();        // d
-      push_val(m);  // d m
-      mk_app_rev(); // (m d)
+      push_val(m); // m
+      push_val(o); // m o
+      Dec();       // m d
+      mk_app();    // (m d)
       return;
     }
     case IND: crash("plan_case: IND: impossible");
@@ -2121,10 +2144,11 @@ void run_law(Value *self, u64 ar) {
     return;
 
   default:
-    break;
+    goto no_jet;
   }
 
  no_jet:
+  // self is still valid here, we haven't allocated
   push_val(self);
   flip_stack(ar+1);
   eval_law(FUNC(self));
@@ -2594,9 +2618,9 @@ again:
     u64 seedSz;
     u64 *words = load_seed_file(buf, &seedSz);
     seed_load(words);
-    check_value(get(0));
+    // check_value(get(0));
     force_in_place(0);
-    check_value(get(0));
+    // check_value(get(0));
     return true;
   }
 
@@ -2674,12 +2698,16 @@ void repl () {
   case '=':
     read_sym();
     if (!read_exp()) { crash("no value"); }
-    Value *val = pop();
-    Value *nm  = pop();
-    bind_symbol(nm, val);
+    {
+      Value *val = get(0);
+      Value *nm  = get(1);
+      bind_symbol(nm, val); // this allocates
+    }
     fprintf(stderr, "=(");
+    Value *nm = pop();
     fprintf_value(stderr, nm);
     fprintf(stderr, ") ");
+    Value *val = pop();
     fprintf_value(stderr, val);
     fprintf(stderr, "\n");
     goto next_input;
