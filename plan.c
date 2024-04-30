@@ -143,8 +143,8 @@ void write_dot(char *);
 Value *normalize (Value*);
 JetTag jet_match(Value*);
 
-static Value *direct(u64);
-static Value *safe_direct(u64);
+static Value *a_Word(u64);
+static Value *DIRECT(u64);
 
 static void swap(void);
 static void mk_app(void);
@@ -606,7 +606,7 @@ Value *end_bignat_alloc(Value *v) {
 
   if (sz == 1 && 0 == (buf[0] >> 63)) {
     abort_bignat_alloc(v);
-    return safe_direct(buf[0]);
+    return DIRECT(buf[0]);
   }
 
   if (sz == old_sz) return v;
@@ -616,17 +616,12 @@ Value *end_bignat_alloc(Value *v) {
   return v;
 }
 
-static inline Value *safe_direct(u64 x) {
-  if (!(x & PTR_NAT_MASK)) {
-    return (Value *) (x | PTR_NAT_MASK);
-  }
-  fprintf(stderr, "YOU SAID IT WAS SAFE!!! YOU LIED!!!");
-  x = x - x;
-  ((char*)x) [0] = 'l';
-  crash("YOU SAID IT WAS SAFE!!! YOU LIED!!!");
+static inline Value *DIRECT(u64 x) {
+  if (x & PTR_NAT_MASK) crash("DIRECT: too big");
+  return (Value *) (x | PTR_NAT_MASK);
 }
 
-static inline void direct(u64 x) {
+static inline Value *a_Word(u64 x) {
   if (!(x & PTR_NAT_MASK)) {
     return (Value *) (x | PTR_NAT_MASK);
   }
@@ -803,7 +798,7 @@ void Add() {
 
   if (is_direct(a)) {
     if (is_direct(b)) {
-      push_val(direct(aSmall + bSmall));
+      push_val(a_Word(aSmall + bSmall));
       return;
     }
 
@@ -846,7 +841,9 @@ void Dec() {
 
   if (is_direct(v)) {
     u64 n = get_direct(v);
-    push_val( (n == 0) ? DIRECT_ZERO : direct(n - 1) );
+    push_val( (n == 0) ? DIRECT_ZERO : DIRECT(n - 1) );
+    // the result is always direct because (x/u63 - 1) is always a u63
+    // unless x==0.
     goto end;
   }
 
@@ -871,7 +868,7 @@ void Sub() {
         push_val(DIRECT_ZERO);
         return;
       }
-      push_val(direct(aSmall - bSmall));
+      push_val(a_Word(aSmall - bSmall));
       return;
     }
     push_val(DIRECT_ZERO);
@@ -920,7 +917,7 @@ void DirectTimesDirect(u64 a, u64 b) {
 
   // if no overflow
   if ((res / a) == b) { // TODO does this always work?
-    push_val(direct(res));
+    push_val(a_Word(res));
     return;
   }
 
@@ -985,8 +982,8 @@ void DivModDirectDirect(u64 a, u64 b) {
     return;
   }
 
-  push_val(direct(a % b)); // mod
-  push_val(direct(a / b)); // div
+  push_val(a_Word(a % b)); // mod
+  push_val(a_Word(a / b)); // div
 }
 
 void DivModBigDirect(Value *a, u64 b) {
@@ -1005,7 +1002,7 @@ void DivModBigDirect(Value *a, u64 b) {
   word_t *buf = BUF(res);
   nn_zero(buf, sz);
   word_t mod = nn_divrem1_simple(buf, BUF(a), sz, b);
-  push_val(direct(mod));           // mod
+  push_val(a_Word(mod));           // mod
   push_val(end_bignat_alloc(res)); // div
 }
 
@@ -1273,13 +1270,13 @@ void seed_load(u64 *inpbuf) {
   }
 
   for (int i=0; i<n_words; i++) {
-    *next_ref++ = direct(inpbuf[used++]);
+    *next_ref++ = a_Word(inpbuf[used++]);
   }
 
   {
     uint8_t *byte_buf = (void*) (inpbuf + used);
     for (int i=0; i<n_bytes; i++) {
-      *next_ref++ = direct(byte_buf[i]);
+      *next_ref++ = a_Word(byte_buf[i]);
     }
     used += (n_bytes / 8);
   }
@@ -1803,7 +1800,7 @@ void incr() {
   Value *x = pop_deref();
 
   if (is_direct(x)) {
-    push_val(direct(get_direct(x) + 1));
+    push_val(a_Word(get_direct(x) + 1));
     return;
   }
 
@@ -2100,7 +2097,7 @@ void run_law(Value *self, u64 ar) {
     Value *a = pop();
     Value *b = pop();
     int ord = cmp_normalized(a, b);
-    push_val(direct(ord));
+    push_val(a_Word(ord));
     return;
 
   case J_TRACE:                   // .. body msg
@@ -2131,7 +2128,7 @@ JetTag jet_match(Value *item) {
   for (int i = 0; i < NUM_JETS; i++) {
     Jet jet = jet_table[i];
 
-    if (NEQ(l.a, safe_direct(jet.arity))) continue;
+    if (NEQ(l.a, DIRECT(jet.arity))) continue;
     if (NEQ(l.n, jet.name)) continue;
 
     if (TRACE_JET_MATCHES) {
@@ -2160,7 +2157,7 @@ bool law_step(u64 depth) {
   #endif
   //
   Value *self = pop_deref();
-  if (GT(AR(self), safe_direct(depth))) {
+  if (GT(AR(self), DIRECT(depth))) {
     // unsaturated application. this is a little weird, but works?
     if (depth <= 1) {
       #if ENABLE_GRAPHVIZ
