@@ -144,6 +144,7 @@ Value *normalize (Value*);
 JetTag jet_match(Value*);
 
 static Value *direct(u64);
+static Value *safe_direct(u64);
 
 static void swap(void);
 static void mk_app(void);
@@ -605,7 +606,7 @@ Value *end_bignat_alloc(Value *v) {
 
   if (sz == 1 && 0 == (buf[0] >> 63)) {
     abort_bignat_alloc(v);
-    return direct(buf[0]);
+    return safe_direct(buf[0]);
   }
 
   if (sz == old_sz) return v;
@@ -615,7 +616,17 @@ Value *end_bignat_alloc(Value *v) {
   return v;
 }
 
-static inline Value *direct(u64 x) {
+static inline Value *safe_direct(u64 x) {
+  if (!(x & PTR_NAT_MASK)) {
+    return (Value *) (x | PTR_NAT_MASK);
+  }
+  fprintf(stderr, "YOU SAID IT WAS SAFE!!! YOU LIED!!!");
+  x = x - x;
+  ((char*)x) [0] = 'l';
+  crash("YOU SAID IT WAS SAFE!!! YOU LIED!!!");
+}
+
+static inline void direct(u64 x) {
   if (!(x & PTR_NAT_MASK)) {
     return (Value *) (x | PTR_NAT_MASK);
   }
@@ -1081,7 +1092,7 @@ typedef struct Jet {
 static inline void to_nat(int i) {
   eval_update(i);
   Value **p = get_ptr(i);
-  if (!IS_NAT(*p)) { *p = direct(0); }
+  if (!IS_NAT(*p)) { *p = DIRECT_ZERO; }
 }
 
 void before_eval(int i) {
@@ -1242,7 +1253,7 @@ void seed_load(u64 *inpbuf) {
   Value **next_ref = tab;
 
   if (n_holes) {
-    *next_ref++ = a_Pin(direct(0));
+    *next_ref++ = a_Pin(DIRECT_ZERO);
   }
 
   // How big are the bignats?
@@ -2120,7 +2131,7 @@ JetTag jet_match(Value *item) {
   for (int i = 0; i < NUM_JETS; i++) {
     Jet jet = jet_table[i];
 
-    if (NEQ(l.a, direct(jet.arity))) continue;
+    if (NEQ(l.a, safe_direct(jet.arity))) continue;
     if (NEQ(l.n, jet.name)) continue;
 
     if (TRACE_JET_MATCHES) {
@@ -2149,7 +2160,7 @@ bool law_step(u64 depth) {
   #endif
   //
   Value *self = pop_deref();
-  if (GT(AR(self), direct(depth))) {
+  if (GT(AR(self), safe_direct(depth))) {
     // unsaturated application. this is a little weird, but works?
     if (depth <= 1) {
       #if ENABLE_GRAPHVIZ
