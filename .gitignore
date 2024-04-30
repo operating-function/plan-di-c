@@ -13,3 +13,4 @@ result*
 # dot
 dot/
 .*.swp
+gmon.out

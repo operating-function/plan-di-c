@@ -1,0 +1,7 @@
+(@rexTrial
+ (0 {= (Pin i)            | ##0 i}
+    {= (Law n a b)        | ##1 n a b}
+    {= (Inc m)            | ##2 m}
+    {= (Case p l a z m o) | ##3 p l a z m o}
+    {= (Die x)            | ##die x  ; Calling a primop above 3 is a crash.}
+ ))
