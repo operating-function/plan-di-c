@@ -2641,6 +2641,49 @@ again:
   }
 }
 
+void repl (void) {
+    static char buf[128];
+
+    static const char *filename = "./seed/sire-in-sire";
+    u64 seedSz;
+    u64 *words = load_seed_file(filename, &seedSz);
+    seed_load(words);
+    force_in_place(0);
+
+  next_input:
+    int i=0;
+    memset(buf, 0, 128);
+
+  read_more:
+
+    ssize_t bytes_read = read(0, buf+i, 1);
+
+    if (bytes_read && i < 100 && buf[i] != '\n') { i++; goto read_more; }
+
+    // Create a string from the input.  (TODO use a bar instead).
+    buf[i+1] = 0;
+    Value *v = start_bignat_alloc(16);
+    memcpy(BUF(v), buf, 128);
+    push_val(end_bignat_alloc(v)); // state input
+
+    mk_app();                      // (state input)
+    force_in_place(0);             // (0 output newstate)
+    v = pop();
+    // fprintf(stderr, "STEP:"); fprintf_value(stderr, v); fprintf(stderr, "\n");
+    // Value *o = TL(HD(v));
+    v = TL(v);
+    push_val(v);                   // newstate
+    // printf("FINAL sp=%lu\n", sp);
+    // printf("OUTPUT:"); fprintf_value(stdout, o); printf("\n\n");
+    // printf("NEW_ST:"); fprintf_value(stdout, v); printf("\n\n");
+
+    // TODO: write() output bytes.
+
+    if (i==0 && !bytes_read) crash("EOF");
+
+    goto next_input;
+}
+
 void test_repl (FILE *f) {
   bool isInteractive = isatty(fileno(f));
 
@@ -2744,7 +2787,7 @@ int main (int argc, char **argv) {
 
   switch (argc) {
   case 1:
-    test_repl(stdin);
+    repl();
     break;
 
   case 2:

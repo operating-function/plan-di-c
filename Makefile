@@ -7,8 +7,12 @@ clean:
 	rm *.o
 
 .PHONY: quick_test
-quick_test:
+quick_test: plan
 	perf stat ./plan foo.in
+
+.PHONY: quine
+quine: plan
+	perf stat ./plan < sire-in-sire.sire
 
 .PHONY: test
 test: plan
