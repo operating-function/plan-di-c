@@ -110,6 +110,10 @@ typedef struct Law {
   Value *a; // Always a nat
   Value *b;
   LawWeight w;
+  // TODO
+  // void (*mach_code)(void);
+  // int num_cnsts;
+  // // store cnsts here directly
 } Law;
 
 typedef struct App {
@@ -1812,6 +1816,18 @@ void mk_law() {
   Value *a = pop_deref();
   Value *n = pop_deref();
 
+  // ;> {8x FnPtr >} Law > (Bar, Row Any)
+  // = (jit eval pushDirect push mkAp mkApRev alloc update slide l)
+
+  // load seed of `jit`, push to stack
+  // push C `FnPtr`s to stack
+  // mk_app()
+  // eval()
+  // HD is Bar of the machine code
+  // TL is cnsts
+  // convert bar into a function, make it executable, store in Law
+  // fetch cnsts from the row, count them, store in Law
+
   Law l = { .n = n, .a = a, .b=b, .w = { .n_lets = 0, .n_calls = 0 } };
 
   weigh_law(1, &l.w, b);
@@ -2148,9 +2164,11 @@ void run_law(Value *self, u64 ar) {
   }
 
  no_jet:
+  // TODO push cnsts
+
   // self is still valid here, we haven't allocated
   push_val(self);
-  flip_stack(ar+1);
+  flip_stack(ar+1); // +num_constants
   eval_law(FUNC(self));
 }
 
