@@ -6,9 +6,13 @@ all: plan
 clean:
 	rm *.o
 
+.PHONY: quick_test
+quick_test:
+	perf stat ./plan foo.in
+
 .PHONY: test
 test: plan
-	perf stat ./plan < test.sexp
+	perf stat ./plan test.sexp
 
 linked_list.o: linked_list.h linked_list.c
 	gcc $(CFLAGS) -c $^

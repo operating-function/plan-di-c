@@ -175,7 +175,7 @@ static void force_in_place();
 void write_dot_extra(char*, char*, Value*);
 
 void frag_load(Value**, u64, int*, u64*, u64**);
-bool read_exp();
+bool read_exp(FILE *f);
 
 ////////////////////////////////////////////////////////////////////////////////
 //  Globals
@@ -2429,21 +2429,21 @@ static char str_buf[STR_BUF_LEN];
 // when `is_sym == false`, we are parsing digits.
 // this seems tidier than passing a function pointer, as issym & isdigit do not
 // have the same type (??).
-void read_str_input(bool is_sym) {
+void read_str_input(FILE *f, bool is_sym) {
   char c;
   int i=0;
   for (; true; i++) {
-    str_buf[i] = c = getchar();
+    str_buf[i] = c = fgetc(f);
     if (is_sym  && (!issym(c)))   break;
     if (!is_sym && (!isdigit(c))) break;
     if (i >= STR_BUF_LEN) crash("read_str_input: input too big");
   }
   str_buf[i] = 0;
-  ungetc(c,stdin);
+  ungetc(c,f);
 }
 
-void read_atom() {
-  read_str_input(false);
+void read_atom(FILE *f) {
+  read_str_input(f, false);
   //
   // y : # of bits required to store
   // x : length of string of '9's
@@ -2462,10 +2462,10 @@ void read_atom() {
 }
 
 // We take the already-read head of the app on the PLAN stack.
-void read_app() {
+void read_app(FILE *f) {
   bool saw_space = false;
   while (true) {
-    char c = getchar();
+    char c = fgetc(f);
     switch (c) {
       case '\r':
       case '\n':
@@ -2479,8 +2479,8 @@ void read_app() {
 
       default:
         if (!saw_space) crash("expecting space or )");
-        ungetc(c, stdin);
-        read_exp();
+        ungetc(c, f);
+        read_exp(f);
         mk_app();
         continue;
     }
@@ -2496,8 +2496,8 @@ void utf8_nat(char *str) {
   push_val(end_bignat_alloc(res));
 }
 
-void read_sym() {
-  read_str_input(true);
+void read_sym(FILE *f) {
+  read_str_input(f, true);
   int len = strlen(str_buf);
   if (!len) crash("Empty symbol");
   utf8_nat(str_buf);
@@ -2530,15 +2530,15 @@ void lookup_symbol() {
   crash(": symbol not found");
 }
 
-bool read_exp() {
+bool read_exp(FILE *f) {
 again:
-  char c = getchar();
+  char c = fgetc(f);
 
-  if (feof(stdin)) return false;
+  if (feof(f)) return false;
 
   if (isalpha(c)) {
-    ungetc(c, stdin);
-    read_sym();
+    ungetc(c, f);
+    read_sym(f);
     lookup_symbol();
     return true;
   }
@@ -2548,7 +2548,7 @@ again:
     return false;
 
   case '%':
-    read_sym();
+    read_sym(f);
     return true;
 
   case ' ':
@@ -2559,8 +2559,8 @@ again:
 
   case ';':
     while (1) {
-      char c = getchar();
-      if (feof(stdin)) return false;
+      char c = fgetc(f);
+      if (feof(f)) return false;
       switch (c) {
       case 0:    return false;
       case '\n': goto again;
@@ -2569,15 +2569,15 @@ again:
     }
 
   case '#': {
-    char n = getchar();
-    ungetc(n, stdin);
+    char n = fgetc(f);
+    ungetc(n, f);
     if (isalpha(n)) {
-      read_sym();
+      read_sym(f);
       mk_pin();
       return true;
     }
     if (isdigit(n)) {
-      read_atom();
+      read_atom(f);
       mk_pin();
       return true;
     }
@@ -2589,8 +2589,8 @@ again:
     char buf[1234] = {0};
     int depth = 1;
     for (int i=0; i<1234; i++) {
-        buf[i] = getchar();
-        if (feof(stdin)) { crash("Unexpected EOF"); }
+        buf[i] = fgetc(f);
+        if (feof(f)) { crash("Unexpected EOF"); }
         switch (buf[i]) {
         case '{':
           depth++;
@@ -2610,7 +2610,7 @@ again:
   }
 
   case '@': {
-    read_str_input(true);
+    read_str_input(f, true);
     int len = strlen(str_buf);
     if (!len) crash("Empty seed");
     char buf[1234] = "./seed/";
@@ -2625,15 +2625,15 @@ again:
   }
 
   case '(':
-      bool ret = read_exp();
+      bool ret = read_exp(f);
       if (!ret) return false;
-      read_app();
+      read_app(f);
       return true;
 
   default:
     if (isdigit(c)) {
-        ungetc(c, stdin);
-        read_atom();
+        ungetc(c, f);
+        read_atom(f);
         return true;
     }
     fprintf(stderr, "Unexpected: '%c'\n", c);
@@ -2641,16 +2641,16 @@ again:
   }
 }
 
-void repl () {
-  bool isInteractive = isatty(fileno(stdin));
+void test_repl (FILE *f) {
+  bool isInteractive = isatty(fileno(f));
 
  next_input:
   if (isInteractive) printf(">> ");
 
  loop:
-  char c = getchar();
+  char c = fgetc(f);
 
-  if (feof(stdin)) return;
+  if (feof(f)) return;
 
   switch (c) {
   case '\t':
@@ -2661,8 +2661,8 @@ void repl () {
 
   case ';':
     while (1) {
-      char c = getchar();
-      if (feof(stdin)) return;
+      char c = fgetc(f);
+      if (feof(f)) return;
       switch (c) {
       case 0:    return;
       case '\n': goto next_input;
@@ -2671,8 +2671,8 @@ void repl () {
     }
 
   case '!':
-    if (!read_exp()) { crash("no value"); }
-    if (!read_exp()) { crash("no value"); }
+    if (!read_exp(f)) { crash("no value"); }
+    if (!read_exp(f)) { crash("no value"); }
     force_in_place(0);
     force_in_place(1);
     Value *y = pop();
@@ -2696,8 +2696,8 @@ void repl () {
     goto next_input;
 
   case '=':
-    read_sym();
-    if (!read_exp()) { crash("no value"); }
+    read_sym(f);
+    if (!read_exp(f)) { crash("no value"); }
     {
       Value *val = get(0);
       Value *nm  = get(1);
@@ -2713,8 +2713,8 @@ void repl () {
     goto next_input;
 
   default:
-    ungetc(c, stdin);
-    if (!read_exp()) return;
+    ungetc(c, f);
+    if (!read_exp(f)) return;
     force_in_place(0);
     fprintf_value(stdout, pop_deref());
     printf("\n");
@@ -2722,7 +2722,7 @@ void repl () {
   }
 }
 
-int main (void) {
+int main (int argc, char **argv) {
   int prot   = PROT_READ | PROT_WRITE;
   int flags  = MAP_FIXED | MAP_PRIVATE | MAP_ANON | MAP_NORESERVE;
 
@@ -2742,7 +2742,20 @@ int main (void) {
   }
   #endif
 
-  repl();
+  switch (argc) {
+  case 1:
+    test_repl(stdin);
+    break;
+
+  case 2:
+    char *filename = argv[1];
+    FILE *f = fopen(filename, "r");
+    test_repl(f);
+    break;
+
+  default:
+    crash("bad usage");
+  }
 
   #if ENABLE_GRAPHVIZ
   write_dot("main final");
