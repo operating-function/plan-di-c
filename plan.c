@@ -1835,6 +1835,20 @@ void push_jit_fn_ptrs(void) {
   // [.. slide update alloc mkApRev mkAp push pushDirect eval]
 }
 
+len_t bar_wid(Value *bar) {
+  if (is_direct(bar)) crash("TODO");
+
+  int wordSz = WID(bar);
+
+  char *buf = (char*) BUF(bar);
+
+  // we know that *some* byte will be non-zero, because otherwise the
+  // number would be direct.
+  int i;
+  for (i = (wordSz * 8) - 1; buf[i] == 0; i--);
+  return (len_t) i;
+}
+
 void mk_law() {
   #if ENABLE_GRAPHVIZ
   write_dot("mk_law");
@@ -1856,9 +1870,30 @@ void mk_law() {
     }                         // [.. n a b (jit ...)]
     force_in_place(0);        // [.. n a b jitRes@(machBar, cnsts)]
 
-    Value *pair = pop();
+    Value *pair    = pop();   // [.. n a b]
+    Value *machBar = deref(TL(HD(pair)));
+    // Value *cnsts   = TL(pair);
     fprintf(stderr, "pair: ");
     fprintf_value(stderr, pair);
+    fprintf(stderr, "\n");
+
+    fprintf(stderr, "machBar: ");
+    fprintf_value(stderr, machBar);
+    fprintf(stderr, "\n");
+
+    word_t *code  = BUF(machBar);
+    len_t codeSz  = bar_wid(machBar);
+    char *codePtr = alloc_code(codeSz);
+    memcpy(codePtr, code, codeSz);
+
+    fprintf(stderr, "code_gen nm: ");
+    fprintf_value(stderr, get(2));
+    fprintf(stderr, "\n");
+    fprintf(stderr, "codePtr: %p (sz=%lu)\ncode: 0x", codePtr, codeSz);
+    for (int i = 0; i < codeSz; i++) {
+      uint8_t byte = ((char*)code)[i];
+      fprintf(stderr, "%02x", byte);
+    }
     fprintf(stderr, "\n");
 
     crash("lol");
