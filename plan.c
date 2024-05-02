@@ -561,7 +561,10 @@ void fprintf_nat(FILE *f, Value *v) {
   long len = nat_byte_width(v);
   long wordSz = is_direct(v) ? 1 : WID(v);
 
-  if (v == DIRECT_ZERO) wordSz = 0;
+  if (v == DIRECT_ZERO) {
+    fputc('0', f);
+    return;
+  }
 
   if (is_symbol(v)) {
     // symbolic, so we can print it as a string, with a leading `%`
