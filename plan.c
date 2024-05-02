@@ -162,6 +162,8 @@ static bool enable_graphviz = 0;
 
 void write_dot(char *);
 
+len_t nat_byte_width(Value *);
+
 Value *normalize (Value*);
 JetTag jet_match(Value*);
 
@@ -414,8 +416,18 @@ void fprintf_value_internal(FILE *, Value *, int);
 
 void fprintf_nat(FILE *, Value *);
 
-bool is_symbol(const char *);
+bool is_symbol(Value *);
 void fprintf_value(FILE*, Value*);
+
+#define BIND_BUF_PTR(nm, v) \
+  word_t tmp;               \
+  char *nm;                 \
+  if (is_direct(v)) {       \
+    tmp = get_direct(v);    \
+    nm = (char*) &tmp;      \
+  } else {                  \
+    nm = (char*) BUF(v);    \
+  }
 
 void fprintf_func_name (FILE *f, Value *law, int recur) {
   assert(TY(law) == LAW);
@@ -428,19 +440,16 @@ void fprintf_func_name (FILE *f, Value *law, int recur) {
     u64 w = get_direct(nm);
     char tmp[9] = {0};
     ((u64*) tmp)[0] = w;
-    if (!is_symbol(tmp)) goto fallback;
+    if (!is_symbol(nm)) goto fallback;
     fprintf(f, "%s", tmp);
     return;
   }
 
   {
-    long num_chars = nm->n.size * sizeof(word_t);
-    char nat_str[num_chars+1];
-    memcpy(nat_str, BUF(nm), num_chars);
-    nat_str[num_chars] = 0;
-
-    if (!is_symbol(nat_str)) { goto fallback; }
-    fprintf(f, "%s", nat_str);
+    if (!is_symbol(nm)) { goto fallback; }
+    int len = nat_byte_width(nm);
+    BIND_BUF_PTR(nm_buf, nm);
+    fwrite(nm_buf, 1, len, f);
     return;
   }
 
@@ -524,84 +533,72 @@ static inline bool issym (char c) {
   return (c == '_' || isalnum(c));
 }
 
-// TODO: This is not safe for nats that contain zero bytes.
-bool is_symbol(const char *str) {
-  if (str[0] == 0) return false;
-  if (str[1] == 0) return isalpha(str[0]);
-  again: {
-  char c = *str;
-  if (!c) return true;
-  if (!issym(c)) return false;
-  str++;
-  goto again;
+bool is_symbol(Value *v) {
+  len_t len = nat_byte_width(v);
+
+  BIND_BUF_PTR(str, v);
+
+  if (len == 0) return false;
+  if (len == 1) return isalpha(str[0]);
+  for (int i=0; i<len; i++) {
+    if (!issym(str[i])) return false;
   }
+  return true;
 }
 
-// TODO: This is not safe for nats that contain zero bytes.
-bool is_string(const char *str) {
-  if (!str[0]) return false;
-  if (!str[1]) return false;
+bool is_string(Value *v) {
+  len_t len = nat_byte_width(v);
+
+  if (len < 2) return false;
+
+  BIND_BUF_PTR(str, v);
+
   int depth = 1;
- again:
-  if (depth == 0) return false;
-  char c = *(str++);
-  switch (c) {
-  case 0:    return true;
-  case '{':  depth++; goto again;
-  case '}':  depth--; goto again;
-  case '\n':
-  case '\r': return false;
-  default:   if (!isprint(c)) return false;
-             else goto again;
+  for (int i=0; i<len; i++) {
+    if (depth == 0) return false;
+    char c = str[i];
+    switch (c) {
+    case 0:    return true;
+    case '{':  depth++; continue;
+    case '}':  depth--; continue;
+    case '\n':
+    case '\r': return false;
+    default:   if (!isprint(c)) return false;
+               else continue;
+    }
   }
+  return true;
 }
 
 void fprintf_nat(FILE *f, Value *v) {
   assert(TY(v) == NAT);
 
-  if (is_direct(v)) {
-    u64 w = get_direct(v);
+  BIND_BUF_PTR(buf, v);
 
-    char tmp[9] = {0};
-    ((u64*) tmp)[0] = w;
-    if (is_symbol(tmp)) {
-      fprintf(f, "%%%s", tmp);
-    } else if (is_string(tmp)) {
-      fprintf(f, "{%s}", tmp);
-    } else {
-      fprintf(f, "%" PRIu64, w);
-    }
-    return;
-  }
+  long len = nat_byte_width(v);
+  long wordSz = is_direct(v) ? 1 : WID(v);
 
-  long num_chars = v->n.size * sizeof(word_t);
-  // TODO: print string directly, instead of copying to the stack.
-  char nat_str[num_chars+1];
-  memcpy(nat_str, BUF(v), num_chars);
-  nat_str[num_chars] = 0;
+  if (v == DIRECT_ZERO) wordSz = 0;
 
-  if (is_symbol(nat_str)) {
+  if (is_symbol(v)) {
     // symbolic, so we can print it as a string, with a leading `%`
-    fprintf(f, "%%%s", nat_str);
-  } else if (is_string(nat_str)) {
-      fprintf(f, "{%s}", nat_str);
+    fputc('%', f);
+    fwrite(buf, 1, len, f);
+  } else if (is_string(v)) {
+    fputc('{', f);
+    fwrite(buf, 1, len, f);
+    fputc('}', f);
   } else {
     // non-symbolic, so we use bsdnt to print as decimal
-    char *tmp = nn_get_str(BUF(v), v->n.size);
+    char *tmp = nn_get_str((word_t*)buf, wordSz);
     fprintf(f, "%s", tmp);
     free(tmp);
   }
 }
 
-bool is_symbol_nat(u64 nat) {
-  char tmp[9] = {0};
-  memcpy(tmp, (char *)(&nat), 8);
-  return is_symbol(tmp);
-}
-
 void show_direct_nat(char *buf, Value *v) {
   u64 nat = get_direct(v);
-  if (is_symbol_nat(nat)) {
+  if (is_symbol(v)) {
     u64 *lol = (u64*) buf;
     *lol = nat;
   } else {
@@ -1835,19 +1832,33 @@ void push_jit_fn_ptrs(void) {
   // [.. slide update alloc mkApRev mkAp push pushDirect eval]
 }
 
-len_t bar_wid(Value *bar) {
-  if (is_direct(bar)) crash("TODO");
+len_t nat_byte_width(Value *bar) {
+  word_t tmp = 0;
+  int wordSz;
+  char *buf;
 
-  int wordSz = WID(bar);
-
-  char *buf = (char*) BUF(bar);
+  if (is_direct(bar)) {
+    wordSz = 1;
+    tmp = get_direct(bar);
+    buf = (char*) &tmp;
+  } else {
+    wordSz = WID(bar);
+    buf = (char*) BUF(bar);
+  }
 
   // we know that *some* byte will be non-zero, because otherwise the
   // number would be direct.
   int i;
   for (i = (wordSz * 8) - 1; buf[i] == 0; i--);
-  return (len_t) i;
+  return (len_t) i+1;
 }
+
+len_t bar_wid(Value *bar) {
+  len_t tmp = nat_byte_width(bar);
+  if (tmp == 0) crash("bar_wid: passed 0");
+  return tmp-1;
+}
+
 
 void mk_law() {
   #if ENABLE_GRAPHVIZ
