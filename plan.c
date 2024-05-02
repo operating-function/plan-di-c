@@ -1832,7 +1832,7 @@ void mk_law() {
   to_nat(1); // a
   to_nat(2); // n
 
-  if (compiler_seed) {
+  if (compiler_seed && false) {
                               // [.. n a b]
     push(0);                  // [.. n a b b]
     push(2);                  // [.. n a b b a]
