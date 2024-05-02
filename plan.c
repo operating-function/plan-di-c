@@ -1852,10 +1852,25 @@ void mk_law() {
 
     crash("lol");
 
+    // prereq:
+    // - mmap a new heap area to put executable code into.
+    // - subroutine for allocating into the executable heap area.
+    // - compute the length of a Bar.
+    // - update GC to work w/ Laws and their new num_cnsts, which will be stored
+    //   at the end of them.
+    // - GC needs to be able to copy them, and traverse over them.
+
+    // jit return value:
+    //
     // HD is Bar of the machine code
+    // memcpy it into executable heap area.
+    // store the fn ptr to it into the Law struct.
+    // if compiler_seed is not defined, either fill it w/ NULL or eval_law.
+    //
     // TL is cnsts
-    // convert bar into a function, make it executable, store in Law
     // fetch cnsts from the row, count them, store in Law
+    //
+    // in run_law no_jet case, push cnsts to stack after self and before args.
   }
 
   Value *b = normalize(pop_deref());
@@ -2197,7 +2212,7 @@ void run_law(Value *self, u64 ar) {
   }
 
  no_jet:
-  // TODO push cnsts
+  // TODO push cnsts (in the right order)
 
   // self is still valid here, we haven't allocated
   push_val(self);
