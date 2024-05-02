@@ -596,6 +596,12 @@ void show_direct_nat(char *buf, Value *v) {
 //  Construction
 
 // just allocates the space. caller must fill buf.
+//
+// WARNING!  It is not acceptable to have other allocations between
+// start_bignat_alloc() and end_bignat_alloc() (or abort_bignat_alloc()).
+// The finalizing functions *shrink* the initial allocation, and all
+// hell will break loose if the nat is no longer that last thing on
+// the heap.
 Value *start_bignat_alloc(size_t num_words) {
   // tag size words..
   Value *res = (Value *)alloc(8 * (2 + num_words));
