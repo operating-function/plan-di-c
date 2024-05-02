@@ -41,8 +41,12 @@ noreturn void crash(char *s) {
 
 static char *tospace     = (char*) (1ULL << 24);
 static char *hp          = (char*) (1ULL << 24);
-static char *fromspace   = (char*) (1ULL << 41);
 static char *tospace_end = (char*) ((1ULL << 24) + BLOCK_SZ);
+
+static char *fromspace   = (char*) (1ULL << 41);
+
+static char *exespace    = (char*) (1ULL << 42);
+static char *xp          = (char*) (1ULL << 42);
 
 static void gc();
 
@@ -52,6 +56,13 @@ static inline void *alloc(size_t bytes) {
   char *res = hp;
   hp += bytes;
   if (hp > tospace_end) { gc(); goto again; }
+  return res;
+}
+
+// argument is in bytes, but must be a multiple of 8.
+static inline void *alloc_code(size_t bytes) {
+  char *res = xp;
+  xp += bytes;
   return res;
 }
 
@@ -2831,6 +2842,7 @@ void test_repl (FILE *f) {
 
 int main (int argc, char **argv) {
   int prot   = PROT_READ | PROT_WRITE;
+  int xprot  = PROT_READ | PROT_WRITE | PROT_EXEC;
   int flags  = MAP_FIXED | MAP_PRIVATE | MAP_ANON | MAP_NORESERVE;
 
   if (tospace != mmap((void*) tospace, HEAP_MAP_SZ, prot, flags, -1, 0))
@@ -2838,6 +2850,9 @@ int main (int argc, char **argv) {
 
   if (fromspace != mmap((void*) fromspace, HEAP_MAP_SZ, prot, flags, -1, 0))
       { perror("fromspace: mmap"); exit(1); }
+
+  if (exespace != mmap((void*) exespace, HEAP_MAP_SZ, xprot, flags, -1, 0))
+      { perror("exespace: mmap"); exit(1); }
 
   push_val(DIRECT_ZERO);
   symbol_table = get_ptr(0);
