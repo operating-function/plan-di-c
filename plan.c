@@ -181,6 +181,9 @@ void write_dot_extra(char*, char*, Value*);
 void frag_load(Value**, u64, int*, u64*, u64**);
 bool read_exp(FILE *f);
 
+Value **symbol_table;
+Value **compiler_seed;
+
 ////////////////////////////////////////////////////////////////////////////////
 //  Globals
 
@@ -643,6 +646,10 @@ static inline Value *DIRECT(u64 x) {
   #endif
 
   return (Value *) (x | PTR_NAT_MASK);
+}
+
+static inline void push_direct(u64 x) {
+  return push_val(DIRECT(x));
 }
 
 static inline void push_word(u64 x) {
@@ -1805,6 +1812,18 @@ Value *normalize (Value *v) {
   }
 }
 
+void push_jit_fn_ptrs(void) {
+  push_val(DIRECT((word_t) &slide));
+  push_val(DIRECT((word_t) &update));
+  push_val(DIRECT((word_t) &alloc));
+  push_val(DIRECT((word_t) &mk_app_rev));
+  push_val(DIRECT((word_t) &mk_app));
+  push_val(DIRECT((word_t) &push));
+  push_val(DIRECT((word_t) &push_direct));
+  push_val(DIRECT((word_t) &eval));
+  // [.. slide update alloc mkApRev mkAp push pushDirect eval]
+}
+
 void mk_law() {
   #if ENABLE_GRAPHVIZ
   write_dot("mk_law");
@@ -1812,22 +1831,36 @@ void mk_law() {
 
   to_nat(1); // a
   to_nat(2); // n
+
+  if (compiler_seed) {
+                              // [.. n a b]
+    push(0);                  // [.. n a b b]
+    push(2);                  // [.. n a b b a]
+    push_jit_fn_ptrs();       // [.. n a b b a 8xFnPtr]
+
+    push_val(*compiler_seed); // [.. n a b b a 8xFnPtr jit]
+
+    for (int i=0; i<10; i++) {
+      mk_app_rev();
+    }                         // [.. n a b (jit ...)]
+    force_in_place(0);        // [.. n a b jitRes@(machBar, cnsts)]
+
+    Value *pair = pop();
+    fprintf(stderr, "pair: ");
+    fprintf_value(stderr, pair);
+    fprintf(stderr, "\n");
+
+    crash("lol");
+
+    // HD is Bar of the machine code
+    // TL is cnsts
+    // convert bar into a function, make it executable, store in Law
+    // fetch cnsts from the row, count them, store in Law
+  }
+
   Value *b = normalize(pop_deref());
   Value *a = pop_deref();
   Value *n = pop_deref();
-
-  // ;> {8x FnPtr >} Law > (Bar, Row Any)
-  // = (jit eval pushDirect push mkAp mkApRev alloc update slide l)
-
-  // load seed of `jit`, push to stack
-  // push C `FnPtr`s to stack
-  // mk_app()
-  // eval()
-  // HD is Bar of the machine code
-  // TL is cnsts
-  // convert bar into a function, make it executable, store in Law
-  // fetch cnsts from the row, count them, store in Law
-
   Law l = { .n = n, .a = a, .b=b, .w = { .n_lets = 0, .n_calls = 0 } };
 
   weigh_law(1, &l.w, b);
@@ -2521,8 +2554,6 @@ void read_sym(FILE *f) {
   utf8_nat(str_buf);
 }
 
-Value **symbol_table;
-
 void bind_symbol(Value *nm, Value *v) {
   push_val(v);
   push_val(nm);
@@ -2795,6 +2826,12 @@ int main (int argc, char **argv) {
 
   push_val(DIRECT_ZERO);
   symbol_table = get_ptr(0);
+
+  u64 seedSz;
+  u64 *words = load_seed_file("./seed/jit", &seedSz);
+  seed_load(words);
+  force_in_place(0);
+  compiler_seed = get_ptr(0);
 
   #if ENABLE_GRAPHVIZ
   struct stat st = {0};
