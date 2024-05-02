@@ -1,5 +1,3 @@
-// - TODO GC at a certain size, not just after each assertion.
-// - TODO Place the two heaps in adjacent memory.
 // - TODO Separate "pinspace" gc generation (not collected / moved).
 // - TODO pinspace backed by file.
 // - TODO resume from pinspace snapshots + log
@@ -72,39 +70,19 @@ static inline void *alloc_code(size_t bytes) {
 
 typedef uint64_t u64;
 
-// Note that underlying enum number for NAT, PIN, LAW, APP are in
+// Note that underlying enum number for BIG, PIN, LAW, APP are in
 // sort-order.
-typedef enum Type {
-  NAT,
-  PIN,
-  LAW,
-  APP,
-  IND,
-  MOV,
-} Type;
-
-typedef enum NatType {
-  SMALL,
-  BIG
-} NatType;
-
-typedef struct BigNat { len_t size; } BigNat;
-
-struct Value;
+typedef enum Type { BIG, PIN, LAW, APP, IND, MOV } Type;
 
 typedef struct Value Value;
 
-typedef enum JetTag {
-  J_ADD,
-  J_SUB,
-  J_MUL,
-  J_DIV,
-  J_MOD,
-  J_DEC,
-  J_CMP,
-  J_TRACE,
-  J_NONE,
-} JetTag;
+typedef struct Big { len_t size; } Big;
+typedef struct Ind { Value *ptr; } Ind;
+
+typedef struct Value Value;
+
+typedef enum JetTag { J_ADD, J_SUB, J_MUL, J_DIV, J_MOD, J_DEC,
+                      J_CMP, J_TRACE, J_NONE, } JetTag;
 
 typedef struct Pin {
   Value *item;
@@ -112,8 +90,7 @@ typedef struct Pin {
 } Pin;
 
 typedef struct LawWeight {
-    u64 n_lets;
-    u64 n_calls;
+  u64 n_lets, n_calls;
 } LawWeight;
 
 typedef struct Law {
@@ -127,20 +104,11 @@ typedef struct Law {
   // // store cnsts here directly
 } Law;
 
-typedef struct App {
-  Value *f;
-  Value *g;
-} App;
+typedef struct App { Value *f, *g; } App;
 
 struct Value {
   Type type;
-  union {
-    Pin p;    // PIN
-    Law l;    // LAW
-    App a;    // APP
-    BigNat n; // NAT
-    Value *i; // IND
-  };
+  union { Pin p; Law l; App a; Big n; Ind i; };
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -157,6 +125,13 @@ char dot_lab[1024];
 #define STACK_BOUNDS_CHECK 0
 #define CHECK_TAGS         0
 #define CHECK_DIRECT       0
+#define ENABLE_ASSERTIONS  0
+
+#if ENABLE_ASSERTIONS
+#define ASSERT_(x) assert(x)
+#else
+static inline void ASSERT_(bool b) {}
+#endif
 
 static bool enable_graphviz = 0;
 
@@ -242,7 +217,7 @@ static inline void ck_law(char *fn_nm, Value *x) {
   sprintf(s, "%s not a LAW or PIN-LAW!", fn_nm);
   if (x->type == LAW) return;
   if (x->type == PIN) {
-    return ck_law(fn_nm, x->i);
+    return ck_law(fn_nm, x->p.item);
   }
   crash(s);
 }
@@ -255,8 +230,8 @@ static inline void ck_app(char *fn_nm, Value *x) {
 
 static inline void ck_nat(char *fn_nm, Value *x) {
   char s[14];
-  sprintf(s, "%s not a NAT!", fn_nm);
-  if (x->type != NAT) crash(s);
+  sprintf(s, "%s not a BIG!", fn_nm);
+  if (x->type != BIG) crash(s);
 }
 
 static inline void ck_ind(char *fn_nm, Value *x) {
@@ -266,13 +241,15 @@ static inline void ck_ind(char *fn_nm, Value *x) {
 }
 
 static inline Type TY(Value *x) {
-  if (is_direct(x)) return NAT;
+  if (is_direct(x)) return BIG;
   return x->type;
 }
 
-static inline bool IS_NAT(Value *x) {
-  return (TY(x) == NAT);
-}
+#define SI static inline
+
+SI bool IS_NAT(Value *x) { return (is_direct(x)  || x->type == BIG); }
+SI bool IS_LAW(Value *x) { return (!is_direct(x) && x->type == LAW); }
+SI bool IS_APP(Value *x) { return (!is_direct(x) && x->type == APP); }
 
 static inline Value *IT(Value *x) {
   x = deref(x);
@@ -287,7 +264,7 @@ static inline Value *NM(Value *x) {
   #if CHECK_TAGS
   ck_law("NM", x);
   #endif
-  if (x->type == PIN) return NM(x->i);
+  if (x->type == PIN) return NM(x->p.item);
   return x->l.n;
 }
 
@@ -296,7 +273,7 @@ static inline Value *AR(Value *x) {
   #if CHECK_TAGS
   ck_law("AR", x);
   #endif
-  if (x->type == PIN) return AR(x->i);
+  if (x->type == PIN) return AR(x->p.item);
   return x->l.a;
 }
 
@@ -305,13 +282,13 @@ static inline Value *BD(Value *x) {
   #if CHECK_TAGS
   ck_law("BD", x);
   #endif
-  if (x->type == PIN) return BD(x->i);
+  if (x->type == PIN) return BD(x->p.item);
   return x->l.b;
 }
 
 static inline Law FUNC(Value *x) {
   x = deref(x);
-  if (x->type == PIN) return FUNC(x->i);
+  if (x->type == PIN) return FUNC(x->p.item);
   return x->l;
 }
 
@@ -335,7 +312,7 @@ static inline Value *IN(Value *x) {
   #if CHECK_TAGS
   ck_ind("IN", x);
   #endif
-  return x->i;
+  return x->i.ptr;
 };
 
 static inline len_t WID(Value *v) {
@@ -355,7 +332,7 @@ void check_nat(Value *v) {
 
   if (is_direct(v)) return;
 
-  if (v->type != NAT) crash("check_nat: not nat");
+  if (v->type != BIG) crash("check_nat: not nat");
 
   word_t sz = v->n.size;
 
@@ -388,7 +365,7 @@ void check_value(Value *v) {
     crash("check_value");
   }
 
-  switch (TY(v)) {
+  switch (v->type) {
     case PIN:
       check_value(IT(v));
       break;
@@ -401,7 +378,7 @@ void check_value(Value *v) {
       check_value(HD(v));
       check_value(TL(v));
       break;
-    case NAT:
+    case BIG:
       check_nat(v);
       break;
     case IND:
@@ -430,11 +407,11 @@ void fprintf_value(FILE*, Value*);
   }
 
 void fprintf_func_name (FILE *f, Value *law, int recur) {
-  assert(TY(law) == LAW);
+  ASSERT_(IS_LAW(law));
 
   Value *nm = NM(law);
 
-  assert(TY(nm) == NAT);
+  ASSERT_(IS_NAT(nm));
 
   if (is_direct(nm)) {
     u64 w = get_direct(nm);
@@ -481,7 +458,7 @@ void fprintf_value(FILE *f , Value *v) {
 }
 
 void fprintf_value_app(FILE *f, Value *v, int recur) {
-  if (TY(v) != APP) {
+  if (!IS_APP(v)) {
     return fprintf_value_internal(f, v, recur);
   }
   fprintf_value_app(f, HD(v), recur);
@@ -495,11 +472,17 @@ void fprintf_value_internal(FILE *f, Value *v, int recur) {
     fprintf(f, "‥");
     return;
   }
-  switch (TY(v)) {
+
+  if (is_direct(v)) {
+    fprintf_nat(f, v);
+    return;
+  }
+
+  switch (v->type) {
     case PIN:
       Value *item = deref(IT(v));
 
-      if (TY(item) == LAW) {
+      if (IS_LAW(item)) {
           fprintf_func_name(f, item, recur+1);
           break;
       }
@@ -518,7 +501,7 @@ void fprintf_value_internal(FILE *f, Value *v, int recur) {
       fprintf_value_app(f, v, recur+1);
       fprintf(f, ")");
       break;
-    case NAT:
+    case BIG:
       fprintf_nat(f, v);
       break;
     case IND:
@@ -571,7 +554,7 @@ bool is_string(Value *v) {
 }
 
 void fprintf_nat(FILE *f, Value *v) {
-  assert(TY(v) == NAT);
+  ASSERT_(IS_NAT(v));
 
   BIND_BUF_PTR(buf, v);
 
@@ -613,7 +596,7 @@ void show_direct_nat(char *buf, Value *v) {
 Value *start_bignat_alloc(size_t num_words) {
   // tag size words..
   Value *res = (Value *)alloc(8 * (2 + num_words));
-  res->type   = NAT;
+  res->type   = BIG;
   res->n.size = num_words;
   return res;
 }
@@ -667,7 +650,7 @@ static inline void push_word(u64 x) {
   }
 
   Value *res = (Value *)alloc(3 * 8);
-  res->type   = NAT;
+  res->type   = BIG;
   res->n.size = 1;
   BUF(res)[0] = x;
   push_val(res);
@@ -733,7 +716,7 @@ int cmp_recur(Value *a, Value *b) {
   if (a->type > b->type) return greater;
 
   switch (a->type) {
-  case NAT:
+  case BIG:
     return big_cmp(a, b);
 
   case PIN:
@@ -871,7 +854,7 @@ void BigMinusDirect(Value *big, u64 direct) {
   // a positive borrow (nonzero `c`) should only be possible if we
   // underflowed a single u64. our invariant is to convert to SMALL when we
   // reach 1 u64, so we should never encounter this case.
-  assert (c == 0);
+  ASSERT_ (c == 0);
   push_val(end_bignat_alloc(res));
 }
 
@@ -1373,9 +1356,11 @@ u64 *load_seed_file (const char *filename, u64 *sizeOut) {
 //  Interpreter stack fns
 
 static inline Value *deref(Value *x) {
-  while (TY(x) == IND) {
-    x = IN(x);
-  }
+ again:
+  if (is_direct(x)) return x;
+
+  if (x->type == IND) { x = x->i.ptr; goto again; }
+
   return x;
 }
 
@@ -1388,28 +1373,25 @@ static inline Value *pop() {
   return stack[sp];
 }
 
-static inline Value *pop_deref() {
-  return deref(pop());
-}
-
 static inline Value **get_ptr(u64 idx) {
+  #if STACK_BOUNDS_CHECK
   if (idx >= sp) crash("get: indexed off stack");
+  #endif
+
   return &stack[(sp-1)-idx];
 }
 
-static inline Value *get(u64 idx) {
-  return *get_ptr(idx);
-}
+static inline Value *pop_deref ()        { return deref(pop());    }
+static inline Value *get       (u64 idx) { return *get_ptr(idx);   }
+static inline Value *get_deref (u64 idx) { return deref(get(idx)); }
 
-static inline Value *get_deref(u64 idx) {
-  return deref(get(idx));
-}
 
 ////////////////////////////////////////////////////////////////////////////////
 //  GC
 
+// argument must always be a heap pointer, never direct.
 static inline size_t alloc_size(Value *x) {
-  if (x->type == NAT) return (8 * (2 + WID(x)));
+  if (x->type == BIG) return (8 * (2 + WID(x)));
   return sizeof(Value);
 }
 
@@ -1421,7 +1403,7 @@ Value *gc_copy(Value *x) {
   if ((char*)x >= tospace && (char*)x < (tospace + HEAP_MAP_SZ))
     return x;
 
-  if (x->type == MOV) return x->i;
+  if (x->type == MOV) return x->i.ptr;
 
   size_t sz = alloc_size(x);
 
@@ -1431,8 +1413,8 @@ Value *gc_copy(Value *x) {
   hp += sz;
 
   // tell further references where to find the new pointer.
-  x->type = MOV;
-  x->i = res;
+  x->type  = MOV;
+  x->i.ptr = res;
 
   return res;
 }
@@ -1452,10 +1434,10 @@ static inline void gc_copy_refs(Value *x) {
     x->a.f = gc_copy(x->a.f);
     x->a.g = gc_copy(x->a.g);
     break;
-  case NAT:
-    break;
+  case BIG:
+    break; // no refs
   case IND:
-    x->i = gc_copy(x->i);
+    x->i.ptr = gc_copy(x->i.ptr);
     break;
   default:
     fprintf(stderr, "gc_copy_refs: bad value: ptr=%p, tag=%d\n", x, x->type);
@@ -1465,18 +1447,13 @@ static inline void gc_copy_refs(Value *x) {
 
 // Cheney's algorithm
 static void gc() {
-  // swap the two heaps (with the new heap being empty).
   char *tmp = fromspace;
   fromspace = tospace;
   tospace = tmp;
   hp = tospace;
 
-  // copy roots to new heap.
-  for (u64 i = 0; i < sp; i++) {
-    *get_ptr(i) = gc_copy(get(i));
-  }
+  for (u64 i = 0; i < sp; i++) { *get_ptr(i) = gc_copy(get(i)); }
 
-  // copy all references from the new heap to the old heap
   for (char *iter = tospace; iter < hp; iter += alloc_size((Value*)iter)) {
     gc_copy_refs((Value*) iter);
   }
@@ -1573,7 +1550,7 @@ void fprintf_heap(FILE *f, Node *input, Node *seen) {
       free(t_p);
       break;
     }
-    case NAT: {
+    case BIG: {
       char *v_p = p_ptr(v);
       fprintf(f, "%s [label=\"", v_p);
       fprintf_nat(f, v);
@@ -1673,8 +1650,8 @@ static void update(u64 idx) {
   Value *v    = get_deref(idx);
   if (head != v) {
     // no update needed if equal, and IND on self would form a cycle.
-    v->type = IND;
-    v->i    = head;
+    v->type  = IND;
+    v->i.ptr = head;
   }
   pop();
 }
@@ -1960,7 +1937,7 @@ void incr() {
     return;
   }
 
-  if (x->type != NAT) {
+  if (x->type != BIG) {
     push_val(DIRECT_ONE);
     return;
   }
@@ -2002,7 +1979,7 @@ void prim_case() {
       mk_app_rev();    // t (a h)
       mk_app_rev();    // (a h t)
       return;
-    case NAT: {
+    case BIG: {
       if (EQZ(o)) {
         push_val(z);
         return;
@@ -2179,12 +2156,12 @@ void eval_law(Law l) {
     // Compute the graph of each let, and fill the corresponding hole.
     for (u64 i = 0; i < lets; i++) {
       // (1 exp next)
-      Value *next   = TL(b);
-      Value *exp    = TL(HD(b));
-      b             = next;
-      Value *gr     = kal(maxRef, &apps, exp);
-      holes[i].type = IND;
-      holes[i].i    = gr;
+      Value *next    = TL(b);
+      Value *exp     = TL(HD(b));
+      b              = next;
+      Value *gr      = kal(maxRef, &apps, exp);
+      holes[i].type  = IND;
+      holes[i].i.ptr = gr;
 
       #if ENABLE_GRAPHVIZ
       write_dot("filled one");
@@ -2437,7 +2414,7 @@ bool unwind(u64 depth) {
     case PIN: {
       Value *item = deref(x->p.item);
       switch (TY(item)) {
-        case NAT: {
+        case BIG: {
           u64 arity = prim_arity(item);
           //
           if (depth < arity) {
@@ -2479,7 +2456,7 @@ bool unwind(u64 depth) {
           crash("MOV escaped GC");
       }
     }
-    case NAT: {
+    case BIG: {
       backout(depth);
       return false;
     }
@@ -2505,7 +2482,7 @@ bool eval() {
       return unwind(0);
     case PIN:
     case LAW:
-    case NAT:
+    case BIG:
       return false;
     case IND: crash("eval: IND");
     default:  crash("eval: bad tag");
