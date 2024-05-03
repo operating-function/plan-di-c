@@ -1829,8 +1829,8 @@ len_t ByteSz(Value *bar) {
     if (is_direct(bar)) {
       return direct_byte_width(get_direct(bar));
     }
-    int sz           = WID(bar) * 8;
-    word_t last_word = ((char*)BUF(bar))[sz-1];
+    int sz           = WID(bar);
+    word_t last_word = BUF(bar)[sz-1];
     return ((sz-1) * 8) + direct_byte_width(last_word);
 }
 
