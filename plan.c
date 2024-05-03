@@ -814,9 +814,13 @@ void WordPlusWord(u64 a, u64 b) {
 void BigPlusWord(u64 word, Value *big) {
   u64 bigSz = WID(big);
 
+  // this is probably unnecessary, but is defensive against bad input.
+  if (is_direct(big)) {
+    WordPlusWord(word, get_direct(big));
+    return;
+  }
   if (bigSz == 1) {
-    Value *bigv = pop();
-    WordPlusWord(word, BUF(bigv)[0]);
+    WordPlusWord(word, BUF(big)[0]);
     return;
   }
 
