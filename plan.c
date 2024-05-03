@@ -541,7 +541,7 @@ bool is_string(Value *v) {
     if (depth == 0) return false;
     char c = str[i];
     switch (c) {
-    case 0:    return true;
+    case 0:    return false;
     case '{':  depth++; continue;
     case '}':  depth--; continue;
     case '\n':
