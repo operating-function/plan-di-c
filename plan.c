@@ -137,7 +137,7 @@ static bool enable_graphviz = 0;
 
 void write_dot(char *);
 
-len_t nat_byte_width(Value *);
+len_t ByteSz(Value *);
 
 Value *normalize (Value*);
 JetTag jet_match(Value*);
@@ -424,7 +424,7 @@ void fprintf_func_name (FILE *f, Value *law, int recur) {
 
   {
     if (!is_symbol(nm)) { goto fallback; }
-    int len = nat_byte_width(nm);
+    int len = ByteSz(nm);
     BIND_BUF_PTR(nm_buf, nm);
     fwrite(nm_buf, 1, len, f);
     return;
@@ -517,7 +517,7 @@ static inline bool issym (char c) {
 }
 
 bool is_symbol(Value *v) {
-  len_t len = nat_byte_width(v);
+  len_t len = ByteSz(v);
 
   BIND_BUF_PTR(str, v);
 
@@ -530,7 +530,7 @@ bool is_symbol(Value *v) {
 }
 
 bool is_string(Value *v) {
-  len_t len = nat_byte_width(v);
+  len_t len = ByteSz(v);
 
   if (len < 2) return false;
 
@@ -558,7 +558,7 @@ void fprintf_nat(FILE *f, Value *v) {
 
   BIND_BUF_PTR(buf, v);
 
-  long len = nat_byte_width(v);
+  long len = ByteSz(v);
   long wordSz = is_direct(v) ? 1 : WID(v);
 
   if (v == DIRECT_ZERO) {
@@ -595,13 +595,14 @@ void show_direct_nat(char *buf, Value *v) {
 ////////////////////////////////////////////////////////////////////////////////
 //  Construction
 
+/*
+    WARNING!  It is not acceptable to allocate between
+    start_bignat_alloc() and end_bignat_alloc() (or abort_bignat_alloc()).
+    The finalizing functions *shrink* the initial allocation, and all hell
+    will break loose if the nat is no longer that last thing on the heap.
+*/
+
 // just allocates the space. caller must fill buf.
-//
-// WARNING!  It is not acceptable to have other allocations between
-// start_bignat_alloc() and end_bignat_alloc() (or abort_bignat_alloc()).
-// The finalizing functions *shrink* the initial allocation, and all
-// hell will break loose if the nat is no longer that last thing on
-// the heap.
 Value *start_bignat_alloc(size_t num_words) {
   // tag size words..
   Value *res = (Value *)alloc(8 * (2 + num_words));
@@ -1818,33 +1819,27 @@ void push_jit_fn_ptrs(void) {
   // [.. slide update alloc mkApRev mkAp push pushDirect eval]
 }
 
-len_t nat_byte_width(Value *bar) {
-  word_t tmp = 0;
-  int wordSz;
-  char *buf;
-
-  if (is_direct(bar)) {
-    wordSz = 1;
-    tmp = get_direct(bar);
-    buf = (char*) &tmp;
-  } else {
-    wordSz = WID(bar);
-    buf = (char*) BUF(bar);
-  }
-
-  // we know that *some* byte will be non-zero, because otherwise the
-  // number would be direct.
-  int i;
-  for (i = (wordSz * 8) - 1; buf[i] == 0; i--);
-  return (len_t) i+1;
+len_t direct_byte_width(word_t w) {
+  // printf("word=%lu, bits=%lu\n", w, u64_bits(w));
+  return (u64_bits(w) + 7) / 8;
 }
 
-len_t bar_wid(Value *bar) {
-  len_t tmp = nat_byte_width(bar);
-  if (tmp == 0) crash("bar_wid: passed 0");
-  return tmp-1;
+
+len_t ByteSz(Value *bar) {
+    if (is_direct(bar)) {
+      return direct_byte_width(get_direct(bar));
+    }
+    int sz           = WID(bar) * 8;
+    word_t last_word = ((char*)BUF(bar))[sz-1];
+    return ((sz-1) * 8) + direct_byte_width(last_word);
 }
 
+len_t BarSz(Value *bar) {
+  ASSERT_(IS_NAT(bar));
+  len_t str_len = ByteSz(bar);
+  if (str_len == 0) crash("BarSz: given zero");
+  return str_len - 1;
+}
 
 void mk_law() {
   #if ENABLE_GRAPHVIZ
@@ -1879,7 +1874,7 @@ void mk_law() {
     fprintf(stderr, "\n");
 
     word_t *code  = BUF(machBar);
-    len_t codeSz  = bar_wid(machBar);
+    len_t codeSz  = BarSz(machBar);
     char *codePtr = alloc_code(codeSz);
     memcpy(codePtr, code, codeSz);
 

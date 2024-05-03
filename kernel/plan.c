@@ -1678,8 +1678,8 @@ void repl (void) {
 
     len_t wid = barlen(deref(output));
 
-    int wrote;
     if (wid) {
+      int wrote;
       fprintf(stderr, "[%lu]", wid);
       if (wid != (wrote = write(1, BUF(output), wid))) {
         printf("tried=%ld, wrote=%d\n", wid, wrote);
