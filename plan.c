@@ -158,7 +158,6 @@ static void push(u64);
 static void push_val(Value*);
 static Value **get_ptr(u64);
 
-void BigPlusDirect(u64, u64);
 void force();
 bool eval();
 void eval_update(int);
@@ -798,35 +797,86 @@ static inline bool EQ2(Value *x) {
   return (x == DIRECT_TWO);
 }
 
-// TODO change to `Value *` arg style of Mul/DivMod/etc
-//
+void WordPlusWord(u64 a, u64 b) {
+  if (b <= (UINT64_MAX - a)) {
+    push_word(a + b);
+    return;
+  }
+
+  // overflow
+  Value *res = start_bignat_alloc(2);
+  u64 *buf = BUF(res);
+  buf[0] = a + b;
+  buf[1] = 1;
+  push_val(res); // no need to push_val_end because never too small.
+}
+
+void BigPlusWord(u64 word, Value *big) {
+  u64 bigSz = WID(big);
+
+  if (bigSz == 1) {
+    Value *bigv = pop();
+    WordPlusWord(word, BUF(bigv)[0]);
+    return;
+  }
+
+  u64 newSz = bigSz + 1;
+
+  push_val(big);
+  Value *res = start_bignat_alloc(newSz); // gc
+  big        = pop();
+
+  word_t carry    = nn_add1(BUF(res), BUF(big), bigSz, word);
+  BUF(res)[bigSz] = carry;
+  push_val(end_bignat_alloc(res));
+}
+
 // invariant: a.size >= b.size
 // stack before: ..rest b a
 // stack after:  ..rest (a+b)
-void BigPlusBig(u64 aSize, u64 bSize) {
+void BigPlusBig(Value *a, Value *b) {
+  u64 aSize = WID(a);
+  u64 bSize = WID(b);
+
+  if (aSize == 1) {
+    if (bSize == 1) {
+      WordPlusWord(BUF(a)[0], BUF(b)[0]);
+      return;
+    }
+
+    BigPlusWord(BUF(a)[0], b);
+    return;
+  }
+
+  if (bSize == 1) {
+    BigPlusWord(BUF(b)[0], a);
+    return;
+  }
+
   long new_size = MAX(aSize, bSize) + 1;
+
+  push_val(b);
+  push_val(a);
   Value *res = start_bignat_alloc(new_size);
+  a = pop();
+  b = pop();
+
+  if (aSize < bSize) {
+    Value *tmp = a;
+    a = b;
+    b = tmp;
+  }
+
   word_t *buf = BUF(res);
-  Value *a = pop_deref();
-  Value *b = pop_deref();
   word_t c = nn_add_c(buf, BUF(a), a->n.size, BUF(b), b->n.size, 0);
   buf[new_size - 1] = c;
   push_val(end_bignat_alloc(res));
 }
 
-void BigPlusDirect(u64 small, u64 bigSz) {
-  u64 newSz       = bigSz + 1;
-  Value *res      = start_bignat_alloc(newSz); // gc
-  Value *big      = pop();
-  word_t carry    = nn_add1(BUF(res), BUF(big), bigSz, small);
-  BUF(res)[bigSz] = carry;
-  push_val(end_bignat_alloc(res));
-}
-
 // arguments must both have already been evaluated and coerced into nats.
 void Add() {
-  Value *a = pop();
-  Value *b = pop();
+  Value *a = pop_deref();
+  Value *b = pop_deref();
 
   u64 aSmall = get_direct(a);
   u64 bSmall = get_direct(b);
@@ -838,20 +888,16 @@ void Add() {
       return;
     }
 
-    push_val(b);
-    BigPlusDirect(aSmall, b->n.size);
+    BigPlusWord(aSmall, b);
     return;
   }
 
   if (is_direct(b)) {
-    push_val(a);
-    BigPlusDirect(bSmall, a->n.size);
+    BigPlusWord(bSmall, a);
     return;
   }
 
-  push_val(b);
-  push_val(a);
-  BigPlusBig(a->n.size, b->n.size);
+  BigPlusBig(a, b);
 }
 
 void BigMinusDirect(Value *big, u64 direct) {
@@ -1946,8 +1992,7 @@ void incr() {
     return;
   }
 
-  push_val(x);
-  BigPlusDirect(1, x->n.size);
+  BigPlusWord(1, x);
 }
 
 void prim_case() {
