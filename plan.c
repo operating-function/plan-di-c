@@ -143,9 +143,9 @@ static char *live_start = NULL;
 static char *live_end   = NULL;
 static char *hp         = NULL;
 
-static Value *stack[STACK_SIZE] = {0};
-static Value **sop              = stack + STACK_SIZE; // sop[0] is the top value
-static Value **stack_end        = stack + STACK_SIZE;
+static Value **stack     = NULL;
+static Value **sop       = NULL; // sop[0] is the top value
+static Value **stack_end = NULL;
 
 static Value **printer_seed  = NULL;
 static Value **compiler_seed = NULL;
@@ -155,23 +155,39 @@ static Value **symbol_table  = NULL;
 // GC Heap /////////////////////////////////////////////////////////////////////
 
 void rts_init (void) {
-    const int rw = PROT_READ | PROT_WRITE;
+    const int rw  = PROT_READ | PROT_WRITE;
+    const int rwx = PROT_READ | PROT_WRITE | PROT_EXEC;
 
     const int heap_flags = MAP_FIXED | MAP_PRIVATE | MAP_ANON | MAP_NORESERVE;
 
     if (HEAP_LOCAL != mmap(HEAP_LOCAL, BLOCK_SIZE, rw, heap_flags, -1, 0))
         { perror("rts_init(heap): mmap"); exit(1); }
 
-    if (JIT_LOCAL != mmap(JIT_LOCAL, (1ULL<<40), rw, heap_flags, -1, 0))
+    const int jit_flags = MAP_FIXED | MAP_PRIVATE | MAP_ANON | MAP_NORESERVE;
+
+    if (JIT_LOCAL != mmap(JIT_LOCAL, (1ULL<<40), rwx, jit_flags, -1, 0))
         { perror("rts_init(jit): mmap"); exit(1); }
+
+    const int stack_flags = MAP_PRIVATE | MAP_ANON;
+
+    stack = mmap(NULL, (STACK_SIZE * sizeof(Value*)), rw, stack_flags, -1, 0);
+
+    if (stack == MAP_FAILED)
+        { perror("rts_init(stk): mmap"); exit(1); }
+
+    memset(stack, 0, STACK_SIZE);
 
     heap_start = HEAP_LOCAL;
     heap_end   = heap_start + BLOCK_SIZE;
     live_start = heap_start;
     live_end   = heap_end;
     hp         = live_start;
+
     jitspace   = JIT_LOCAL;
     jp         = jitspace;
+
+    stack_end  = stack + STACK_SIZE;
+    sop        = stack_end;
 }
 
 /*
