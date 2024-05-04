@@ -6,7 +6,7 @@ set -ex
 
 make plan
 rm -rf ./dot
-./plan <<<"$1" || true
+./plan /dev/stdin <<<"$1" || true
 sh/dotify # risky if many .dot files
 read
 feh -FB black -Z ./dot/*.png
