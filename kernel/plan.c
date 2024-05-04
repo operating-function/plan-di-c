@@ -1,73 +1,41 @@
-#include <ctype.h>
-#include <inttypes.h>
-#include <stdarg.h>
-#include <stdbool.h>
 #include <stdint.h>
-#include <stdlib.h>
-#include <stdnoreturn.h>
+#define __STDC_WANT_LIB_EXT2__  1
+#include <stdio.h>
+#include <stdbool.h>
+#include <ctype.h>
+#include <stdarg.h>
 #include <string.h>
-#include <sys/mman.h>
 #include <sys/param.h>
+#include <sys/stat.h>
+#include <inttypes.h>
 #include <unistd.h>
+#include <stdnoreturn.h>
+#include <sys/mman.h>
 
 #include "bsdnt.h"
 
+
+// Utils ///////////////////////////////////////////////////////////////////////
+
 noreturn void crash(char *s) { printf("Error: %s\n", s); exit(1); }
-
-#define HEAP_MAP_SZ (1ULL << 40) // 1 TB
-#define BLOCK_SZ    65536
-
-static char *tospace     = (char*) (1ULL << 24);
-static char *hp          = (char*) (1ULL << 24);
-static char *fromspace   = (char*) (1ULL << 41);
-static char *tospace_end = (char*) ((1ULL << 24) + BLOCK_SZ);
-
-static void gc();
-
-static inline void *alloc(size_t bytes) {
- again:
-  char *res = hp;
-  hp += bytes;
-  if (hp > tospace_end) { gc(); goto again; }
-  return res;
-}
 
 
 ////////////////////////////////////////////////////////////////////////////////
 //  Typedefs
 
-typedef uint64_t u64;
-
-// Note that underlying enum number for NAT, PIN, LAW, APP are in
+// Note that underlying enum number for BIG, PIN, LAW, APP are in
 // sort-order.
-typedef enum Type {
-  NAT,
-  PIN,
-  LAW,
-  APP,
-  IND,
-  MOV,
-} Type;
-
-typedef enum NatType {
-  SMALL,
-  BIG
-} NatType;
-
-typedef struct BigNat { len_t size; } BigNat;
+typedef enum Type { BIG, PIN, LAW, APP, IND, MOV } Type;
 
 typedef struct Value Value;
 
-typedef enum JetTag {
-  J_ADD,
-  J_SUB,
-  J_MUL,
-  J_DIV,
-  J_MOD,
-  J_DEC,
-  J_CMP,
-  J_NONE,
-} JetTag;
+typedef struct Big { len_t size; } Big;
+typedef struct Ind { Value *ptr; } Ind;
+
+typedef struct Value Value;
+
+typedef enum JetTag { J_ADD, J_SUB, J_MUL, J_DIV, J_MOD, J_DEC,
+                      J_CMP, J_TRACE, J_NONE, } JetTag;
 
 typedef struct Pin {
   Value *item;
@@ -75,8 +43,7 @@ typedef struct Pin {
 } Pin;
 
 typedef struct LawWeight {
-    u64 n_lets;
-    u64 n_calls;
+  word_t n_lets, n_calls;
 } LawWeight;
 
 typedef struct Law {
@@ -86,64 +53,121 @@ typedef struct Law {
   LawWeight w;
 } Law;
 
-typedef struct App {
-  Value *f;
-  Value *g;
-} App;
+typedef struct App { Value *f, *g; } App;
 
 struct Value {
   Type type;
-  union {
-    Pin p;    // PIN
-    Law l;    // LAW
-    App a;    // APP
-    BigNat n; // NAT
-    Value *i; // IND
-  };
+  union { Pin p; Law l; App a; Big n; Ind i; };
 };
 
-////////////////////////////////////////////////////////////////////////////////
-//  Prototypes
+typedef uint64_t u64;
 
-Value *normalize (Value*);
-JetTag jet_match(Value*);
 
-static void push_word(u64);
-static Value *DIRECT(u64);
+// Prototypes //////////////////////////////////////////////////////////////////
 
-static void swap(void);
-static void mk_app(void);
-static void clone(void);
-static Value *pop(void);
-static Value *get(u64);
-static Value *get_deref(u64);
-static Value *pop_deref(void);
-static void slide(u64);
-static void update(u64);
-static void push(u64);
-static void push_val(Value*);
-static Value **get_ptr(u64);
+JetTag jet_match        (Value*);
+static void mk_app      (void);
+static void eval_update (int);
+static bool eval        (void);
+static void force       (void);
+static void update      (u64);
+static void cheney      (void);
 
-void BigPlusDirect(u64, u64);
-void force();
-bool eval();
-void eval_update(int);
-static void force_in_place();
 
-void write_dot_extra(char*, char*, Value*);
-
-void frag_load(Value**, u64, int*, u64*, u64**);
-bool read_exp(FILE *f);
-
-////////////////////////////////////////////////////////////////////////////////
-//  Globals
+// Config //////////////////////////////////////////////////////////////////////
 
 #define STACK_SIZE 65536
-Value *stack[STACK_SIZE];
-u64 sp = 0;
+#define BLOCK_SIZE 65536
+#define HEAP_LOCAL ((void*)(1ULL<<24))
 
-////////////////////////////////////////////////////////////////////////////////
-//  Nat pointer tagging (ptr-nat)
+
+// Globals /////////////////////////////////////////////////////////////////////
+
+static char *heap_start = NULL;
+static char *heap_end   = NULL;
+
+static char *live_start = NULL;
+static char *live_end   = NULL;
+static char *hp         = NULL;
+
+static Value *stack[STACK_SIZE];
+static u64 sp = 0;
+
+static Value **printer_seed = NULL;
+
+
+// GC Heap /////////////////////////////////////////////////////////////////////
+
+void heap_init (void) {
+    const int prot   = PROT_READ | PROT_WRITE;
+    const int flags  = MAP_FIXED | MAP_PRIVATE | MAP_ANON | MAP_NORESERVE;
+
+    if (HEAP_LOCAL != mmap(HEAP_LOCAL, BLOCK_SIZE, prot, flags, -1, 0))
+        { perror("heap_init: mmap"); exit(1); }
+
+    heap_start = HEAP_LOCAL;
+    heap_end   = heap_start + BLOCK_SIZE;
+    live_start = heap_start;
+    live_end   = heap_end;
+    hp         = live_start;
+}
+
+void extend_mmap (void) {
+    const int prot   = PROT_READ | PROT_WRITE;
+    const int flags  = MAP_FIXED | MAP_PRIVATE | MAP_ANON | MAP_NORESERVE;
+
+    while (live_end > heap_end) {
+        len_t mapped_bytes = heap_end - heap_start;
+        if (heap_end != mmap(heap_end, mapped_bytes, prot, flags, -1, 0))
+            { perror("extend_mmap: mmap"); exit(1); }
+        heap_end += mapped_bytes;
+    }
+}
+
+void heap_resize (void) {
+    ssize_t used_bytes = hp - live_start;
+    ssize_t used_blocks = (((used_bytes + BLOCK_SIZE) - 1) / BLOCK_SIZE);
+    ssize_t new_size = BLOCK_SIZE * 2 * used_blocks;
+    live_end = live_start + new_size;
+    extend_mmap();
+}
+
+void gc (void) {
+
+    // copy left
+    if (heap_start < live_start) {
+        hp = live_start = heap_start;
+        hp = live_start;
+        cheney();
+        heap_resize();
+        return;
+    }
+
+    // copy right
+    if (heap_start == live_start) {
+        ssize_t live_size = live_end - live_start;
+        live_start = heap_start + (live_size * 2); // leave room for left-copy
+        live_end   = live_start + live_size;
+        hp         = live_start;
+        extend_mmap();
+        cheney();
+        heap_resize();
+        return;
+    }
+
+    crash("gc: impossible: bad live_start");
+}
+
+static inline void *alloc(size_t bytes) {
+ again:
+  char *res = hp;
+  hp += bytes;
+  if (hp > live_end) { gc(); goto again; }
+  return res;
+}
+
+
+// Direct Atoms ////////////////////////////////////////////////////////////////
 
 // if the high bit is set, then the remaining 63 bits should be interpreted as
 // a nat. this is simpler than having to modify all pointers to mask/unmask
@@ -156,76 +180,115 @@ u64 sp = 0;
 # define DIRECT_TWO   ((Value*)9223372036854775810ull)
 
 static inline bool is_direct(Value *x) {
-  return (((word_t) x) & PTR_NAT_MASK);
+  return (((u64) x) & PTR_NAT_MASK);
 }
 
-static inline word_t get_direct(Value *x) {
-  return (word_t) (((word_t) x) & ~PTR_NAT_MASK);
+static inline u64 get_direct(Value *x) {
+  return (u64) (((u64) x) & ~PTR_NAT_MASK);
 }
+
+static inline Value *DIRECT(u64 x) {
+  return (Value *) (x | PTR_NAT_MASK);
+}
+
+
+// Stack ///////////////////////////////////////////////////////////////////////
+
+static inline Value *deref(Value *x) {
+  while (!is_direct(x) && x->type == IND) x = x->i.ptr;
+  return x;
+}
+
+static inline Value *pop       (void)     { sp--; return stack[sp];    }
+static inline Value **get_ptr  (u64 idx)  { return &stack[(sp-1)-idx]; }
+static inline Value *pop_deref (void)     { return deref(pop());       }
+static inline Value *get       (u64 idx)  { return *get_ptr(idx);      }
+static inline Value *get_deref (u64 idx)  { return deref(get(idx));    }
+static inline void push_val    (Value *x) { stack[sp] = x; sp++;       }
+static inline void push        (u64 idx)  { push_val(get_deref(idx));  }
+
+// before: ..rest x y
+// after:  ..rest y x
+static inline void swap() {
+  Value *n1 = pop();
+  Value *n2 = pop();
+  push_val(n1);
+  push_val(n2);
+}
+
+void slide(u64 count) {
+  Value *top = get_deref(0);
+  sp -= count;
+  stack[sp-1] = top;
+}
+
 
 ////////////////////////////////////////////////////////////////////////////////
 //  Accessors
 
-static inline Value *IN(Value *x) { return x->i; };
-
-static inline Value *deref(Value *x) {
-  if (is_direct(x)) return x;
-  while (x->type == IND) x = IN(x);
-  return x;
-}
-
-static inline Value *HD(Value *x) { return deref(x)->a.f; };
-
-static inline Value *TL(Value *x) { return deref(x)->a.g; };
+static Value *deref(Value *x);
 
 static inline Type TY(Value *x) {
-  if (is_direct(x)) return NAT;
+  if (is_direct(x)) return BIG;
   return x->type;
 }
 
-static inline bool IS_NAT(Value *x) { return (TY(x) == NAT); }
+#define SI static inline
 
-static inline Value *IT(Value *x) {
-  x = deref(x);
-  return x->p.item;
-};
+SI bool    IS_NAT (Value *x) { return (is_direct(x)  || x->type == BIG); }
+SI bool    IS_LAW (Value *x) { return (!is_direct(x) && x->type == LAW); }
+SI bool    IS_APP (Value *x) { return (!is_direct(x) && x->type == APP); }
+SI Value  *IT     (Value *x) { return deref(x)->p.item;                  }
+SI Value  *HD     (Value *x) { return deref(x)->a.f;                     }
+SI Value  *TL     (Value *x) { return deref(x)->a.g;                     }
+SI Value  *IN     (Value *x) { return x->i.ptr;                          }
+SI len_t   WID    (Value *v) { return v->n.size;                         }
+SI word_t *BUF    (Value *v) { return (void*) (&(v->n.size) + 1);        }
 
 static inline Value *NM(Value *x) {
   x = deref(x);
-  if (x->type == PIN) return NM(x->i);
+  if (x->type == PIN) return NM(x->p.item);
   return x->l.n;
 }
 
 static inline Value *AR(Value *x) {
   x = deref(x);
-  if (x->type == PIN) return AR(x->i);
+  if (x->type == PIN) return AR(x->p.item);
   return x->l.a;
 }
 
 static inline Value *BD(Value *x) {
   x = deref(x);
-  if (x->type == PIN) return BD(x->i);
+  if (x->type == PIN) return BD(x->p.item);
   return x->l.b;
 }
 
 static inline Law FUNC(Value *x) {
   x = deref(x);
-  if (x->type == PIN) return FUNC(x->i);
+  if (x->type == PIN) return FUNC(x->p.item);
   return x->l;
 }
 
-static inline len_t   WID (Value *v) { return v->n.size; }
-static inline word_t *BUF (Value *v) { return (void*) (&(v->n.size) + 1); }
+
+// Allocation //////////////////////////////////////////////////////////////////
+
+static inline void push_direct(u64 x) {
+  return push_val(DIRECT(x));
+}
 
 
-////////////////////////////////////////////////////////////////////////////////
-//  Construction
+/*
+    WARNING!  It is not acceptable to allocate between
+    start_bignat_alloc() and end_bignat_alloc() (or abort_bignat_alloc()).
+    The finalizing functions *shrink* the initial allocation, and all hell
+    will break loose if the nat is no longer that last thing on the heap.
+*/
 
 // just allocates the space. caller must fill buf.
 Value *start_bignat_alloc(size_t num_words) {
   // tag size words..
   Value *res = (Value *)alloc(8 * (2 + num_words));
-  res->type   = NAT;
+  res->type   = BIG;
   res->n.size = num_words;
   return res;
 }
@@ -260,10 +323,6 @@ Value *end_bignat_alloc(Value *v) {
   return v;
 }
 
-static inline Value *DIRECT(u64 x) {
-  return (Value *) (x | PTR_NAT_MASK);
-}
-
 static inline void push_word(u64 x) {
   if (!(x & PTR_NAT_MASK)) {
     push_val((Value *) (x | PTR_NAT_MASK));
@@ -271,7 +330,7 @@ static inline void push_word(u64 x) {
   }
 
   Value *res = (Value *)alloc(3 * 8);
-  res->type   = NAT;
+  res->type   = BIG;
   res->n.size = 1;
   BUF(res)[0] = x;
   push_val(res);
@@ -337,7 +396,7 @@ int cmp_recur(Value *a, Value *b) {
   if (a->type > b->type) return greater;
 
   switch (a->type) {
-  case NAT:
+  case BIG:
     return big_cmp(a, b);
 
   case PIN:
@@ -373,71 +432,98 @@ static inline int cmp_normalized(Value *a, Value *b) {
   return cmp_recur(a,b);
 }
 
-static inline bool LT(Value *a, Value *b) {
-  return cmp_normalized(a,b) == 0;
+SI bool LT  (Value *a, Value *b) { return cmp_normalized(a,b) == 0; }
+SI bool GT  (Value *a, Value *b) { return cmp_normalized(a,b) == 2; }
+SI bool LTE (Value *a, Value *b) { return cmp_normalized(a,b) != 2; }
+SI bool GTE (Value *a, Value *b) { return cmp_normalized(a,b) != 0; }
+SI bool EQ  (Value *a, Value *b) { return cmp_normalized(a,b) == 1; }
+SI bool NEQ (Value *a, Value *b) { return cmp_normalized(a,b) != 1; }
+
+SI bool EQZ(Value *x) { return (x == DIRECT_ZERO); }
+SI bool EQ1(Value *x) { return (x == DIRECT_ONE); }
+SI bool EQ2(Value *x) { return (x == DIRECT_TWO); }
+
+static void WordPlusWord(u64 a, u64 b) {
+  if (b <= (UINT64_MAX - a)) {
+    push_word(a + b);
+    return;
+  }
+
+  // overflow
+  Value *res = start_bignat_alloc(2);
+  u64 *buf = BUF(res);
+  buf[0] = a + b;
+  buf[1] = 1;
+  push_val(res); // no need to push_val_end because never too small.
 }
 
-static inline bool GT(Value *a, Value *b) {
-  return cmp_normalized(a,b) == 2;
+static void BigPlusWord(u64 word, Value *big) {
+  u64 bigSz = WID(big);
+
+  // this is probably unnecessary, but is defensive against bad input.
+  if (is_direct(big)) {
+    WordPlusWord(word, get_direct(big));
+    return;
+  }
+  if (bigSz == 1) {
+    WordPlusWord(word, BUF(big)[0]);
+    return;
+  }
+
+  u64 newSz = bigSz + 1;
+
+  push_val(big);
+  Value *res = start_bignat_alloc(newSz); // gc
+  big        = pop();
+
+  word_t carry    = nn_add1(BUF(res), BUF(big), bigSz, word);
+  BUF(res)[bigSz] = carry;
+  push_val(end_bignat_alloc(res));
 }
 
-static inline bool LTE(Value *a, Value *b) {
-  return cmp_normalized(a,b) != 2;
-}
+static void BigPlusBig(Value *a, Value *b) {
+  u64 aSize = WID(a);
+  u64 bSize = WID(b);
 
-static inline bool GTE(Value *a, Value *b) {
-  return cmp_normalized(a,b) != 0;
-}
+  if (aSize == 1) {
+    if (bSize == 1) {
+      WordPlusWord(BUF(a)[0], BUF(b)[0]);
+      return;
+    }
 
-static inline bool EQ(Value *a, Value *b) {
-  return cmp_normalized(a,b) == 1;
-}
+    BigPlusWord(BUF(a)[0], b);
+    return;
+  }
 
-static inline bool NEQ(Value *a, Value *b) {
-  return cmp_normalized(a,b) != 1;
-}
+  if (bSize == 1) {
+    BigPlusWord(BUF(b)[0], a);
+    return;
+  }
 
-static inline bool EQZ(Value *x) {
-   return (x == DIRECT_ZERO);
-}
-
-static inline bool EQ1(Value *x) {
-  return (x == DIRECT_ONE);
-}
-
-static inline bool EQ2(Value *x) {
-  return (x == DIRECT_TWO);
-}
-
-// TODO change to `Value *` arg style of Mul/DivMod/etc
-//
-// invariant: a.size >= b.size
-// stack before: ..rest b a
-// stack after:  ..rest (a+b)
-void BigPlusBig(u64 aSize, u64 bSize) {
   long new_size = MAX(aSize, bSize) + 1;
+
+  push_val(b);
+  push_val(a);
   Value *res = start_bignat_alloc(new_size);
+  a = pop();
+  b = pop();
+
+  if (aSize < bSize) {
+    Value *tmp = a;
+    a = b;
+    b = tmp;
+  }
+
   word_t *buf = BUF(res);
-  Value *a = pop_deref();
-  Value *b = pop_deref();
   word_t c = nn_add_c(buf, BUF(a), a->n.size, BUF(b), b->n.size, 0);
   buf[new_size - 1] = c;
   push_val(end_bignat_alloc(res));
 }
 
-void BigPlusDirect(u64 small, u64 bigSz) {
-  u64 newSz       = bigSz + 1;
-  Value *res      = start_bignat_alloc(newSz); // gc
-  Value *big      = pop();
-  word_t carry    = nn_add1(BUF(res), BUF(big), bigSz, small);
-  BUF(res)[bigSz] = carry;
-  push_val(end_bignat_alloc(res));
-}
-
 // arguments must both have already been evaluated and coerced into nats.
-void Add() {
-  Value *a = pop();
-  Value *b = pop();
+static void Add() {
+  Value *a = pop_deref();
+  Value *b = pop_deref();
 
   u64 aSmall = get_direct(a);
   u64 bSmall = get_direct(b);
@@ -449,38 +535,29 @@ void Add() {
       return;
     }
 
-    push_val(b);
-    BigPlusDirect(aSmall, b->n.size);
+    BigPlusWord(aSmall, b);
     return;
   }
 
   if (is_direct(b)) {
-    push_val(a);
-    BigPlusDirect(bSmall, a->n.size);
+    BigPlusWord(bSmall, a);
     return;
   }
 
-  push_val(b);
-  push_val(a);
-  BigPlusBig(a->n.size, b->n.size);
+  BigPlusBig(a, b);
 }
 
-void BigMinusDirect(Value *big, u64 direct) {
+static void BigMinusDirect(Value *big, u64 direct) {
   u64 bigSz = big->n.size;
   push_val(big);                           // save
   Value *res  = start_bignat_alloc(bigSz); // gc
   big         = pop();                     // reload
   word_t *buf = BUF(res);
-  word_t c = nn_sub1(buf, BUF(big), bigSz, direct);
-  // a positive borrow (nonzero `c`) should only be possible if we
-  // underflowed a single u64. our invariant is to convert to SMALL when we
-  // reach 1 u64, so we should never encounter this case.
-  // assert (c == 0);
+  nn_sub1(buf, BUF(big), bigSz, direct);
   push_val(end_bignat_alloc(res));
 }
 
-void Dec() {
-
+static void Dec() {
   Value *v = pop_deref();
 
   if (is_direct(v)) {
@@ -488,12 +565,13 @@ void Dec() {
     push_val( (n == 0) ? DIRECT_ZERO : DIRECT(n - 1) );
     // the result is always direct because (x/u63 - 1) is always a u63
     // unless x==0.
-  } else {
-    BigMinusDirect(v, 1);
+    return;
   }
+
+  BigMinusDirect(v, 1);
 }
 
-void Sub() {
+static void Sub() {
   Value *a = pop();
   Value *b = pop();
 
@@ -545,7 +623,7 @@ void Sub() {
   }
 }
 
-void DirectTimesDirect(u64 a, u64 b) {
+static void DirectTimesDirect(u64 a, u64 b) {
   if (a==0 || b==0) {
     push_val(DIRECT_ZERO);
     return;
@@ -553,8 +631,7 @@ void DirectTimesDirect(u64 a, u64 b) {
 
   u64 res = a * b;
 
-  // if no overflow
-  if ((res / a) == b) { // TODO does this always work?
+  if ((res / a) == b) { // if no overflow
     push_word(res);
     return;
   }
@@ -565,12 +642,7 @@ void DirectTimesDirect(u64 a, u64 b) {
   push_val(end_bignat_alloc(ret));
 }
 
-// call alloc to reserve words
-// fill in data
-// truncate
-// decrease hp.
-
-void BigTimesDirect(u64 small, Value *big) {
+static void BigTimesDirect(u64 small, Value *big) {
   u64 newSz = big->n.size + 1;
   push_val(big);                          // save pointer to stack
   Value *res = start_bignat_alloc(newSz); // gc
@@ -582,7 +654,7 @@ void BigTimesDirect(u64 small, Value *big) {
   push_val(end_bignat_alloc(res));
 }
 
-void BigTimesBig(Value *a, Value *b) {
+static void BigTimesBig(Value *a, Value *b) {
   long new_size = a->n.size + b->n.size;
   push_val(a);                               // save pointer
   push_val(b);                               // save pointer
@@ -595,7 +667,7 @@ void BigTimesBig(Value *a, Value *b) {
   push_val(end_bignat_alloc(res));
 }
 
-void Mul() {
+static void Mul() {
   Value *a = pop();
   Value *b = pop();
 
@@ -612,9 +684,9 @@ void Mul() {
   else BigTimesBig(a, b);
 }
 
-void DivModDirectDirect(u64 a, u64 b) {
+static void DivModDirectDirect(u64 a, u64 b) {
   if (b == 0) {
-    // we could crash here instead
+    // TODO: Crash here
     push_val(DIRECT_ZERO); // mod
     push_val(DIRECT_ZERO); // div
     return;
@@ -624,9 +696,9 @@ void DivModDirectDirect(u64 a, u64 b) {
   push_word(a / b); // div
 }
 
-void DivModBigDirect(Value *a, u64 b) {
+static void DivModBigDirect(Value *a, u64 b) {
   if (b == 0) {
-    // we could crash here instead
+    // TODO: Crash here
     push_val(DIRECT_ZERO); // mod
     push_val(DIRECT_ZERO); // div
     return;
@@ -646,7 +718,7 @@ void DivModBigDirect(Value *a, u64 b) {
   // need the swap() becuause push_word(mod) can invalidate
 }
 
-void DivModBigBig(Value *a, Value *b) {
+static void DivModBigBig(Value *a, Value *b) {
   long aSz = WID(a);
   long bSz = WID(b);
 
@@ -681,9 +753,7 @@ void DivModBigBig(Value *a, Value *b) {
   swap();
 }
 
-// stack before: ..rest b a
-// stack after:  ..rest (a%b) (a/b)
-void DivMod() {
+static void DivMod() {
   Value *a = pop();
   Value *b = pop();
 
@@ -703,19 +773,8 @@ void DivMod() {
   else DivModBigBig(a, b);
 }
 
-// stack before: ..rest b a
-// stack after:  ..rest (a/b)
-void Div() {
-  DivMod();
-  slide(1);
-}
-
-// stack before: ..rest b a
-// stack after:  ..rest (a%b)
-void Mod() {
-  DivMod();
-  pop();
-}
+SI void Div() { DivMod(); slide(1); }
+SI void Mod() { DivMod(); pop(); }
 
 ////////////////////////////////////////////////////////////////////////////////
 //  Jets
@@ -742,7 +801,7 @@ static inline void force_in_place(int i) {
 
 // causes a stack slot to be updated (and dereferenced) in place,
 // otherwise leaving the stack shape the same as it was before.
-void eval_update(int i) {
+static void eval_update(int i) {
   Value **p = get_ptr(i);
  again:
   if (is_direct(*p)) return;
@@ -765,27 +824,23 @@ void eval_update(int i) {
   }
 }
 
-#define ADD   (Value*)9223372036861355073ULL
-#define SUB   (Value*)9223372036861228371ULL
-#define MUL   (Value*)9223372036861883725ULL
-#define DIV   (Value*)9223372036862536004ULL
-#define MOD   (Value*)9223372036861357901ULL
-#define DEC   (Value*)9223372036861289796ULL
-#define CMP   (Value*)9223372036862143811ULL
-
-#define NUM_JETS 7
+#define NUM_JETS 8
 Jet jet_table[NUM_JETS] =
-  { (Jet) { .name = ADD,   .arity = 2, .tag = J_ADD   }
-  , (Jet) { .name = SUB,   .arity = 2, .tag = J_SUB   }
-  , (Jet) { .name = MUL,   .arity = 2, .tag = J_MUL   }
-  , (Jet) { .name = DIV,   .arity = 2, .tag = J_DIV   }
-  , (Jet) { .name = MOD,   .arity = 2, .tag = J_MOD   }
-  , (Jet) { .name = DEC,   .arity = 1, .tag = J_DEC   }
-  , (Jet) { .name = CMP,   .arity = 2, .tag = J_CMP   }
+  { { (Value*)9223372036861355073ULL, 2, J_ADD   }
+  , { (Value*)9223372036861228371ULL, 2, J_SUB   }
+  , { (Value*)9223372036861883725ULL, 2, J_MUL   }
+  , { (Value*)9223372036862536004ULL, 2, J_DIV   }
+  , { (Value*)9223372036861357901ULL, 2, J_MOD   }
+  , { (Value*)9223372036861289796ULL, 1, J_DEC   }
+  , { (Value*)9223372036862143811ULL, 2, J_CMP   }
+  , { (Value*)9223372472313803348ULL, 2, J_TRACE }
   };
+
 
 ////////////////////////////////////////////////////////////////////////////////
 //  Seeds
+
+void frag_load(Value**, u64, int*, u64*, u64**);
 
 void frag_load_cell(Value **tab, u64 tabSz, int *use, u64 *acc, u64 **mor) {
   frag_load(tab, tabSz, use, acc, mor); // .. f
@@ -836,9 +891,7 @@ void frag_load(Value **tab, u64 tabSz, int *use, u64 *acc, u64 **mor) {
 }
 
 void stack_grow(u64 count) {
-  for (u64 i = 0; i < count; i++) {
-    push_val(NULL);
-  }
+  for (u64 i = 0; i < count; i++) push_val(NULL);
 }
 
 void seed_load(u64 *inpbuf) {
@@ -938,36 +991,13 @@ u64 *load_seed_file (const char *filename, u64 *sizeOut) {
   return buf;
 }
 
-////////////////////////////////////////////////////////////////////////////////
-//  Interpreter stack fns
-
-static inline Value *pop() {
-  sp--;
-  return stack[sp];
-}
-
-static inline Value *pop_deref() {
-  return deref(pop());
-}
-
-static inline Value **get_ptr(u64 idx) {
-  if (idx >= sp) crash("get: indexed off stack");
-  return &stack[(sp-1)-idx];
-}
-
-static inline Value *get(u64 idx) {
-  return *get_ptr(idx);
-}
-
-static inline Value *get_deref(u64 idx) {
-  return deref(get(idx));
-}
 
 ////////////////////////////////////////////////////////////////////////////////
 //  GC
 
+// argument must always be a heap pointer, never direct.
 static inline size_t alloc_size(Value *x) {
-  if (x->type == NAT) return (8 * (2 + WID(x)));
+  if (x->type == BIG) return (8 * (2 + WID(x)));
   return sizeof(Value);
 }
 
@@ -975,11 +1005,13 @@ Value *gc_copy(Value *x) {
   if (x == NULL || is_direct(x))
     return x;
 
+  char *xc = (char*) x;
+
   // if this points into the tospace, we don't need to copy.
-  if ((char*)x >= tospace && (char*)x < (tospace + HEAP_MAP_SZ))
+  if (xc >= live_start && xc < live_end)
     return x;
 
-  if (x->type == MOV) return x->i;
+  if (x->type == MOV) return x->i.ptr;
 
   size_t sz = alloc_size(x);
 
@@ -989,8 +1021,8 @@ Value *gc_copy(Value *x) {
   hp += sz;
 
   // tell further references where to find the new pointer.
-  x->type = MOV;
-  x->i = res;
+  x->type  = MOV;
+  x->i.ptr = res;
 
   return res;
 }
@@ -1010,10 +1042,10 @@ static inline void gc_copy_refs(Value *x) {
     x->a.f = gc_copy(x->a.f);
     x->a.g = gc_copy(x->a.g);
     break;
-  case NAT:
-    break;
+  case BIG:
+    break; // no refs
   case IND:
-    x->i = gc_copy(x->i);
+    x->i.ptr = gc_copy(x->i.ptr);
     break;
   default:
     fprintf(stderr, "gc_copy_refs: bad value: ptr=%p, tag=%d\n", x, x->type);
@@ -1021,30 +1053,16 @@ static inline void gc_copy_refs(Value *x) {
   }
 }
 
-// Cheney's algorithm
-static void gc() {
-  // swap the two heaps (with the new heap being empty).
-  char *tmp = fromspace;
-  fromspace = tospace;
-  tospace = tmp;
-  hp = tospace;
+static void cheney (void) {
+  for (u64 i = 0; i < sp; i++) { *get_ptr(i) = gc_copy(get(i)); }
 
-  // copy roots to new heap.
-  for (u64 i = 0; i < sp; i++) {
-    *get_ptr(i) = gc_copy(get(i));
-  }
-
-  // copy all references from the new heap to the old heap
-  for (char *iter = tospace; iter < hp; iter += alloc_size((Value*)iter)) {
+  for (char *iter = live_start;
+       iter < hp;
+       iter += alloc_size((Value*)iter)
+      ) {
     gc_copy_refs((Value*) iter);
   }
-
-  long used     = hp - tospace;
-  long new_size = BLOCK_SZ * (1 + (used/BLOCK_SZ));
-       new_size = new_size + (new_size / 2);
-  tospace_end   = tospace + new_size;
 }
-
 
 ////////////////////////////////////////////////////////////////////////////////
 //  Interpreter
@@ -1054,18 +1072,12 @@ static void update(u64 idx) {
   Value *v    = get_deref(idx);
   if (head != v) {
     // no update needed if equal, and IND on self would form a cycle.
-    v->type = IND;
-    v->i    = head;
+    v->type  = IND;
+    v->i.ptr = head;
   }
   pop();
 }
 
-static inline void push_val(Value *x) { stack[sp] = x; sp++; }
-static inline void push(u64 idx)      { push_val(get_deref(idx)); }
-static inline void clone()            { push_val(get_deref(0)); }
-
-// before: ..rest f x
-// after:  ..rest (f x)
 static inline void mk_app() {
   Value *res = (Value *)alloc(sizeof(Value));
   res->type = APP;
@@ -1074,8 +1086,6 @@ static inline void mk_app() {
   push_val(res);
 }
 
-// before: ..rest x f
-// after:  ..rest (f x)
 static inline void mk_app_rev() {
   Value *res = (Value *)alloc(sizeof(Value));
   res->type = APP;
@@ -1084,19 +1094,16 @@ static inline void mk_app_rev() {
   push_val(res);
 }
 
-// before: ..rest x y
-// after:  ..rest y x
-static inline void swap() {
-  Value *n1 = pop();
-  Value *n2 = pop();
-  push_val(n1);
-  push_val(n2);
-}
-
-void slide(u64 count) {
-  Value *top = get_deref(0);
-  sp -= count;
-  stack[sp-1] = top;
+Value *normalize (Value *v) {
+ again:
+  if (is_direct(v)) return v;
+  switch (v->type) {
+  case IND: v = IN(v); goto again;
+  case APP: v->a.f = normalize(v->a.f);
+            v->a.g = normalize(v->a.g);
+            return v;
+  default:  return v;// P/L/N: already normalized
+  }
 }
 
 void mk_pin() {
@@ -1128,30 +1135,25 @@ void weigh_law(bool on_spine, LawWeight *out, Value *x) {
     goto again;
   }
 
-  return;                                         // neither a let nor a call
+  // neither a let nor a call
 }
 
-Value *normalize (Value *v) {
- again:
-  if (is_direct(v)) return v;
-  switch (v->type) {
-  case IND: v = IN(v); goto again;
-  case APP:
-    v->a.f = normalize(v->a.f);
-    v->a.g = normalize(v->a.g);
-    return v;
-  default: // P/L/N: already normalized
-    return v;
-  }
+static inline len_t WordSz(word_t w) { return (u64_bits(w) + 7) / 8; }
+
+len_t ByteSz(Value *bar) {
+    if (is_direct(bar)) return WordSz(get_direct(bar));
+    int sz           = WID(bar);
+    word_t last_word = BUF(bar)[sz-1];
+    return ((sz-1) * 8) + WordSz(last_word);
 }
 
 void mk_law() {
   to_nat(1); // a
   to_nat(2); // n
+
   Value *b = normalize(pop_deref());
   Value *a = pop_deref();
   Value *n = pop_deref();
-
   Law l = { .n = n, .a = a, .b=b, .w = { .n_lets = 0, .n_calls = 0 } };
 
   weigh_law(1, &l.w, b);
@@ -1169,13 +1171,8 @@ void incr() {
     return;
   }
 
-  if (x->type != NAT) {
-    push_val(DIRECT_ONE);
-    return;
-  }
-
-  push_val(x);
-  BigPlusDirect(1, x->n.size);
+  if (x->type != BIG) push_val(DIRECT_ONE);
+  else BigPlusWord(1, x);
 }
 
 void prim_case() {
@@ -1207,7 +1204,7 @@ void prim_case() {
       mk_app_rev();    // t (a h)
       mk_app_rev();    // (a h t)
       return;
-    case NAT: {
+    case BIG: {
       if (EQZ(o)) {
         push_val(z);
         return;
@@ -1250,11 +1247,9 @@ void handle_oversaturated_application(u64 count) {
   eval();
 }
 
-void backout(u64 depth) {
+static inline void backout(u64 depth) {
   // pop stack of unwound apps.
-  for (u64 i = 0; i < depth; i++) {
-    pop();
-  }
+  for (u64 i = 0; i < depth; i++) pop();
   // `eval` saved the outermost APP, and that should now be at the bottom
   // of the stack.
 }
@@ -1293,7 +1288,7 @@ Value *kal(u64 maxRef, Value **pool, Value *x) {
 // 0 indicates no lets
 u64 length_let_spine(Value *x) {
   u64 count = 0;
-loop:
+ loop:
   if (TY(x) == APP) {
     Value *car = deref(HD(x));
     if (TY(car) == APP) {
@@ -1314,7 +1309,7 @@ typedef struct GrMem {
   Value *apps;
 } GrMem;
 
-void eval_law(Law l) {
+static void eval_law(Law l) {
   u64 args = get_direct(l.a); // this code is unreachable with bignat arity
   u64 lets = l.w.n_lets;
   u64 kals = l.w.n_calls;
@@ -1339,12 +1334,12 @@ void eval_law(Law l) {
     // Compute the graph of each let, and fill the corresponding hole.
     for (u64 i = 0; i < lets; i++) {
       // (1 exp next)
-      Value *next   = TL(b);
-      Value *exp    = TL(HD(b));
-      b             = next;
-      Value *gr     = kal(maxRef, &apps, exp);
-      holes[i].type = IND;
-      holes[i].i    = gr;
+      Value *next    = TL(b);
+      Value *exp     = TL(HD(b));
+      b              = next;
+      Value *gr      = kal(maxRef, &apps, exp);
+      holes[i].type  = IND;
+      holes[i].i.ptr = gr;
     }
 
   }
@@ -1353,6 +1348,32 @@ void eval_law(Law l) {
   push_val(gr);                 // .. self args slots bodyGr
   eval();                       // .. self args slots bodyWhnf
   return slide(maxRef+1);       // .. bodyWhnf
+}
+
+#define BIND_BUF_PTR(nm, v) \
+  word_t tmp;               \
+  char *nm;                 \
+  if (is_direct(v)) {       \
+    tmp = get_direct(v);    \
+    nm = (char*) &tmp;      \
+  } else {                  \
+    nm = (char*) BUF(v);    \
+  }
+
+void Trace (char *end) {
+    force_in_place(0);
+    push_val(DIRECT(12));        // .. msg 12
+    push_val(*printer_seed);     // .. msg 12 printer
+    mk_app_rev();                // .. msg (printer 12)
+    mk_app_rev();                // .. (printer 12 msg)
+    force_in_place(0);           // .. msg_bar
+    Value *ov = pop_deref();     // ..
+    int bwid = ByteSz(ov);
+    BIND_BUF_PTR(obuf, ov);
+    char *bbuf = (void*) obuf;
+    if (bwid < 1) return;
+    fwrite(bbuf, 1, bwid - 1, stderr);
+    fprintf(stderr, "%s", end);
 }
 
 void run_law(Value *self, u64 ar) {
@@ -1406,14 +1427,21 @@ void run_law(Value *self, u64 ar) {
     push_word(ord);
     return;
 
+  case J_TRACE:                  // .. body msg
+    Trace("\n");                 // .. body
+    eval();                      // .. *body
+    return;
+
   default:
     goto no_jet;
   }
 
  no_jet:
+  // TODO push cnsts (in the right order)
+
   // self is still valid here, we haven't allocated
   push_val(self);
-  flip_stack(ar+1);
+  flip_stack(ar+1); // +num_constants
   eval_law(FUNC(self));
 }
 
@@ -1439,22 +1467,20 @@ JetTag jet_match(Value *item) {
 // returns true if it eval-ed
 bool law_step(u64 depth) {
   Value *self = pop_deref();
-
   if (GT(AR(self), DIRECT(depth))) {
     // unsaturated application. this is a little weird, but works?
     if (depth <= 1) return false;
     backout(depth-1);
     return false;
+  } else {
+
+    setup_call(depth);
+    if (!is_direct(AR(self))) crash("impossible: called law with huge arity");
+    u64 ar = get_direct(AR(self));
+    run_law(self, ar);
+    if (ar < depth) handle_oversaturated_application(depth - ar);
+    return true;
   }
-
-  setup_call(depth);
-  if (!is_direct(AR(self))) crash("impossible: called law with huge arity");
-  u64 ar = get_direct(AR(self));
-
-  run_law(self, ar);
-
-  if (ar < depth) handle_oversaturated_application(depth - ar);
-  return true;
 }
 
 u64 prim_arity(Value *op) {
@@ -1502,9 +1528,12 @@ void do_prim(Value *op) {
       goto exception_case;
     }
   }
-exception_case:
-  force_in_place(1); // param
-  exit(1);
+exception_case:                      // param tag
+  force_in_place(1);                 // *param tag
+  fprintf(stderr, "Exception(");
+  Trace("): ");                      // param
+  Trace("\n");                       //
+  exit(0);
 }
 
 bool unwind(u64 depth) {
@@ -1522,7 +1551,7 @@ bool unwind(u64 depth) {
     case PIN: {
       Value *item = deref(x->p.item);
       switch (TY(item)) {
-        case NAT: {
+        case BIG: {
           u64 arity = prim_arity(item);
           //
           if (depth < arity) {
@@ -1564,7 +1593,7 @@ bool unwind(u64 depth) {
           crash("MOV escaped GC");
       }
     }
-    case NAT: {
+    case BIG: {
       backout(depth);
       return false;
     }
@@ -1586,14 +1615,14 @@ bool eval() {
       return unwind(0);
     case PIN:
     case LAW:
-    case NAT:
+    case BIG:
       return false;
     case IND: crash("eval: IND");
     default:  crash("eval: bad tag");
   }
 }
 
-void force_whnf() {
+void force_whnf (void) {
   Value *top = pop_deref();
   if (TY(top) == APP) {
     push_val(TL(top));
@@ -1603,10 +1632,10 @@ void force_whnf() {
   }
 }
 
-void force() {
+void force (void) {
   Value *top = get_deref(0);
   if (TY(top) == APP) {
-    clone();
+    push_val(get_deref(0));
     eval();
     update(1);
     force_whnf();
@@ -1618,42 +1647,18 @@ void force() {
 ////////////////////////////////////////////////////////////////////////////////
 //  Runner
 
-len_t direct_byte_width(word_t w) {
-  printf("word=%lu, bits=%lu\n", w, u64_bits(w));
-  return (u64_bits(w) + 7) / 8;
-}
-
-len_t nat_byte_width(Value *bar) {
-    if (is_direct(bar)) {
-      printf("direct\n");
-      return direct_byte_width(get_direct(bar));
+static void repl (void) {
+    { // load seed (starting state)
+      static const char *sire_seed = "sire.seed";
+      u64 seedSz;
+      u64 *words = load_seed_file(sire_seed, &seedSz);
+      seed_load(words);
+      force_in_place(0);
     }
-    printf("indirect\n");
-    int sz           = WID(bar) * 8;
-    word_t last_word = ((char*)BUF(bar))[sz-1];
-    return ((sz-1) * 8) + direct_byte_width(last_word);
-}
 
-len_t barlen(Value *bar) {
-  if (!is_direct(bar) && bar->type != NAT)
-    crash("barlen: not nat");
-  len_t str_len = nat_byte_width(bar);
-  printf("str_len=%lu\n", str_len);
-  if (str_len == 0) crash("barlen: given zero");
-  return str_len - 1;
-}
-
-void repl (void) {
     static char buf[128];
 
-    static const char *filename = "sire.seed";
-    u64 seedSz;
-    u64 *words = load_seed_file(filename, &seedSz);
-    seed_load(words);
-    force_in_place(0);
-
   next_input:
-    // putv(get(0));
     int i=0;
     memset(buf, 0, 128);
 
@@ -1665,43 +1670,45 @@ void repl (void) {
 
     // Create a string from the input.  (TODO use a bar instead).
     buf[i+1] = 0;
-    Value *v = start_bignat_alloc(16);
-    memcpy(BUF(v), buf, 128);
-    push_val(end_bignat_alloc(v)); // state input
 
-    mk_app();                      // (state input)
-    force_in_place(0);             // (0 output newstate)
-    v = pop();
-    Value *output = TL(HD(v));
-    v = TL(v);
-    push_val(v);                   // newstate
-
-    len_t wid = barlen(deref(output));
-
-    if (wid) {
-      int wrote;
-      fprintf(stderr, "[%lu]", wid);
-      if (wid != (wrote = write(1, BUF(output), wid))) {
-        printf("tried=%ld, wrote=%d\n", wid, wrote);
-        crash("write() failed");
-      }
+    {
+      Value *v = start_bignat_alloc(16);
+      memcpy(BUF(v), buf, 128);
+      push_val(end_bignat_alloc(v)); // state input
     }
 
-    if (i==0 && !bytes_read) exit(0);
+    mk_app();                      // .. (state input)
+    force_in_place(0);             // .. (0 output newstate)
+    Value *res = pop();            // ..
+    Value *nex = TL(res);
+    Value *out = deref(TL(HD(res)));
+    push_val(nex);                 // newstate
+
+    int bwid = ByteSz(out);
+    if (bwid > 1) {
+      BIND_BUF_PTR(obuf, out);
+      char *bbuf = (void*) obuf;
+      int owid = bwid - 1;
+      fwrite(bbuf, 1, owid, stderr);
+      fprintf(stderr, "\n");
+    }
+
+    if (i==0 && !bytes_read) { return; }
 
     goto next_input;
 }
 
-
 int main (int argc, char **argv) {
-  int prot   = PROT_READ | PROT_WRITE;
-  int flags  = MAP_FIXED | MAP_PRIVATE | MAP_ANON | MAP_NORESERVE;
+  heap_init();
 
-  if (tospace != mmap((void*) tospace, HEAP_MAP_SZ, prot, flags, -1, 0))
-      { perror("tospace: mmap"); exit(1); }
-
-  if (fromspace != mmap((void*) fromspace, HEAP_MAP_SZ, prot, flags, -1, 0))
-      { perror("fromspace: mmap"); exit(1); }
+  { // load printer
+    static const char *tracefile = "trace.seed";
+    u64 seedSz;
+    u64 *words = load_seed_file(tracefile, &seedSz);
+    seed_load(words);
+    force_in_place(0);
+    printer_seed=get_ptr(0);
+  }
 
   repl();
 }
