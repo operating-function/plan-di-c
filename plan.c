@@ -21,18 +21,132 @@
 #include "linked_list.h"
 
 
+// Config //////////////////////////////////////////////////////////////////////
+
+#define BLOCK_SIZE 65536
+#define STACK_SIZE 65536
+#define HEAP_LOCAL ((void*)(1ULL<<24))
+#define JIT_LOCAL  ((void*)(1ULL<<42))
+
+#define TRACE_JET_MATCHES  0
+#define TRACE_CALLS        0
+#define TRACE_LAWS         0
+#define ENABLE_GRAPHVIZ    0
+#define STACK_BOUNDS_CHECK 0
+#define CHECK_TAGS         0
+#define CHECK_DIRECT       0
+#define ENABLE_ASSERTIONS  0
+
+#if ENABLE_ASSERTIONS
+#define ASSERT_(x) assert(x)
+#else
+static inline void ASSERT_(bool b) {}
+#endif
+
+
+// Types ///////////////////////////////////////////////////////////////////////
+
+typedef uint64_t u64;
+
+// Note that underlying enum number for BIG, PIN, LAW, APP are in
+// sort-order.
+typedef enum Type { BIG, PIN, LAW, APP, IND, MOV } Type;
+
+typedef struct Value Value;
+
+typedef struct Big { len_t size; } Big;
+typedef struct Ind { Value *ptr; } Ind;
+
+typedef struct Value Value;
+
+typedef enum JetTag { J_ADD, J_SUB, J_MUL, J_DIV, J_MOD, J_DEC,
+                      J_CMP, J_TRACE, J_NONE, } JetTag;
+
+typedef struct Pin {
+  Value *item;
+  JetTag jet;
+} Pin;
+
+typedef struct LawWeight {
+  u64 n_lets, n_calls;
+} LawWeight;
+
+typedef struct Law {
+  Value *n; // Always a nat
+  Value *a; // Always a nat
+  Value *b;
+  LawWeight w;
+  // TODO
+  // void (*mach_code)(void);
+  // int num_cnsts;
+  // // store cnsts here directly
+} Law;
+
+typedef struct App { Value *f, *g; } App;
+
+struct Value {
+  Type type;
+  union { Pin p; Law l; App a; Big n; Ind i; };
+};
+
+
+////////////////////////////////////////////////////////////////////////////////
+//  Prototypes
+
+char *p_ptr    (Value *x);
+void write_dot (char *);
+
+len_t ByteSz(Value *);
+
+Value *normalize (Value*);
+JetTag jet_match(Value*);
+
+static void push_word(u64);
+
+static void swap(void);
+static void mk_app(void);
+static void clone(void);
+static Value *pop(void);
+static Value *get(u64);
+static Value *get_deref(u64);
+static Value *pop_deref(void);
+static void slide(u64);
+static void update(u64);
+static void push(u64);
+static void push_val(Value*);
+static Value **get_ptr(u64);
+
+void force();
+bool eval();
+void eval_update(int);
+static void force_in_place();
+
+void write_dot_extra(char*, char*, Value*);
+
+void frag_load(Value**, u64, int*, u64*, u64**);
+bool read_exp(FILE *f);
+
+
+
 // Utils ///////////////////////////////////////////////////////////////////////
 
 noreturn void crash(char *s) { printf("Error: %s\n", s); exit(1); }
 
 
-// GC Heap /////////////////////////////////////////////////////////////////////
 
-#define BLOCK_SIZE 65536
-#define HEAP_LOCAL ((void*)(1ULL<<24))
+// Globals /////////////////////////////////////////////////////////////////////
 
-static char *jitspace = (char*) (1ULL << 42);
-static char *jp       = (char*) (1ULL << 42);
+#if ENABLE_GRAPHVIZ
+char dot_lab[1024];
+static bool enable_graphviz = 0;
+#endif
+
+#if TRACE_CALLS
+int call_depth = 0; // for debugging traces
+#endif
+
+static char *jitspace = NULL;
+static char *jp       = NULL;
 
 static char *heap_start = NULL;
 static char *heap_end   = NULL;
@@ -41,24 +155,34 @@ static char *live_start = NULL;
 static char *live_end   = NULL;
 static char *hp         = NULL;
 
+static Value *stack[STACK_SIZE] = {0};
+static u64 sp = 0;
 
-void heap_init (void) {
-    const int prot   = PROT_READ | PROT_WRITE;
-    const int flags  = MAP_FIXED | MAP_PRIVATE | MAP_ANON | MAP_NORESERVE;
+static Value **printer_seed  = NULL;
+static Value **compiler_seed = NULL;
+static Value **symbol_table  = NULL;
 
-    if (HEAP_LOCAL != mmap(HEAP_LOCAL, BLOCK_SIZE, prot, flags, -1, 0))
-        { perror("heap_init: mmap"); exit(1); }
+
+// GC Heap /////////////////////////////////////////////////////////////////////
+
+void rts_init (void) {
+    const int rw = PROT_READ | PROT_WRITE;
+
+    const int heap_flags = MAP_FIXED | MAP_PRIVATE | MAP_ANON | MAP_NORESERVE;
+
+    if (HEAP_LOCAL != mmap(HEAP_LOCAL, BLOCK_SIZE, rw, heap_flags, -1, 0))
+        { perror("rts_init(heap): mmap"); exit(1); }
+
+    if (JIT_LOCAL != mmap(JIT_LOCAL, (1ULL<<40), rw, heap_flags, -1, 0))
+        { perror("rts_init(jit): mmap"); exit(1); }
 
     heap_start = HEAP_LOCAL;
     heap_end   = heap_start + BLOCK_SIZE;
     live_start = heap_start;
     live_end   = heap_end;
     hp         = live_start;
-
-    // 1TB for jit codegen
-    int xprot  = PROT_READ | PROT_WRITE | PROT_EXEC;
-    if (jitspace != mmap(jitspace, (1ULL<<40), xprot, flags, -1, 0))
-      { perror("jitspace: mmap"); exit(1); }
+    jitspace   = JIT_LOCAL;
+    jp         = jitspace;
 }
 
 /*
@@ -143,123 +267,7 @@ static inline void *jit_alloc(size_t bytes) {
 }
 
 
-////////////////////////////////////////////////////////////////////////////////
-//  Typedefs
-
-typedef uint64_t u64;
-
-// Note that underlying enum number for BIG, PIN, LAW, APP are in
-// sort-order.
-typedef enum Type { BIG, PIN, LAW, APP, IND, MOV } Type;
-
-typedef struct Value Value;
-
-typedef struct Big { len_t size; } Big;
-typedef struct Ind { Value *ptr; } Ind;
-
-typedef struct Value Value;
-
-typedef enum JetTag { J_ADD, J_SUB, J_MUL, J_DIV, J_MOD, J_DEC,
-                      J_CMP, J_TRACE, J_NONE, } JetTag;
-
-typedef struct Pin {
-  Value *item;
-  JetTag jet;
-} Pin;
-
-typedef struct LawWeight {
-  u64 n_lets, n_calls;
-} LawWeight;
-
-typedef struct Law {
-  Value *n; // Always a nat
-  Value *a; // Always a nat
-  Value *b;
-  LawWeight w;
-  // TODO
-  // void (*mach_code)(void);
-  // int num_cnsts;
-  // // store cnsts here directly
-} Law;
-
-typedef struct App { Value *f, *g; } App;
-
-struct Value {
-  Type type;
-  union { Pin p; Law l; App a; Big n; Ind i; };
-};
-
-////////////////////////////////////////////////////////////////////////////////
-//  Prototypes
-
-int call_depth = 0;
-
-char dot_lab[1024];
-
-#define TRACE_JET_MATCHES  0
-#define TRACE_CALLS        0
-#define TRACE_LAWS         0
-#define ENABLE_GRAPHVIZ    0
-#define STACK_BOUNDS_CHECK 0
-#define CHECK_TAGS         0
-#define CHECK_DIRECT       0
-#define ENABLE_ASSERTIONS  0
-
-#if ENABLE_ASSERTIONS
-#define ASSERT_(x) assert(x)
-#else
-static inline void ASSERT_(bool b) {}
-#endif
-
-static bool enable_graphviz = 0;
-
-void write_dot(char *);
-
-len_t ByteSz(Value *);
-
-Value *normalize (Value*);
-JetTag jet_match(Value*);
-
-static void push_word(u64);
-static Value *DIRECT(u64);
-
-static void swap(void);
-static void mk_app(void);
-static void clone(void);
-static Value *pop(void);
-static Value *get(u64);
-static Value *get_deref(u64);
-static Value *pop_deref(void);
-static void slide(u64);
-static void update(u64);
-static void push(u64);
-static void push_val(Value*);
-static Value **get_ptr(u64);
-
-void force();
-bool eval();
-void eval_update(int);
-static void force_in_place();
-
-void write_dot_extra(char*, char*, Value*);
-
-void frag_load(Value**, u64, int*, u64*, u64**);
-bool read_exp(FILE *f);
-
-Value **symbol_table;
-Value **compiler_seed;
-Value **printer_seed = NULL;
-
-
-////////////////////////////////////////////////////////////////////////////////
-//  Globals
-
-#define STACK_SIZE 65536
-Value *stack[STACK_SIZE];
-u64 sp = 0;
-
-////////////////////////////////////////////////////////////////////////////////
-//  Nat pointer tagging (ptr-nat)
+// Direct Nats /////////////////////////////////////////////////////////////////
 
 // if the high bit is set, then the remaining 63 bits should be interpreted as
 // a nat. this is simpler than having to modify all pointers to mask/unmask
@@ -278,6 +286,15 @@ static inline bool is_direct(Value *x) {
 static inline u64 get_direct(Value *x) {
   return (u64) (((u64) x) & ~PTR_NAT_MASK);
 }
+
+static inline Value *DIRECT(u64 x) {
+  #if CHECK_DIRECT
+  if (x & PTR_NAT_MASK) crash("DIRECT: too big");
+  #endif
+
+  return (Value *) (x | PTR_NAT_MASK);
+}
+
 
 ////////////////////////////////////////////////////////////////////////////////
 //  Accessors
@@ -720,17 +737,8 @@ Value *end_bignat_alloc(Value *v) {
   return v;
 }
 
-static inline Value *DIRECT(u64 x) {
-  #if CHECK_DIRECT
-  if (x & PTR_NAT_MASK) crash("DIRECT: too big");
-  #endif
-
-  return (Value *) (x | PTR_NAT_MASK);
-}
-
-static inline void push_direct(u64 x) {
-  return push_val(DIRECT(x));
-}
+// This needs to exist for now because the JIT generates calls to it.
+void push_direct(u64 x) { return push_val(DIRECT(x)); }
 
 static inline void push_word(u64 x) {
   if (!(x & PTR_NAT_MASK)) {
@@ -1261,23 +1269,6 @@ static inline void to_nat(int i) {
   if (!IS_NAT(*p)) { *p = DIRECT_ZERO; }
 }
 
-void before_eval(int i) {
-  if (!TRACE_CALLS) return;
-  for (int i=0; i<call_depth; i++) fprintf(stderr, " ");
-  fprintf_value(stderr, get_deref(i));
-  fprintf(stderr, "\n");
-  call_depth++;
-}
-
-void after_eval(int i) {
-  if (!TRACE_CALLS) return;
-  call_depth--;
-  for (int i=0; i<call_depth; i++) fprintf(stderr, " ");
-  fprintf(stderr, "=> ");
-  fprintf_value(stderr, get_deref(i));
-  fprintf(stderr, "\n");
-}
-
 static inline void force_in_place(int i) {
   push(i);
   force();
@@ -1740,6 +1731,7 @@ Node *stack_to_list_heap_only() {
   return l;
 }
 
+#if ENABLE_GRAPHVIZ
 void write_dot_extra(char *label, char *extra, Value *v) {
   if (!enable_graphviz) return;
   char fp[20] = {0};
@@ -1770,6 +1762,7 @@ void write_dot_extra(char *label, char *extra, Value *v) {
 void write_dot(char *label) {
   write_dot_extra(label, "", NULL);
 }
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////
 //  Interpreter
@@ -2303,9 +2296,7 @@ void eval_law(Law l) {
 
   Value *gr = kal(maxRef, &apps, b);
   push_val(gr);                 // .. self args slots bodyGr
-  before_eval(0);
   eval();                       // .. self args slots bodyWhnf
-  after_eval(0);
   return slide(maxRef+1);       // .. bodyWhnf
 }
 
@@ -2449,12 +2440,12 @@ bool law_step(u64 depth) {
 
     // enable_graphviz=1;
 
-    if (TRACE_CALLS) {
-      for (int i=0; i<call_depth; i++) fprintf(stderr, " ");
-      fprintf_value(stderr, get_deref(depth-1));
-      fprintf(stderr, "\n");
-      call_depth++;
-    }
+    #if TRACE_CALLS
+    for (int i=0; i<call_depth; i++) fprintf(stderr, " ");
+    fprintf_value(stderr, get_deref(depth-1));
+    fprintf(stderr, "\n");
+    call_depth++;
+    #endif
 
     setup_call(depth);
     if (!is_direct(AR(self))) crash("impossible: called law with huge arity");
@@ -2462,6 +2453,7 @@ bool law_step(u64 depth) {
 
     run_law(self, ar);
 
+    #if TRACE_CALLS
     if (TRACE_CALLS) {
       call_depth--;
       for (int i=0; i<call_depth; i++) fprintf(stderr, " ");
@@ -2469,6 +2461,8 @@ bool law_step(u64 depth) {
       fprintf_value(stderr, get_deref(0));
       fprintf(stderr, "\n");
     }
+    #endif
+
     if (ar < depth) handle_oversaturated_application(depth - ar);
     return true;
   }
@@ -3013,7 +3007,7 @@ void test_repl (FILE *f) {
 }
 
 int main (int argc, char **argv) {
-  heap_init();
+  rts_init();
 
   { // load printer
     static const char *tracefile = "./seed/renderPlan";
