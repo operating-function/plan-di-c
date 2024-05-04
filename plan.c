@@ -158,7 +158,7 @@ void rts_init (void) {
     const int rw  = PROT_READ | PROT_WRITE;
     const int rwx = PROT_READ | PROT_WRITE | PROT_EXEC;
 
-    const int heap_flags = MAP_FIXED | MAP_PRIVATE | MAP_ANON | MAP_NORESERVE;
+    const int heap_flags = MAP_FIXED | MAP_PRIVATE | MAP_ANON;
 
     if (HEAP_LOCAL != mmap(HEAP_LOCAL, BLOCK_SIZE, rw, heap_flags, -1, 0))
         { perror("rts_init(heap): mmap"); exit(1); }
@@ -205,7 +205,7 @@ void rts_init (void) {
 */
 void extend_mmap (void) {
     const int prot   = PROT_READ | PROT_WRITE;
-    const int flags  = MAP_FIXED | MAP_PRIVATE | MAP_ANON | MAP_NORESERVE;
+    const int flags  = MAP_FIXED | MAP_PRIVATE | MAP_ANON;
 
     while (live_end > heap_end) {
         len_t mapped_bytes = heap_end - heap_start;
