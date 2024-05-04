@@ -1,6 +1,6 @@
 CFLAGS = -O3 -Wall -Werror -fdiagnostics-color=always
 
-all: plan
+all: plan plan_debug
 
 .PHONY: clean
 clean:
