@@ -170,6 +170,8 @@ bool read_exp(FILE *f);
 
 Value **symbol_table;
 Value **compiler_seed;
+Value **printer_seed = NULL;
+
 
 ////////////////////////////////////////////////////////////////////////////////
 //  Globals
@@ -2235,6 +2237,24 @@ void eval_law(Law l) {
   return slide(maxRef+1);       // .. bodyWhnf
 }
 
+void Trace (char *end) {
+    force_in_place(0);
+    push_val(DIRECT(12));        // .. msg 12
+    push_val(*printer_seed);     // .. msg 12 printer
+    mk_app_rev();                // .. msg (printer 12)
+    mk_app_rev();                // .. (printer 12 msg)
+    force_in_place(0);           // .. msg_bar
+    Value *ov = pop_deref();     // ..
+    int bwid = ByteSz(ov);
+    BIND_BUF_PTR(obuf, ov);
+    char *bbuf = (void*) obuf;
+    if (bwid < 1) return;
+    int owid = bwid - 1;
+    int wrote = fwrite(bbuf, 1, owid, stderr);
+    ASSERT_(owid == wrote);
+    fprintf(stderr, "%s", end);
+}
+
 void run_law(Value *self, u64 ar) {
   if (TY(self) != PIN) goto no_jet;
 
@@ -2286,12 +2306,9 @@ void run_law(Value *self, u64 ar) {
     push_word(ord);
     return;
 
-  case J_TRACE:                   // .. body msg
-    force_in_place(0);            // .. body msg
-    Value *msg = pop();           // .. body
-    fprintf_value(stdout, msg);
-    fprintf(stdout, "\n");
-    eval();                       // .. *body
+  case J_TRACE:                  // .. body msg
+    Trace("\n");                 // .. body
+    eval();                      // .. *body
     return;
 
   default:
@@ -2437,13 +2454,11 @@ void do_prim(Value *op) {
       goto exception_case;
     }
   }
-exception_case:
-  force_in_place(1); // param
-  fprintf(stdout, "Exception(");
-  fprintf_value(stdout, get_deref(0));
-  fprintf(stdout, "): ");
-  fprintf_value(stdout, get_deref(1));
-  fprintf(stdout, "\n");
+exception_case:                      // param tag
+  force_in_place(1);                 // *param tag
+  fprintf(stderr, "Exception(");
+  Trace("): ");                      // param
+  Trace("\n");                       //
   exit(0);
 }
 
@@ -2792,14 +2807,16 @@ again:
   }
 }
 
-void repl (void) {
-    static char buf[128];
+static void repl (void) {
+    { // load seed (starting state)
+      static const char *sire_seed = "./seed/sire-in-sire";
+      u64 seedSz;
+      u64 *words = load_seed_file(sire_seed, &seedSz);
+      seed_load(words);
+      force_in_place(0);
+    }
 
-    static const char *filename = "./seed/sire-in-sire";
-    u64 seedSz;
-    u64 *words = load_seed_file(filename, &seedSz);
-    seed_load(words);
-    force_in_place(0);
+    static char buf[128];
 
   next_input:
     int i=0;
@@ -2813,24 +2830,31 @@ void repl (void) {
 
     // Create a string from the input.  (TODO use a bar instead).
     buf[i+1] = 0;
-    Value *v = start_bignat_alloc(16);
-    memcpy(BUF(v), buf, 128);
-    push_val(end_bignat_alloc(v)); // state input
 
-    mk_app();                      // (state input)
-    force_in_place(0);             // (0 output newstate)
-    v = pop();
-    // fprintf(stderr, "STEP:"); fprintf_value(stderr, v); fprintf(stderr, "\n");
-    // Value *o = TL(HD(v));
-    v = TL(v);
-    push_val(v);                   // newstate
-    // printf("FINAL sp=%lu\n", sp);
-    // printf("OUTPUT:"); fprintf_value(stdout, o); printf("\n\n");
-    // printf("NEW_ST:"); fprintf_value(stdout, v); printf("\n\n");
+    {
+      Value *v = start_bignat_alloc(16);
+      memcpy(BUF(v), buf, 128);
+      push_val(end_bignat_alloc(v)); // state input
+    }
 
-    // TODO: write() output bytes.
+    mk_app();                      // .. (state input)
+    force_in_place(0);             // .. (0 output newstate)
+    Value *res = pop();            // ..
+    Value *nex = TL(res);
+    Value *out = deref(TL(HD(res)));
+    push_val(nex);                 // newstate
 
-    if (i==0 && !bytes_read) crash("EOF");
+    int bwid = ByteSz(out);
+    if (bwid > 1) {
+      BIND_BUF_PTR(obuf, out);
+      char *bbuf = (void*) obuf;
+      int owid = bwid - 1;
+      int wrote = fwrite(bbuf, 1, owid, stderr);
+      ASSERT_(owid != wrote);
+      fprintf(stderr, "\n");
+    }
+
+    if (i==0 && !bytes_read) { return; }
 
     goto next_input;
 }
@@ -2930,14 +2954,28 @@ int main (int argc, char **argv) {
   if (exespace != mmap((void*) exespace, HEAP_MAP_SZ, xprot, flags, -1, 0))
       { perror("exespace: mmap"); exit(1); }
 
-  push_val(DIRECT_ZERO);
-  symbol_table = get_ptr(0);
+  { // load printer
+    static const char *tracefile = "./seed/renderPlan";
+    u64 seedSz;
+    u64 *words = load_seed_file(tracefile, &seedSz);
+    seed_load(words);
+    force_in_place(0);
+    printer_seed=get_ptr(0);
+  }
 
-  u64 seedSz;
-  u64 *words = load_seed_file("./seed/jit", &seedSz);
-  seed_load(words);
-  force_in_place(0);
-  compiler_seed = get_ptr(0);
+
+  { // setup symbol table (TODO: only the testing harness needs this)
+    push_val(DIRECT_ZERO);
+    symbol_table = get_ptr(0);
+  }
+
+  { // load the compiler seed
+    u64 seedSz;
+    u64 *words = load_seed_file("./seed/jit", &seedSz);
+    seed_load(words);
+    force_in_place(0);
+    compiler_seed = get_ptr(0);
+  }
 
   #if ENABLE_GRAPHVIZ
   struct stat st = {0};

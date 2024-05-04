@@ -1770,7 +1770,7 @@ I=0 ;; data Item = I Str (List Tree) (Maybe Tree)0
 @ [ss expo]         | macro ss rex
 | readExpr e expo ss
 
-(evalExpr rex st0)=(pairMap evalSire | readExpr NIL rex st0)
+(evalExpr rex st0)=(pairMap x&[evalSire-x] | readExpr NIL rex st0)
 
 = (isExpRune rune)
 | Has rune , {|} {#|} {-} {#-} {**} {#**} {@} {#@} {@@} {#@@} {^} {#^}
@@ -1947,6 +1947,130 @@ I=0 ;; data Item = I Str (List Tree) (Maybe Tree)0
 
 ;;; The Sire Quine ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+cenBar=(Add 256 {%})
+haxBar=(Add 256 {#})
+aceBar=(Add 256 { })
+palBar=(Add 256 {(})
+parBar=(Add 256 {)})
+kelBar=(Add 256 "{")
+kerBar=(Add 256 "}")
+galBar=(Add 256 "<")
+garBar=(Add 256 ">")
+selBar=(Add 256 "[")
+serBar=(Add 256 "]")
+dotBar=(Add 256 {.})
+(strSlice s)=[0 ByteSz-s s]
+
+newlineBar=(Add 256 newlineChar)
+
+lsnoc=listSnoc
+lweld=listWeld
+lcons=CONS
+lcat=listCat
+lmap=listMap
+
+= (listIntersperse sep xs)
+^ listCase xs 0 (x xs)&(CONS x | _ sep xs)
+& (sep xs) | listFoldr (x xs)&(CONS sep | CONS x xs) NIL xs
+
+lsz=listLen
+
+= (isRex h xs)
+| And | Has h [{WORD} {TEXT} {LINE} {OPEN} {NEST} {INFX} {PREF} {SHUT} {EMBD}]
+| And | Eql ##rex (fst xs)
+# simpleswitch (lsz xs) FALSE
+- 2 | Eql h {EMBD}                               ; EMBD #rex v
+- 3 | Has h [{WORD} {TEXT} {LINE}]               ; WORD #rex txt heir
+- 4 | Has h [{OPEN} {NEST} {INFX} {PREF} {SHUT}] ; OEPN #rex rune sons heir
+
+=?= 1
+  @ rex ' | foo bar
+  | isRex Hd-rex listFromRow-rex
+
+= (Apply f xs)    | foldl (f x & f x) f xs
+
+= (rr rp d rex)
+| If Eq1-d
+    | dotBar::NIL
+@ go rr-rp-(Dec d)
+# simplecase rex (Die-{renderRex: given something that isn't rex})
+- WORD _ t h   | (strSlice t :: And h (lsnoc (palBar :: go h) parBar))
+- TEXT _ t h   | lcons strSlice-"{"
+               | lcons strSlice-t
+               | lcons strSlice-"}"
+               | And h (go h)
+- LINE _ t h   | go (Apply {TEXT} rex)
+- OPEN _ r s h | go (Apply {NEST} rex)
+- INFX _ r s h | go (Apply {NEST} rex)
+- PREF _ r s h | go (Apply {NEST} rex)
+- SHUT _ r s h | go (Apply {NEST} rex)
+- NEST _ r s h ^ (strSlice "(" :: (strSlice r :: _))
+               | lweld ^ lsnoc (lcat _) strSlice-")"
+                       | listFromRow | Map x&(aceBar :: go x) s
+               | And h (rr rp d h)
+- EMBD _ v     | lcons strSlice-{«}
+               | lsnoc (rp (Dec d) v)
+                       strSlice-{»}
+
+= (rpApp rp d f xs)
+| If IsApp-f
+    | rpApp rp d Car-f (Cdr f)::xs
+| Ifz IsNat-f
+    ^ lcons palBar (lsnoc lcat-_ parBar)
+    | listIntersperse (aceBar::0)
+    | (rp d f :: lmap (rp Dec-d) xs)
+| If (isRex f xs)
+    | lcons strSlice-{'} (rr rp d | Fill f xs)
+| else
+    | lweld (And f | rp 2 f)
+    ^ lcons selBar (lsnoc lcat-_ serBar)
+    | listIntersperse (aceBar::0)
+    | lmap (rp Dec-d) xs
+
+= (_Bar pad) | ###1 1 1 pad
+
+= (rp d v)
+| If (Eq1 d)
+    | dotBar::NIL
+| If IsNat-v
+    | If (strIsSymbol v) | [cenBar [strSlice-v 0]]
+    | [strSlice-(showNat v) 0]
+| If IsPin-v
+    @ i (PinItem v)
+    | If (IsLaw i && strIsSymbol LawName-i)
+        | (strSlice (LawName i))::0
+    | If (IsNat i)
+        ^ haxBar::(strSlice _ :: NIL)
+        | If (strIsSymbol i) i (showNat i)
+    | lcons galBar
+    | lsnoc (rp d PinItem-v)
+            garBar
+| If IsLaw-v
+    | lcons kelBar
+    | lweld (rp d LawName-v)
+    | lcons aceBar
+    | lweld (rp d LawArgs-v)
+    | lcons aceBar
+    | lsnoc (rp Dec-d LawBody-v)
+            kerBar
+| rpApp rp d Car-v (Cdr v :: 0)
+
+(renderPlan depth v)=(ByteFillList | listSnoc (rp depth v) [0 1 1])
+
+(renderPlanStr d v)=(b @ renderPlan d v)(ByteTake Dec-(ByteSz b) b)
+
+( "2[3 4]"          =?= renderPlanStr 0 (2 3 4))
+( "[3 4]"           =?= renderPlanStr 0 (0 3 4))
+( "%foo[3 4]"       =?= renderPlanStr 0 ({foo} 3 4))
+( "(k3 3 4)"        =?= renderPlanStr 0 (Pin-(k3 p q r s ? p) 3 4))
+( "(<{0 4 1}> 3 4)" =?= renderPlanStr 0 (Pin-(p q r s & p) 3 4))
+
+( "2[. .]"          =?= renderPlanStr 2 (2 3 4))
+( "[. .]"           =?= renderPlanStr 2 (0 3 4))
+( "%foo[. .]"       =?= renderPlanStr 2 ({foo} 3 4))
+( "(k3 . .)"        =?= renderPlanStr 2 (Pin-(k3 p q r s ? p) (3 4) 4))
+( "(<{0 4 .}> . .)" =?= renderPlanStr 2 (Pin-(p q r s & p) 3 4))
+
 = (consumeLines buf) ; Str > (Row Str, Str)
 @ wid (ByteSz buf)
 ^ _ 0 0
@@ -1956,6 +2080,11 @@ I=0 ;; data Item = I Str (List Tree) (Maybe Tree)0
 @ sliceSz    | Sub ix off
 @ acc        | acc (ByteSlice off sliceSz buf)
 | go acc Inc-(Add off sliceSz)
+
+= (renderOutput outs)
+| Ifz outs 1
+@ o (If Eq1-(Sz outs) fst-outs outs)
+| renderPlan 8 o
 
 = (sireRepl output prevLino ss bs buf rawInput)
 
@@ -1973,9 +2102,9 @@ I=0 ;; data Item = I Str (List Tree) (Maybe Tree)0
         @ (bs, frags) | rexStep bs line
         | go bs (CONS frags acc) lines
 
-    @ [!ss newLino]
-        ^ listFoldl _ [ss prevLino] blocks
-        & ([ss prevLino] [newLino rex])
+    @ [!ss outs newLino]
+        ^ listFoldl _ [ss [] prevLino] blocks
+        & ([ss acc prevLino] [newLino rex])
 
         ; Trace {ss}-ss
         ; Trace {rex}-rex
@@ -1984,17 +2113,16 @@ I=0 ;; data Item = I Str (List Tree) (Maybe Tree)0
         @ ss         | sireLineNumSet (Add newLines | sireLineNum ss)
                      | sireBlockSet rex
                      | ss
-        @ [!ss _out] | executeSire rex ss
-        | Trace {out}-_out
-        | [ss newLino]
+        @ [!ss outs] | executeSire rex ss
+        | [ss (Weld acc outs) newLino]
 
     | Ifz eof
         ; Trace "more input!"-(sireRepl output newLino ss bs buf)
         ; Trace "result"-_ _
-        | (0, sireRepl output newLino ss bs buf)
+       ++ renderOutput outs
+       ++ sireRepl output newLino ss bs buf
 
-    : main < maybeCase (lookupVal {main} ss) Die-{main is not bound}
-    (output main, {NO MORE INPUT})
+    (renderOutput outs, {NO MORE INPUT})
 
 = (runSireRepl save)
 | sireRepl save 0 (SIRE_STATE 1 0 0 0 0 '()) (BS {REPL} 1 WOODS) ""
