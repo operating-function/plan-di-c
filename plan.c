@@ -144,10 +144,8 @@ static char *live_end   = NULL;
 static char *hp         = NULL;
 
 static Value *stack[STACK_SIZE] = {0};
-static Value **sp               = stack;          // sp[-1] is the top value.
-#if STACK_BOUNDS_CHECK
+static Value **sop              = stack + STACK_SIZE; // sop[0] is the top value
 static Value **stack_end        = stack + STACK_SIZE;
-#endif
 
 static Value **printer_seed  = NULL;
 static Value **compiler_seed = NULL;
@@ -289,6 +287,10 @@ static inline Value *DIRECT(u64 x) {
 
 // Stack Operations ////////////////////////////////////////////////////////////
 
+static inline ssize_t get_stack_size (void) {
+  return (stack_end - sop);
+}
+
 static inline Value *deref (Value *x) {
   while (!is_direct(x) && x->type == IND) x = x->i.ptr;
   return x;
@@ -296,20 +298,20 @@ static inline Value *deref (Value *x) {
 
 static inline Value *pop (void) {
   #if STACK_BOUNDS_CHECK
-  if (sp <= stack) crash("pop: empty stack");
+  if (sop >= stack_end) crash("pop: empty stack");
   #endif
 
-  return *(--sp);
+  Value *res = *sop;
+  sop++;
+  return res;
 }
 
 static inline Value **get_ptr (u64 idx) {
-  Value **res = sp - (idx+1);
-
   #if STACK_BOUNDS_CHECK
-  if (res < stack) crash("get: indexed off stack");
+  if (sop+idx >= stack_end) crash("get: indexed off stack");
   #endif
 
-  return res;
+  return sop+idx;
 }
 
 static inline void push_val (Value *x) {
@@ -321,11 +323,13 @@ static inline void push_val (Value *x) {
   write_dot_extra("push_val", extra, x);
   #endif
 
+  sop--;
+
   #if STACK_BOUNDS_CHECK
-  if (sp >= stack_end) crash("push_val: stack overflow");
+  if (sop < stack) crash("push_val: stack overflow");
   #endif
 
-  *(sp++) = x;
+  *sop = x;
 }
 
 static inline Value *pop_deref (void)     { return deref(pop());       }
@@ -350,21 +354,18 @@ static inline void swap() {
   push_val(n2);
 }
 
-void slide(u64 count) {
+static inline void slide (u64 count) {
   #if ENABLE_GRAPHVIZ
   snprintf(dot_lab, 1024, "slide %lu", count);
   write_dot(dot_lab);
   #endif
 
-  Value *top = get_deref(0);
-
-  sp -= count;
-
   #if STACK_BOUNDS_CHECK
-  if (sp < (stack+1)) crash("stack underflow");
+  if (sop+count >= stack_end) crash("stack underflow");
   #endif
 
-  sp[-1] = top;
+  sop[count] = *sop;
+  sop += count;
 
   #if ENABLE_GRAPHVIZ
   snprintf(dot_lab, 1024, "post slide %lu", count);
@@ -1453,16 +1454,6 @@ void frag_load(Value **tab, u64 tabSz, int *use, u64 *acc, u64 **mor) {
   push_val(tab[ref]);
 }
 
-void stack_grow(u64 count) {
-  #if ENABLE_GRAPHVIZ
-  snprintf(dot_lab, 1024, "stack_grow %lu", count);
-  write_dot(dot_lab);
-  #endif
-  for (u64 i = 0; i < count; i++) {
-    push_val(NULL);
-  }
-}
-
 void seed_load(u64 *inpbuf) {
   u64 n_holes = inpbuf[0];
   u64 n_bigs  = inpbuf[1];
@@ -1481,8 +1472,9 @@ void seed_load(u64 *inpbuf) {
 
   // clever: store working table on stack to make everything GC safe.
 
-  stack_grow(n_entries);
-  Value **tab = get_ptr(n_entries-1); // 0
+  sop -= n_entries; // grow the stack
+  for (int i=0; i<n_entries; i++) sop[i] = DIRECT_ZERO;
+  Value **tab = sop;
 
   Value **next_ref = tab;
 
@@ -1530,8 +1522,7 @@ void seed_load(u64 *inpbuf) {
     *next_ref++ = pop();
   }
 
-  // The top-most entry is the result
-  slide(n_entries - 1);
+  sop += (n_entries - 1); // drop everything besided the final entry.
 }
 
 u64 *load_seed_file (const char *filename, u64 *sizeOut) {
@@ -1623,7 +1614,7 @@ static inline void gc_copy_refs(Value *x) {
 }
 
 static void cheney (void) {
-  for (Value **p = stack; p < sp; p++) { *p = gc_copy(*p); }
+  for (Value **p = sop; p < stack_end; p++) *p = gc_copy(*p);
 
   for (char *iter = live_start;
        iter < hp;
@@ -1749,7 +1740,7 @@ void fprintf_stack(FILE *f) {
   // => stack [label="<ss> stack|<s0>|<s1>|<s2>", color=blue, height=2.5];
   fprintf(f, "stack [label=\"<ss> stack");
 
-  ssize_t stack_size = (sp - stack);
+  ssize_t stack_size = get_stack_size();
 
   for (int i = 0; i < stack_size; i++) {
     char label[256] = "";
@@ -1769,7 +1760,8 @@ void fprintf_stack(FILE *f) {
 }
 
 Node *stack_to_list_heap_only() {
-  ssize_t stack_size = (sp - stack);
+  ssize_t stack_size = get_stack_size();
+
   Node *l = NULL;
   if (stack_size == 0) return l;
   for (u64 i = 0; i < stack_size; i++) {
@@ -2119,7 +2111,7 @@ void setup_call(u64 depth) {
   // setup the call by pulling the TLs out of all apps which we have
   // unwound.  (TODO: use pointer arithmetic)
   for (u64 i = 0; i < depth; i++) {
-    sp[-(1+i)] = TL(sp[-(1+i)]);
+    sop[i] = TL(sop[i]);
   }
 }
 
@@ -2132,9 +2124,10 @@ void flip_stack(u64 depth) {
   if (depth == 0) return;
   u64 d1 = depth-1;
   for (u64 i = 0; i < depth/2; i++) {
-    Value *tmp      = sp[-(i+1)];
-    sp[-(1+i)]      = sp[-(1+(d1-i))];
-    sp[-(1+(d1-i))] = tmp;
+    Value *tmp      = sop[i];
+    sop[i]          = sop[d1-i];
+    sop[d1-i]       = tmp;
+    // TODO: pointer arithmatic, not index arithmetic.
   }
 }
 
@@ -2252,16 +2245,16 @@ void eval_law(Law l) {
 
   if (lets) {
     #if STACK_BOUNDS_CHECK
-    if (sp+lets >= stack_end) crash("eval_law: stack overflow");
+    if (sop-lets < stack) crash("eval_law: stack overflow");
     #endif
 
     // Add a black hole per let.
-    for (u64 i = 0; i < lets; i++) *(sp++) = holes+i;
+    for (u64 i = 0; i < lets; i++) *(--sop) = holes+i;
 
     #if ENABLE_GRAPHVIZ
     for (u64 i = 0; i < lets; i++) {
-      holes[i].type = IND;
-      holes[i].i    = NULL;
+      holes[i].type  = IND;
+      holes[i].i.ptr = NULL;
     }
     write_dot("added holes for lets");
     #endif
@@ -2295,6 +2288,11 @@ void eval_law(Law l) {
 
 void Trace (char *end) {
     force_in_place(0);
+    if (printer_seed == NULL) {
+      fprintf_value(stderr, pop_deref());
+      fprintf(stderr, "\n");
+      return;
+    }
     push_val(DIRECT(12));        // .. msg 12
     push_val(*printer_seed);     // .. msg 12 printer
     mk_app_rev();                // .. msg (printer 12)
@@ -3010,7 +3008,6 @@ int main (int argc, char **argv) {
     force_in_place(0);
     printer_seed=get_ptr(0);
   }
-
 
   { // setup symbol table (TODO: only the testing harness needs this)
     push_val(DIRECT_ZERO);
