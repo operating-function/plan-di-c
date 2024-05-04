@@ -101,20 +101,8 @@ len_t ByteSz(Value *);
 Value *normalize (Value*);
 JetTag jet_match(Value*);
 
-static void push_word(u64);
-
-static void swap(void);
 static void mk_app(void);
-static void clone(void);
-static Value *pop(void);
-static Value *get(u64);
-static Value *get_deref(u64);
-static Value *pop_deref(void);
-static void slide(u64);
 static void update(u64);
-static void push(u64);
-static void push_val(Value*);
-static Value **get_ptr(u64);
 
 void force();
 bool eval();
@@ -293,6 +281,90 @@ static inline Value *DIRECT(u64 x) {
   #endif
 
   return (Value *) (x | PTR_NAT_MASK);
+}
+
+
+// Stack Operations ////////////////////////////////////////////////////////////
+
+static inline Value *deref (Value *x) {
+  while (!is_direct(x) && x->type == IND) x = x->i.ptr;
+  return x;
+}
+
+static inline Value *pop (void) {
+  #if STACK_BOUNDS_CHECK
+  if (sp == 0) crash("pop: empty stack");
+  #endif
+
+  sp--;
+  return stack[sp];
+}
+
+static inline Value **get_ptr (u64 idx) {
+  #if STACK_BOUNDS_CHECK
+  if (idx >= sp) crash("get: indexed off stack");
+  #endif
+
+  return &stack[(sp-1)-idx];
+}
+
+static inline void push_val (Value *x) {
+  #if ENABLE_GRAPHVIZ
+  char extra[50];
+  char *x_p = p_ptr(x);
+  sprintf(extra, "i[color=red];\ni -> %s", x_p);
+  free(x_p);
+  write_dot_extra("push_val", extra, x);
+  #endif
+
+  #if STACK_BOUNDS_CHECK
+  if ((sp+1) > STACK_SIZE) crash("push_val: stack overflow");
+  #endif
+
+  stack[sp] = x;
+  sp++;
+}
+
+static inline Value *pop_deref (void)     { return deref(pop());       }
+static inline Value *get       (u64 idx)  { return *get_ptr(idx);      }
+static inline Value *get_deref (u64 idx)  { return deref(get(idx));    }
+
+static inline void push(u64 idx) {
+  #if ENABLE_GRAPHVIZ
+  snprintf(dot_lab, 1024, "push %lu", idx);
+  write_dot(dot_lab);
+  #endif
+
+  push_val(get_deref(idx));
+}
+
+// before: ..rest x y
+// after:  ..rest y x
+static inline void swap() {
+  Value *n1 = pop();
+  Value *n2 = pop();
+  push_val(n1);
+  push_val(n2);
+}
+
+void slide(u64 count) {
+  #if ENABLE_GRAPHVIZ
+  snprintf(dot_lab, 1024, "slide %lu", count);
+  write_dot(dot_lab);
+  #endif
+
+  #if STACK_BOUNDS_CHECK
+  if (count >= sp) crash("stack underflow");
+  #endif
+
+  Value *top = get_deref(0);
+  sp -= count;
+  stack[sp-1] = top;
+  //
+  #if ENABLE_GRAPHVIZ
+  snprintf(dot_lab, 1024, "post slide %lu", count);
+  write_dot(dot_lab);
+  #endif
 }
 
 
@@ -1483,39 +1555,6 @@ u64 *load_seed_file (const char *filename, u64 *sizeOut) {
   return buf;
 }
 
-////////////////////////////////////////////////////////////////////////////////
-//  Interpreter stack fns
-
-static inline Value *deref(Value *x) {
- again:
-  if (is_direct(x)) return x;
-
-  if (x->type == IND) { x = x->i.ptr; goto again; }
-
-  return x;
-}
-
-static inline Value *pop() {
-  #if STACK_BOUNDS_CHECK
-  if (sp == 0) crash("pop: empty stack");
-  #endif
-
-  sp--;
-  return stack[sp];
-}
-
-static inline Value **get_ptr(u64 idx) {
-  #if STACK_BOUNDS_CHECK
-  if (idx >= sp) crash("get: indexed off stack");
-  #endif
-
-  return &stack[(sp-1)-idx];
-}
-
-static inline Value *pop_deref ()        { return deref(pop());    }
-static inline Value *get       (u64 idx) { return *get_ptr(idx);   }
-static inline Value *get_deref (u64 idx) { return deref(get(idx)); }
-
 
 ////////////////////////////////////////////////////////////////////////////////
 //  GC
@@ -1783,31 +1822,6 @@ static void update(u64 idx) {
   pop();
 }
 
-static inline void push_val(Value *x) {
-  #if ENABLE_GRAPHVIZ
-  char extra[50];
-  char *x_p = p_ptr(x);
-  sprintf(extra, "i[color=red];\ni -> %s", x_p);
-  free(x_p);
-  write_dot_extra("push_val", extra, x);
-  #endif
-
-  #if STACK_BOUNDS_CHECK
-  if ((sp+1) > STACK_SIZE) crash("push_val: stack overflow");
-  #endif
-
-  stack[sp] = x;
-  sp++;
-}
-
-static inline void push(u64 idx) {
-  #if ENABLE_GRAPHVIZ
-  snprintf(dot_lab, 1024, "push %lu", idx);
-  write_dot(dot_lab);
-  #endif
-
-  push_val(get_deref(idx));
-}
 
 static inline void clone() {
   #if ENABLE_GRAPHVIZ
@@ -1843,35 +1857,6 @@ static inline void mk_app_rev() {
   res->a.f = pop();
   res->a.g = pop();
   push_val(res);
-}
-
-// before: ..rest x y
-// after:  ..rest y x
-static inline void swap() {
-  Value *n1 = pop();
-  Value *n2 = pop();
-  push_val(n1);
-  push_val(n2);
-}
-
-void slide(u64 count) {
-  #if ENABLE_GRAPHVIZ
-  snprintf(dot_lab, 1024, "slide %lu", count);
-  write_dot(dot_lab);
-  #endif
-
-  #if STACK_BOUNDS_CHECK
-  if (count >= sp) crash("stack underflow");
-  #endif
-
-  Value *top = get_deref(0);
-  sp -= count;
-  stack[sp-1] = top;
-  //
-  #if ENABLE_GRAPHVIZ
-  snprintf(dot_lab, 1024, "post slide %lu", count);
-  write_dot(dot_lab);
-  #endif
 }
 
 void mk_pin() {
