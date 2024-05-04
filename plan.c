@@ -144,7 +144,10 @@ static char *live_end   = NULL;
 static char *hp         = NULL;
 
 static Value *stack[STACK_SIZE] = {0};
-static u64 sp = 0;
+static Value **sp               = stack;          // sp[-1] is the top value.
+#if STACK_BOUNDS_CHECK
+static Value **stack_end        = stack + STACK_SIZE;
+#endif
 
 static Value **printer_seed  = NULL;
 static Value **compiler_seed = NULL;
@@ -293,19 +296,20 @@ static inline Value *deref (Value *x) {
 
 static inline Value *pop (void) {
   #if STACK_BOUNDS_CHECK
-  if (sp == 0) crash("pop: empty stack");
+  if (sp <= stack) crash("pop: empty stack");
   #endif
 
-  sp--;
-  return stack[sp];
+  return *(--sp);
 }
 
 static inline Value **get_ptr (u64 idx) {
+  Value **res = sp - (idx+1);
+
   #if STACK_BOUNDS_CHECK
-  if (idx >= sp) crash("get: indexed off stack");
+  if (res < stack) crash("get: indexed off stack");
   #endif
 
-  return &stack[(sp-1)-idx];
+  return res;
 }
 
 static inline void push_val (Value *x) {
@@ -318,11 +322,10 @@ static inline void push_val (Value *x) {
   #endif
 
   #if STACK_BOUNDS_CHECK
-  if ((sp+1) > STACK_SIZE) crash("push_val: stack overflow");
+  if (sp >= stack_end) crash("push_val: stack overflow");
   #endif
 
-  stack[sp] = x;
-  sp++;
+  *(sp++) = x;
 }
 
 static inline Value *pop_deref (void)     { return deref(pop());       }
@@ -353,14 +356,16 @@ void slide(u64 count) {
   write_dot(dot_lab);
   #endif
 
+  Value *top = get_deref(0);
+
+  sp -= count;
+
   #if STACK_BOUNDS_CHECK
-  if (count >= sp) crash("stack underflow");
+  if (sp < (stack+1)) crash("stack underflow");
   #endif
 
-  Value *top = get_deref(0);
-  sp -= count;
-  stack[sp-1] = top;
-  //
+  sp[-1] = top;
+
   #if ENABLE_GRAPHVIZ
   snprintf(dot_lab, 1024, "post slide %lu", count);
   write_dot(dot_lab);
@@ -1618,7 +1623,7 @@ static inline void gc_copy_refs(Value *x) {
 }
 
 static void cheney (void) {
-  for (u64 i = 0; i < sp; i++) { *get_ptr(i) = gc_copy(get(i)); }
+  for (Value **p = stack; p < sp; p++) { *p = gc_copy(*p); }
 
   for (char *iter = live_start;
        iter < hp;
@@ -1743,7 +1748,10 @@ void fprintf_stack(FILE *f) {
   // print "stack topper"
   // => stack [label="<ss> stack|<s0>|<s1>|<s2>", color=blue, height=2.5];
   fprintf(f, "stack [label=\"<ss> stack");
-  for (int i = 0; i < sp; i++) {
+
+  ssize_t stack_size = (sp - stack);
+
+  for (int i = 0; i < stack_size; i++) {
     char label[256] = "";
     if (is_direct(get(i))) show_direct_nat(label, get(i));
     fprintf(f, "| <s%d> %s ", i, label);
@@ -1751,7 +1759,7 @@ void fprintf_stack(FILE *f) {
   fprintf(f, "\", color=blue, height=2.5];\n");
 
   // print edges between stack topper Values
-  for (int i = 0; i < sp; i++) {
+  for (int i = 0; i < stack_size; i++) {
     Value *v = get(i);
     if (is_direct(v)) continue;
     char *v_p = p_ptr(v);
@@ -1761,9 +1769,10 @@ void fprintf_stack(FILE *f) {
 }
 
 Node *stack_to_list_heap_only() {
+  ssize_t stack_size = (sp - stack);
   Node *l = NULL;
-  if (sp == 0) return l;
-  for (u64 i = 0; i < sp; i++) {
+  if (stack_size == 0) return l;
+  for (u64 i = 0; i < stack_size; i++) {
     if (is_direct(get(i))) continue;
     l = cons((void *)get(i), l);
   }
@@ -2108,9 +2117,9 @@ void setup_call(u64 depth) {
   #endif
 
   // setup the call by pulling the TLs out of all apps which we have
-  // unwound.
+  // unwound.  (TODO: use pointer arithmetic)
   for (u64 i = 0; i < depth; i++) {
-    stack[(sp-1)-i] = TL(stack[(sp-1)-i]);
+    sp[-(1+i)] = TL(sp[-(1+i)]);
   }
 }
 
@@ -2121,12 +2130,11 @@ void flip_stack(u64 depth) {
   #endif
   //
   if (depth == 0) return;
-  Value *tmp;
-  u64 d_1 = depth-1;
+  u64 d1 = depth-1;
   for (u64 i = 0; i < depth/2; i++) {
-    tmp                   = stack[(sp-1)-i];
-    stack[(sp-1)-i]       = stack[(sp-1)-(d_1-i)];
-    stack[(sp-1)-(d_1-i)] = tmp;
+    Value *tmp      = sp[-(i+1)];
+    sp[-(1+i)]      = sp[-(1+(d1-i))];
+    sp[-(1+(d1-i))] = tmp;
   }
 }
 
@@ -2243,12 +2251,12 @@ void eval_law(Law l) {
   #endif
 
   if (lets) {
-    // Add a black hole per let.
-    for (u64 i = 0; i < lets; i++) stack[sp++] = holes+i;
-
     #if STACK_BOUNDS_CHECK
-    if (sp > STACK_SIZE) crash("eval_law: stack overflow");
+    if (sp+lets >= stack_end) crash("eval_law: stack overflow");
     #endif
+
+    // Add a black hole per let.
+    for (u64 i = 0; i < lets; i++) *(sp++) = holes+i;
 
     #if ENABLE_GRAPHVIZ
     for (u64 i = 0; i < lets; i++) {
