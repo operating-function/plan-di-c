@@ -849,7 +849,7 @@ static inline void push_word(u64 x) {
 
 static inline Value *a_Pin(Value *item) {
   push_val(item);
-  Value *res = (Value *)alloc(sizeof(Value));
+  Value *res = (Value *)alloc(24); // tag, item, jet_tag
   item = pop();
   res->type = PIN;
   JetTag jet = jet_match(item);
@@ -861,7 +861,8 @@ static inline Value *a_Law(Law l) {
   push_val(l.n);
   push_val(l.a);
   push_val(l.b);
-  Value *res = (Value *)alloc(sizeof(Value));
+  // tag name args body weights
+  Value *res = (Value *)alloc(32 + sizeof(LawWeight));
   l.b = pop();
   l.a = pop();
   l.n = pop();
@@ -1571,10 +1572,16 @@ u64 *load_seed_file (const char *filename, u64 *sizeOut) {
 ////////////////////////////////////////////////////////////////////////////////
 //  GC
 
-// argument must always be a heap pointer, never direct.
 static inline size_t alloc_size(Value *x) {
-  if (x->type == BIG) return (8 * (2 + WID(x)));
-  return sizeof(Value);
+  // never direct (because this is called on an actual heap object).
+  switch (x->type) {
+  case BIG: return (8 * (2 + WID(x)));
+  case APP: return 24;
+  case IND: return 24;
+  case PIN: return 24;
+  case LAW: return 32 + sizeof(LawWeight);
+  default:  crash("alloc_size: bad tag");
+  }
 }
 
 Value *gc_copy(Value *x) {
@@ -1855,7 +1862,7 @@ static inline void mk_app() {
   write_dot("mk_app");
   #endif
 
-  Value *res = (Value *)alloc(sizeof(Value));
+  Value *res = (Value *)alloc(24);
   res->type = APP;
   res->a.g = pop();
   res->a.f = pop();
@@ -1869,7 +1876,7 @@ static inline void mk_app_rev() {
   write_dot("mk_app_rev");
   #endif
 
-  Value *res = (Value *)alloc(sizeof(Value));
+  Value *res = (Value *)alloc(24);
   res->type = APP;
   res->a.f = pop();
   res->a.g = pop();
@@ -2175,7 +2182,7 @@ void backout(u64 depth) {
   // of the stack.
 }
 
-Value *kal(u64 maxRef, Value **pool, Value *x) {
+Value *kal(u64 maxRef, char **pool, Value *x) {
   if (is_direct(x)) {
     u64 xv = get_direct(x);
     if (xv > maxRef) return x;                   // unquoted constant
@@ -2199,7 +2206,8 @@ Value *kal(u64 maxRef, Value **pool, Value *x) {
   Value *f = TL(hx);
   Value *g = TL(x);
 
-  Value *this_call = (*pool)++;                  // allocte (type is preset)
+  Value *this_call = (Value*) *pool;
+  *pool += 24;
   this_call->type = APP;
   this_call->a.f  = kal(maxRef, pool, f);
   this_call->a.g  = kal(maxRef, pool, g);
@@ -2225,11 +2233,6 @@ loop:
   return count;
 }
 
-typedef struct GrMem {
-  Value *holes;
-  Value *apps;
-} GrMem;
-
 void eval_law(Law l) {
   u64 args = get_direct(l.a); // this code is unreachable with bignat arity
   u64 lets = l.w.n_lets;
@@ -2243,21 +2246,21 @@ void eval_law(Law l) {
   }
   #endif
 
-  const size_t bytes = sizeof(Value) * (lets + kals);
+  // we are allocating APPs and INDs, which are both 24 bytes.
+  const size_t bytes = 24 * (lets + kals);
 
   push_val(l.b);                            // save (law body)
-  Value *mem = bytes ? alloc(bytes) : NULL; // gc
-  Value *b   = pop();                       // restore (law body)
+  char *mem = bytes ? alloc(bytes) : NULL; // gc
+  Value *b  = pop();                       // restore (law body)
 
   // initialize letrec slots, since they might be referenced before they
   // are filled in, but leave APPs uninitialized.  KAL will initialize.
 
-  Value *holes = mem;
-  Value *apps  = mem + lets;
-
   #if ENABLE_GRAPHVIZ
   write_dot("starting graph construction");
   #endif
+
+  char *apps = mem + lets*24;
 
   if (lets) {
     #if STACK_BOUNDS_CHECK
@@ -2265,25 +2268,29 @@ void eval_law(Law l) {
     #endif
 
     // Add a black hole per let.
-    for (u64 i = 0; i < lets; i++) *(--sop) = holes+i;
+    for (u64 i = 0; i < lets; i++) *(--sop) = (Value*) (mem + 24*i);
 
     #if ENABLE_GRAPHVIZ
     for (u64 i = 0; i < lets; i++) {
-      holes[i].type  = IND;
-      holes[i].i.ptr = NULL;
+      Value *ptr = (Value*) (mem + (i*24));
+      ptr->type  = IND;
+      ptr->i.ptr = NULL; // {type=IND, ptr=NULL} indicates a black hole
     }
     write_dot("added holes for lets");
     #endif
 
     // Compute the graph of each let, and fill the corresponding hole.
     for (u64 i = 0; i < lets; i++) {
+
       // (1 exp next)
-      Value *next    = TL(b);
-      Value *exp     = TL(HD(b));
-      b              = next;
-      Value *gr      = kal(maxRef, &apps, exp);
-      holes[i].type  = IND;
-      holes[i].i.ptr = gr;
+      Value *next = TL(b);
+      Value *exp  = TL(HD(b));
+      b           = next;
+      Value *gr   = kal(maxRef, &apps, exp);
+
+      Value *ptr = (Value*) (mem + (i*24));
+      ptr->type  = IND;
+      ptr->i.ptr = gr;
 
       #if ENABLE_GRAPHVIZ
       write_dot("filled one");
