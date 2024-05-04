@@ -21,46 +21,124 @@
 #include "linked_list.h"
 
 
-////////////////////////////////////////////////////////////////////////////////
-//  Crash
+// Utils ///////////////////////////////////////////////////////////////////////
 
-noreturn void crash(char *s) {
-  printf("Error: %s\n", s);
-  exit(1);
+noreturn void crash(char *s) { printf("Error: %s\n", s); exit(1); }
+
+
+// GC Heap /////////////////////////////////////////////////////////////////////
+
+#define BLOCK_SIZE 65536
+#define HEAP_LOCAL ((void*)(1ULL<<24))
+
+static char *jitspace = (char*) (1ULL << 42);
+static char *jp       = (char*) (1ULL << 42);
+
+static char *heap_start = NULL;
+static char *heap_end   = NULL;
+
+static char *live_start = NULL;
+static char *live_end   = NULL;
+static char *hp         = NULL;
+
+
+void heap_init (void) {
+    const int prot   = PROT_READ | PROT_WRITE;
+    const int flags  = MAP_FIXED | MAP_PRIVATE | MAP_ANON | MAP_NORESERVE;
+
+    if (HEAP_LOCAL != mmap(HEAP_LOCAL, BLOCK_SIZE, prot, flags, -1, 0))
+        { perror("heap_init: mmap"); exit(1); }
+
+    heap_start = HEAP_LOCAL;
+    heap_end   = heap_start + BLOCK_SIZE;
+    live_start = heap_start;
+    live_end   = heap_end;
+    hp         = live_start;
+
+    // 1TB for jit codegen
+    int xprot  = PROT_READ | PROT_WRITE | PROT_EXEC;
+    if (jitspace != mmap(jitspace, (1ULL<<40), xprot, flags, -1, 0))
+      { perror("jitspace: mmap"); exit(1); }
 }
 
+/*
+    {extend_mmap} doubles the size of the mapped heap until it covers
+    the end of the live region.
 
-// Heap ////////////////////////////////////////////////////////////////////////
+    It uses MAP_FIXED to simply grow the mapped region.  We get the size
+    of the current heap, and simply allocate another mmap region of the
+    same size, immediately after the currently mapped region.
 
-#define HEAP_MAP_SZ (1ULL << 40) // 1 TB
-#define BLOCK_SZ    65536
+    Using MAP_FIXED is simple, but not robust or portable.
 
-// tospace and fromspace are swapped on every GC.
+    This will double the heap_size *multiple times* if needed to cover
+    the live area (but that shouldn't actually happen in practice).
+*/
+void extend_mmap (void) {
+    const int prot   = PROT_READ | PROT_WRITE;
+    const int flags  = MAP_FIXED | MAP_PRIVATE | MAP_ANON | MAP_NORESERVE;
 
-static char *tospace     = (char*) (1ULL << 24);
-static char *hp          = (char*) (1ULL << 24);
-static char *tospace_end = (char*) ((1ULL << 24) + BLOCK_SZ);
+    while (live_end > heap_end) {
+        len_t mapped_bytes = heap_end - heap_start;
+        if (heap_end != mmap(heap_end, mapped_bytes, prot, flags, -1, 0))
+            { perror("extend_mmap: mmap"); exit(1); }
+        heap_end += mapped_bytes;
+    }
+}
 
-static char *fromspace   = (char*) (1ULL << 41);
+/*
+    {heap_resize} sets the end of the live region to be twice as big as
+    the amount of used data (after gc), rounded up to the nearest
+    BLOCK_SIZE.
+*/
+void heap_resize (void) {
+    ssize_t used_bytes = hp - live_start;
+    ssize_t used_blocks = (((used_bytes + BLOCK_SIZE) - 1) / BLOCK_SIZE);
+    ssize_t new_size = BLOCK_SIZE * 2 * used_blocks;
+    live_end = live_start + new_size;
+    extend_mmap();
+}
 
-static char *exespace    = (char*) (1ULL << 42);
-static char *xp          = (char*) (1ULL << 42);
+static void cheney (void);
 
-static void gc();
+void gc (void) {
 
-// argument is in bytes, but must be a multiple of 8.
+    // copy left
+    if (heap_start < live_start) {
+        hp = live_start = heap_start;
+        hp = live_start;
+        cheney();
+        heap_resize();
+        return;
+    }
+
+    // copy right
+    if (heap_start == live_start) {
+        ssize_t live_size = live_end - live_start;
+        live_start = heap_start + (live_size * 2); // leave room for left-copy
+        live_end   = live_start + live_size;
+        hp         = live_start;
+        extend_mmap();
+        cheney();
+        heap_resize();
+        return;
+    }
+
+    crash("gc: impossible: bad live_start");
+}
+
 static inline void *alloc(size_t bytes) {
  again:
   char *res = hp;
   hp += bytes;
-  if (hp > tospace_end) { gc(); goto again; }
+  if (hp > live_end) { gc(); goto again; }
   return res;
 }
 
 // argument is in bytes, but must be a multiple of 8.
-static inline void *alloc_code(size_t bytes) {
-  char *res = xp;
-  xp += bytes;
+static inline void *jit_alloc(size_t bytes) {
+  char *res = jp;
+  jp += bytes;
   return res;
 }
 
@@ -356,12 +434,12 @@ void check_value(Value *v) {
 
   if (is_direct(v)) return;
 
-  if ((char*)v < tospace) {
+  if ((char*)v < live_start) {
     fprintf(stderr, "check_value: %p is before the heap", v);
     crash("check_value");
   }
 
-  if ((char*)v >= tospace_end) {
+  if ((char*)v >= live_end) {
     fprintf(stderr, "check_value: %p is past the heap", v);
     crash("check_value");
   }
@@ -1461,8 +1539,10 @@ Value *gc_copy(Value *x) {
   if (x == NULL || is_direct(x))
     return x;
 
+  char *xc = (char*) x;
+
   // if this points into the tospace, we don't need to copy.
-  if ((char*)x >= tospace && (char*)x < (tospace + HEAP_MAP_SZ))
+  if (xc >= live_start && xc < live_end)
     return x;
 
   if (x->type == MOV) return x->i.ptr;
@@ -1507,23 +1587,15 @@ static inline void gc_copy_refs(Value *x) {
   }
 }
 
-// Cheney's algorithm
-static void gc() {
-  char *tmp = fromspace;
-  fromspace = tospace;
-  tospace = tmp;
-  hp = tospace;
-
+static void cheney (void) {
   for (u64 i = 0; i < sp; i++) { *get_ptr(i) = gc_copy(get(i)); }
 
-  for (char *iter = tospace; iter < hp; iter += alloc_size((Value*)iter)) {
+  for (char *iter = live_start;
+       iter < hp;
+       iter += alloc_size((Value*)iter)
+      ) {
     gc_copy_refs((Value*) iter);
   }
-
-  long used     = hp - tospace;
-  long new_size = BLOCK_SZ * (1 + (used/BLOCK_SZ));
-       new_size = new_size + (new_size / 2);
-  tospace_end   = tospace + new_size;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1927,7 +1999,7 @@ void mk_law() {
 
     word_t *code  = BUF(machBar);
     len_t codeSz  = BarSz(machBar);
-    char *codePtr = alloc_code(codeSz);
+    char *codePtr = jit_alloc(codeSz);
     memcpy(codePtr, code, codeSz);
 
     fprintf(stderr, "code_gen nm: ");
@@ -2941,18 +3013,7 @@ void test_repl (FILE *f) {
 }
 
 int main (int argc, char **argv) {
-  int prot   = PROT_READ | PROT_WRITE;
-  int xprot  = PROT_READ | PROT_WRITE | PROT_EXEC;
-  int flags  = MAP_FIXED | MAP_PRIVATE | MAP_ANON | MAP_NORESERVE;
-
-  if (tospace != mmap((void*) tospace, HEAP_MAP_SZ, prot, flags, -1, 0))
-      { perror("tospace: mmap"); exit(1); }
-
-  if (fromspace != mmap((void*) fromspace, HEAP_MAP_SZ, prot, flags, -1, 0))
-      { perror("fromspace: mmap"); exit(1); }
-
-  if (exespace != mmap((void*) exespace, HEAP_MAP_SZ, xprot, flags, -1, 0))
-      { perror("exespace: mmap"); exit(1); }
+  heap_init();
 
   { // load printer
     static const char *tracefile = "./seed/renderPlan";
