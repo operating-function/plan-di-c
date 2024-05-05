@@ -154,8 +154,11 @@ static char *live_end   = NULL;
 static char *hp         = NULL;
 
 static Value **stack     = NULL;
-static Value **sp        = NULL; // sp[0] is the top value
 static Value **stack_end = NULL;
+
+// TODO: this isn't yet used, but the idea is to be able to codegen
+// calls to things like push() as direct register operations.
+register Value **sp asm ("r12"); // sp[0] is the top value
 
 static Value **printer_seed  = NULL;
 static Value **compiler_seed = NULL;
