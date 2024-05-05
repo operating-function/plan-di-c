@@ -1,12 +1,58 @@
-// - TODO Separate "pinspace" gc generation (not collected / moved).
-// - TODO pinspace backed by file.
-// - TODO resume from pinspace snapshots + log
-// - TODO WASM
-// - TODO Seed loader uses only system calls, no stdlib IO.
-// - TODO Trace() uses only system calls, no stdlib IO.
-// - TODO Trace() uses only system calls, no stdlib IO.
-// - TODO repl() uses only system calls, no stdlib IO.
-// - TODO Remove all uses of malloc() (including in BSDNT).
+// # Quine
+// - ☑ Run the quine.
+// - ☐ Check that the quine re-produces an identical value.
+//
+//     Make the quine take a `main` argument, and assert that it's
+//     equal to the "main" binding at the end of execution.
+//
+//     This may work with the existing Cmp, but it also may be too slow
+//     since we have many duplicated pins.  In the latter case, we will
+//     need to use pin-hashing.
+
+// # Correctness Issues
+// - ☐ Bottom-safe version of the cmp jet.
+
+// # Minimize the Heap Layout
+// - ☐ Bit-pack the nat size directly into the tag.
+// - ☐ Bit-pack the law size directly into the tag.
+// - ☐ Use smaller numbers for the law weights.
+// - ☐ Don't store the law weights if we codegen.
+
+// # Only one mmap() region.
+// - ☐ Put the stack directly in front of the heap.
+// - ☐ Make the heap executable.
+// - ☐ Put the JIT code directly on the laws.
+// - ☐ Eliminate the jitspace heap.
+// - ☐ Preallocate a large region with MAP_NORESERVE
+//     - Just to find a region that's safe to use.
+//     - Then release the mapping (so that core dumps aren't huge).
+//     - Then allocate within that region useing MAP_FIXED.
+
+// # Persist
+// - ☐ Use offsets instead of pointers.
+// - ☐ Second GC generation at the beginning of the mapping.
+//     - Don't collect from the second generation.
+//     - Move to the 2nd gen between evals (no stack)
+//     - Layout should be: [2nd] [stack] [gap]? [fst]
+//     - First: run normal gc to compact new data.
+//         - But always copy to the right.
+//     - Second: expand the second generation to make room for the new data.
+//     - Third: move new data into the 2nd gen.
+//         - Just traverse the 2nd gen, and move all objects.
+//         - Reference into the first gen are just offset by a fixed number.
+// - ☐ Use a disk-backed mmap() for the 2nd gen.
+// - ☐ Sync to disk after each growth of the 2nd gen.
+// - ☐ Figure out how to write snapshots + restore from snapshots.
+
+// # WASM
+// - ☐ Get this to compile to WASM.
+
+// # No Stdlib
+// - ☐ Seed loader uses only system calls, no stdlib IO.
+// - ☐ Trace() uses only system calls, no stdlib IO.
+// - ☐ Trace() uses only system calls, no stdlib IO.
+// - ☐ repl() uses only system calls, no stdlib IO.
+// - ☐ Remove all uses of malloc() (including in BSDNT).
 
 #include <stdint.h>
 #define __STDC_WANT_LIB_EXT2__  1
