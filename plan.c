@@ -93,26 +93,23 @@ struct Value {
 ////////////////////////////////////////////////////////////////////////////////
 //  Prototypes
 
-char *p_ptr    (Value *x);
-void write_dot (char *);
+static char  *p_ptr           (Value*);
+static len_t  ByteSz          (Value*);
+static Value *normalize       (Value*);
+static JetTag jet_match       (Value*);
+static void   mk_app          (void);
+static void   update          (u64);
+static void   force           (void);
+static bool   eval            (void);
+static void   eval_update     (int);
+static void   force_in_place  (int);
+static void   frag_load       (Value**, u64, int*, u64*, u64**);
+static bool   read_exp        (FILE *f);
 
-len_t ByteSz(Value *);
-
-Value *normalize (Value*);
-JetTag jet_match(Value*);
-
-static void mk_app(void);
-static void update(u64);
-
-void force();
-bool eval();
-void eval_update(int);
-static void force_in_place();
-
-void write_dot_extra(char*, char*, Value*);
-
-void frag_load(Value**, u64, int*, u64*, u64**);
-bool read_exp(FILE *f);
+#if ENABLE_GRAPHVIZ
+static void   write_dot       (char*);
+static void   write_dot_extra (char*, char*, Value*);
+#endif
 
 
 
