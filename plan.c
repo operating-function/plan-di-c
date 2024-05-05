@@ -37,6 +37,7 @@
 #define CHECK_DIRECT       0
 #define ENABLE_ASSERTIONS  0
 #define ENABLE_VALIDATION  0
+#define ENABLE_PRINTER     1
 
 #if ENABLE_ASSERTIONS
 #define ASSERT_(x) assert(x)
@@ -120,6 +121,17 @@ void check_value (Value *v);
 #else
 #define check_value(v)
 #endif
+
+#if ENABLE_PRINTER
+static void fprint_nat(FILE *, Value *);
+static bool is_symbol(Value *);
+static void fprintv(FILE*, Value*);
+static void fprintv_internal(FILE *, Value *, int);
+#else
+#define fprint_nat(f,v)
+#define fprintv(f,v)
+#endif
+
 
 // Utils ///////////////////////////////////////////////////////////////////////
 
@@ -511,11 +523,6 @@ static inline word_t *BUF(Value *v) {
   return (void*) (&(v->n.size) + 1);
 }
 
-void fprint_nat(FILE *, Value *);
-bool is_symbol(Value *);
-void fprintv(FILE*, Value*);
-void fprintv_internal(FILE *, Value *, int);
-
 #define BIND_BUF_PTR(nm, v) \
   word_t tmp;               \
   char *nm;                 \
@@ -525,192 +532,6 @@ void fprintv_internal(FILE *, Value *, int);
   } else {                  \
     nm = (char*) BUF(v);    \
   }
-
-void fprint_nm (FILE *f, Value *law, int recur) {
-  ASSERT_(IS_LAW(law));
-
-  Value *nm = NM(law);
-
-  ASSERT_(IS_NAT(nm));
-
-  if (is_direct(nm)) {
-    u64 w = get_direct(nm);
-    char tmp[9] = {0};
-    ((u64*) tmp)[0] = w;
-    if (!is_symbol(nm)) goto fallback;
-    fprintf(f, "%s", tmp);
-    return;
-  }
-
-  {
-    if (!is_symbol(nm)) { goto fallback; }
-    int len = ByteSz(nm);
-    BIND_BUF_PTR(nm_buf, nm);
-    fwrite(nm_buf, 1, len, f);
-    return;
-  }
-
-fallback:
-  fprintf(f, "<");
-  fprintv_internal(f, law, recur);
-  fprintf(f, ">");
-}
-
-void fprintv(FILE *f , Value *v) {
-  switch (TY(v)) {
-  case PIN:
-    fprintf(f, "<");
-    fprintv(f, IT(v));
-    fprintf(f, ">");
-    break;
-  case LAW:
-    fprintf(f, "{");
-    fprint_nat(f, NM(v));
-    fprintf(f, " ");
-    fprint_nat(f, AR(v));
-    fprintf(f, " ");
-    fprintv_internal(f, BD(v), 0);
-    fprintf(f, "}");
-    break;
-  default:
-    fprintv_internal(f, v, 0);
-  }
-}
-
-void fprintv_app(FILE *f, Value *v, int recur) {
-  if (!IS_APP(v)) {
-    return fprintv_internal(f, v, recur);
-  }
-  fprintv_app(f, HD(v), recur);
-  fprintf(f, " ");
-  fprintv_internal(f, TL(v), recur+1);
-}
-
-void fprintv_internal(FILE *f, Value *v, int recur) {
-  v = deref(v);
-  if (recur > 20) {
-    fprintf(f, "‥");
-    return;
-  }
-
-  if (is_direct(v)) {
-    fprint_nat(f, v);
-    return;
-  }
-
-  switch (v->type) {
-    case PIN:
-      Value *item = deref(IT(v));
-
-      if (IS_LAW(item)) {
-          fprint_nm(f, item, recur+1);
-          break;
-      }
-
-      fprintf(f, "<");
-      fprintv_internal(f, item, recur+1);
-      fprintf(f, ">");
-      break;
-    case LAW:
-      fprintf(f, "{");
-      fprint_nat(f, NM(v));
-      fprintf(f, "}");
-      break;
-    case APP:
-      fprintf(f, "(");
-      fprintv_app(f, v, recur+1);
-      fprintf(f, ")");
-      break;
-    case BIG:
-      fprint_nat(f, v);
-      break;
-    case IND:
-      crash("fprintv_internal: got IND");
-    default:
-      fprintf(f, "!!");
-      break;
-  }
-}
-
-static inline bool issym (char c) {
-  return (c == '_' || isalnum(c));
-}
-
-bool is_symbol(Value *v) {
-  len_t len = ByteSz(v);
-
-  BIND_BUF_PTR(str, v);
-
-  if (len == 0) return false;
-  if (len == 1) return isalpha(str[0]);
-  for (int i=0; i<len; i++) {
-    if (!issym(str[i])) return false;
-  }
-  return true;
-}
-
-bool is_string(Value *v) {
-  len_t len = ByteSz(v);
-
-  if (len < 2) return false;
-
-  BIND_BUF_PTR(str, v);
-
-  int depth = 1;
-  for (int i=0; i<len; i++) {
-    if (depth == 0) return false;
-    char c = str[i];
-    switch (c) {
-    case 0:    return false;
-    case '{':  depth++; continue;
-    case '}':  depth--; continue;
-    case '\n':
-    case '\r': return false;
-    default:   if (!isprint(c)) return false;
-               else continue;
-    }
-  }
-  return true;
-}
-
-void fprint_nat(FILE *f, Value *v) {
-  ASSERT_(IS_NAT(v));
-
-  BIND_BUF_PTR(buf, v);
-
-  long len = ByteSz(v);
-  long wordSz = is_direct(v) ? 1 : WID(v);
-
-  if (v == DIRECT_ZERO) {
-    fputc('0', f);
-    return;
-  }
-
-  if (is_symbol(v)) {
-    // symbolic, so we can print it as a string, with a leading `%`
-    fputc('%', f);
-    fwrite(buf, 1, len, f);
-  } else if (is_string(v)) {
-    fputc('{', f);
-    fwrite(buf, 1, len, f);
-    fputc('}', f);
-  } else {
-    // non-symbolic, so we use bsdnt to print as decimal
-    char *tmp = nn_get_str((word_t*)buf, wordSz);
-    fprintf(f, "%s", tmp);
-    free(tmp);
-  }
-}
-
-void show_direct_nat(char *buf, Value *v) {
-  u64 nat = get_direct(v);
-  if (is_symbol(v)) {
-    u64 *lol = (u64*) buf;
-    *lol = nat;
-  } else {
-    sprintf(buf, "%lu", nat);
-  }
-}
 
 ////////////////////////////////////////////////////////////////////////////////
 //  Construction
@@ -2427,6 +2248,10 @@ void force() {
 #define STR_BUF_LEN 4096
 static char str_buf[STR_BUF_LEN];
 
+static inline bool issym (char c) {
+  return (c == '_' || isalnum(c));
+}
+
 // when `is_sym == true`,  we are parsing symbols.
 // when `is_sym == false`, we are parsing digits.
 // this seems tidier than passing a function pointer, as issym & isdigit do not
@@ -2746,18 +2571,14 @@ void test_repl (FILE *f) {
   case '=':
     read_sym(f);
     if (!read_exp(f)) { crash("no value"); }
-    {
-      Value *val = get(0);
-      Value *nm  = get(1);
-      bind_symbol(nm, val); // this allocates
-    }
-    fprintf(stderr, "=(");
-    Value *nm = pop();
-    fprintv(stderr, nm);
-    fprintf(stderr, ") ");
-    Value *val = pop();
-    fprintv(stderr, val);
-    fprintf(stderr, "\n");
+    bind_symbol(get(1), get(0)); // this allocates
+    #if ENABLE_PRINTER
+    fprintf(stderr, "= ");
+    fprintv(stderr, get(1));
+    fprintf(stderr, " ..\n");
+    #endif
+    pop();
+    pop();
     goto next_input;
 
   default:
@@ -2819,6 +2640,195 @@ int main (int argc, char **argv) {
   write_dot("main final");
   #endif
 }
+
+// Debug Printer ///////////////////////////////////////////////////////////////
+
+#if ENABLE_PRINTER
+
+void fprintv(FILE *f , Value *v) {
+  switch (TY(v)) {
+  case PIN:
+    fprintf(f, "<");
+    fprintv(f, IT(v));
+    fprintf(f, ">");
+    break;
+  case LAW:
+    fprintf(f, "{");
+    fprint_nat(f, NM(v));
+    fprintf(f, " ");
+    fprint_nat(f, AR(v));
+    fprintf(f, " ");
+    fprintv_internal(f, BD(v), 0);
+    fprintf(f, "}");
+    break;
+  default:
+    fprintv_internal(f, v, 0);
+  }
+}
+
+void fprintv_app(FILE *f, Value *v, int recur) {
+  if (!IS_APP(v)) {
+    return fprintv_internal(f, v, recur);
+  }
+  fprintv_app(f, HD(v), recur);
+  fprintf(f, " ");
+  fprintv_internal(f, TL(v), recur+1);
+}
+
+void fprint_nm (FILE *f, Value *law, int recur) {
+  ASSERT_(IS_LAW(law));
+
+  Value *nm = NM(law);
+
+  ASSERT_(IS_NAT(nm));
+
+  if (is_direct(nm)) {
+    u64 w = get_direct(nm);
+    char tmp[9] = {0};
+    ((u64*) tmp)[0] = w;
+    if (!is_symbol(nm)) goto fallback;
+    fprintf(f, "%s", tmp);
+    return;
+  }
+
+  {
+    if (!is_symbol(nm)) { goto fallback; }
+    int len = ByteSz(nm);
+    BIND_BUF_PTR(nm_buf, nm);
+    fwrite(nm_buf, 1, len, f);
+    return;
+  }
+
+fallback:
+  fprintf(f, "<");
+  fprintv_internal(f, law, recur);
+  fprintf(f, ">");
+}
+
+void fprintv_internal(FILE *f, Value *v, int recur) {
+  v = deref(v);
+  if (recur > 20) {
+    fprintf(f, "‥");
+    return;
+  }
+
+  if (is_direct(v)) {
+    fprint_nat(f, v);
+    return;
+  }
+
+  switch (v->type) {
+    case PIN:
+      Value *item = deref(IT(v));
+
+      if (IS_LAW(item)) {
+          fprint_nm(f, item, recur+1);
+          break;
+      }
+
+      fprintf(f, "<");
+      fprintv_internal(f, item, recur+1);
+      fprintf(f, ">");
+      break;
+    case LAW:
+      fprintf(f, "{");
+      fprint_nat(f, NM(v));
+      fprintf(f, "}");
+      break;
+    case APP:
+      fprintf(f, "(");
+      fprintv_app(f, v, recur+1);
+      fprintf(f, ")");
+      break;
+    case BIG:
+      fprint_nat(f, v);
+      break;
+    case IND:
+      crash("fprintv_internal: got IND");
+    default:
+      fprintf(f, "!!");
+      break;
+  }
+}
+
+bool is_symbol(Value *v) {
+  len_t len = ByteSz(v);
+
+  BIND_BUF_PTR(str, v);
+
+  if (len == 0) return false;
+  if (len == 1) return isalpha(str[0]);
+  for (int i=0; i<len; i++) {
+    if (!issym(str[i])) return false;
+  }
+  return true;
+}
+
+bool is_string(Value *v) {
+  len_t len = ByteSz(v);
+
+  if (len < 2) return false;
+
+  BIND_BUF_PTR(str, v);
+
+  int depth = 1;
+  for (int i=0; i<len; i++) {
+    if (depth == 0) return false;
+    char c = str[i];
+    switch (c) {
+    case 0:    return false;
+    case '{':  depth++; continue;
+    case '}':  depth--; continue;
+    case '\n':
+    case '\r': return false;
+    default:   if (!isprint(c)) return false;
+               else continue;
+    }
+  }
+  return true;
+}
+
+void fprint_nat(FILE *f, Value *v) {
+  ASSERT_(IS_NAT(v));
+
+  BIND_BUF_PTR(buf, v);
+
+  long len = ByteSz(v);
+  long wordSz = is_direct(v) ? 1 : WID(v);
+
+  if (v == DIRECT_ZERO) {
+    fputc('0', f);
+    return;
+  }
+
+  if (is_symbol(v)) {
+    // symbolic, so we can print it as a string, with a leading `%`
+    fputc('%', f);
+    fwrite(buf, 1, len, f);
+  } else if (is_string(v)) {
+    fputc('{', f);
+    fwrite(buf, 1, len, f);
+    fputc('}', f);
+  } else {
+    // non-symbolic, so we use bsdnt to print as decimal
+    char *tmp = nn_get_str((word_t*)buf, wordSz);
+    fprintf(f, "%s", tmp);
+    free(tmp);
+  }
+}
+
+void show_direct_nat(char *buf, Value *v) {
+  u64 nat = get_direct(v);
+  if (is_symbol(v)) {
+    u64 *lol = (u64*) buf;
+    *lol = nat;
+  } else {
+    sprintf(buf, "%lu", nat);
+  }
+}
+
+
+#endif
 
 
 // Graphviz ////////////////////////////////////////////////////////////////////
