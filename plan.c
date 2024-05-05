@@ -154,7 +154,7 @@ static char *live_end   = NULL;
 static char *hp         = NULL;
 
 static Value **stack     = NULL;
-static Value **sop       = NULL; // sop[0] is the top value
+static Value **sp        = NULL; // sp[0] is the top value
 static Value **stack_end = NULL;
 
 static Value **printer_seed  = NULL;
@@ -197,7 +197,7 @@ void rts_init (void) {
     jp         = jitspace;
 
     stack_end  = stack + STACK_SIZE;
-    sop        = stack_end;
+    sp         = stack_end;
 }
 
 /*
@@ -314,7 +314,7 @@ static inline Value *DIRECT(u64 x) {
 // Stack Operations ////////////////////////////////////////////////////////////
 
 static inline ssize_t get_stack_size (void) {
-  return (stack_end - sop);
+  return (stack_end - sp);
 }
 
 static inline Value *deref (Value *x) {
@@ -324,20 +324,20 @@ static inline Value *deref (Value *x) {
 
 static inline Value *pop (void) {
   #if STACK_BOUNDS_CHECK
-  if (sop >= stack_end) crash("pop: empty stack");
+  if (sp >= stack_end) crash("pop: empty stack");
   #endif
 
-  Value *res = *sop;
-  sop++;
+  Value *res = *sp;
+  sp++;
   return res;
 }
 
 static inline Value **get_ptr (u64 idx) {
   #if STACK_BOUNDS_CHECK
-  if (sop+idx >= stack_end) crash("get: indexed off stack");
+  if (sp+idx >= stack_end) crash("get: indexed off stack");
   #endif
 
-  return sop+idx;
+  return sp+idx;
 }
 
 static inline void push_val (Value *x) {
@@ -349,13 +349,13 @@ static inline void push_val (Value *x) {
   write_dot_extra("push_val", extra, x);
   #endif
 
-  sop--;
+  sp--;
 
   #if STACK_BOUNDS_CHECK
-  if (sop < stack) crash("push_val: stack overflow");
+  if (sp < stack) crash("push_val: stack overflow");
   #endif
 
-  *sop = x;
+  *sp = x;
 }
 
 static inline Value *pop_deref (void)     { return deref(pop());       }
@@ -387,11 +387,11 @@ static inline void slide (u64 count) {
   #endif
 
   #if STACK_BOUNDS_CHECK
-  if (sop+count >= stack_end) crash("stack underflow");
+  if (sp+count >= stack_end) crash("stack underflow");
   #endif
 
-  sop[count] = *sop;
-  sop += count;
+  sp[count] = *sp;
+  sp += count;
 
   #if ENABLE_GRAPHVIZ
   snprintf(dot_lab, 1024, "post slide %lu", count);
@@ -1240,9 +1240,9 @@ void seed_load(u64 *inpbuf) {
 
   // clever: store working table on stack to make everything GC safe.
 
-  sop -= n_entries; // grow the stack
-  for (int i=0; i<n_entries; i++) sop[i] = DIRECT_ZERO;
-  Value **tab = sop;
+  sp -= n_entries; // grow the stack
+  for (int i=0; i<n_entries; i++) sp[i] = DIRECT_ZERO;
+  Value **tab = sp;
 
   Value **next_ref = tab;
 
@@ -1290,7 +1290,7 @@ void seed_load(u64 *inpbuf) {
     *next_ref++ = pop();
   }
 
-  sop += (n_entries - 1); // drop everything besided the final entry.
+  sp += (n_entries - 1); // drop everything besided the final entry.
 
   check_value(get(0));
   force_in_place(0);
@@ -1392,7 +1392,7 @@ static inline void gc_copy_refs(Value *x) {
 }
 
 static void cheney (void) {
-  for (Value **p = sop; p < stack_end; p++) *p = gc_copy(*p);
+  for (Value **p = sp; p < stack_end; p++) *p = gc_copy(*p);
 
   for (char *iter = live_start;
        iter < hp;
@@ -1709,7 +1709,7 @@ void setup_call(u64 depth) {
   // setup the call by pulling the TLs out of all apps which we have
   // unwound.  (TODO: use pointer arithmetic)
   for (u64 i = 0; i < depth; i++) {
-    sop[i] = TL(sop[i]);
+    sp[i] = TL(sp[i]);
   }
 }
 
@@ -1722,9 +1722,9 @@ void flip_stack(u64 depth) {
   if (depth == 0) return;
   u64 d1 = depth-1;
   for (u64 i = 0; i < depth/2; i++) {
-    Value *tmp      = sop[i];
-    sop[i]          = sop[d1-i];
-    sop[d1-i]       = tmp;
+    Value *tmp = sp[i];
+    sp[i]      = sp[d1-i];
+    sp[d1-i]   = tmp;
     // TODO: pointer arithmatic, not index arithmetic.
   }
 }
@@ -1839,11 +1839,11 @@ void eval_law(Law l) {
 
   if (lets) {
     #if STACK_BOUNDS_CHECK
-    if (sop-lets < stack) crash("eval_law: stack overflow");
+    if (sp-lets < stack) crash("eval_law: stack overflow");
     #endif
 
     // Add a black hole per let.
-    for (u64 i = 0; i < lets; i++) *(--sop) = (Value*) (mem + 24*i);
+    for (u64 i = 0; i < lets; i++) *(--sp) = (Value*) (mem + 24*i);
 
     #if ENABLE_GRAPHVIZ
     for (u64 i = 0; i < lets; i++) {
