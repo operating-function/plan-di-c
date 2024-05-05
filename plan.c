@@ -93,7 +93,6 @@ struct Value {
 ////////////////////////////////////////////////////////////////////////////////
 //  Prototypes
 
-static char  *p_ptr           (Value*);
 static len_t  ByteSz          (Value*);
 static Value *normalize       (Value*);
 static JetTag jet_match       (Value*);
@@ -107,8 +106,13 @@ static void   frag_load       (Value**, u64, int*, u64*, u64**);
 static bool   read_exp        (FILE *f);
 
 #if ENABLE_GRAPHVIZ
-static void   write_dot       (char*);
-static void   write_dot_extra (char*, char*, Value*);
+static char        dot_lab[1024];
+static bool        enable_graphviz = 0;
+static const char *dot_dir_path = "./dot";
+
+static char *p_ptr           (Value*);
+static void  write_dot       (char*);
+static void  write_dot_extra (char*, char*, Value*);
 #endif
 
 #if ENABLE_VALIDATION
@@ -117,20 +121,11 @@ void check_value (Value *v);
 #define check_value(v)
 #endif
 
-
-
 // Utils ///////////////////////////////////////////////////////////////////////
 
 noreturn void crash(char *s) { printf("Error: %s\n", s); exit(1); }
 
-
-
 // Globals /////////////////////////////////////////////////////////////////////
-
-#if ENABLE_GRAPHVIZ
-char dot_lab[1024];
-static bool enable_graphviz = 0;
-#endif
 
 #if TRACE_CALLS
 int call_depth = 0; // for debugging traces
@@ -1587,186 +1582,6 @@ static void cheney (void) {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-//  DOT printing
-
-int dot_count = 0;
-char *dot_dir_path = "./dot";
-
-char *p_ptr(Value *x) {
-  char *buf = malloc(48);
-  if (x == NULL) {
-    sprintf(buf, "N_null");
-  } else if (is_direct(x)) {
-    sprintf(buf, "ptr_nat_%lu", get_direct(x));
-  } else {
-    sprintf(buf, "N_%p", x);
-  }
-  return buf;
-}
-
-// TODO turn `Node *` into `Value *` tree of APPs
-void fprint_heap(FILE *f, Node *input, Node *seen) {
- again:
-  // empty input - done
-  if (null_list(input)) return;
-  //
-  Value *v = (Value *)input->ptr;
-  input = input->next;
-  //
-  // if NULL or seen, recur on tail of input
-  if ((v == NULL) || (member_list((void *)v, seen))) {
-    goto again;
-  }
-  //
-  // non-seen Value. print it, add `v` to `seen`, add any discovered addresses
-  // to `input`.
-  switch (TY(v)) {
-    case PIN: {
-      char *v_p = p_ptr(v);
-      char *i_p = p_ptr(IT(v));
-      if (is_direct(IT(v))) {
-        fprintf(f, "%s [label = \"\\<%lu\\>\"];\n", v_p, get_direct(IT(v)));
-      } else {
-        fprintf(f, "%s [label=pin];\n", v_p);
-        fprintf(f, "%s -> %s [arrowhead=box];\n", v_p, i_p);
-        input = cons((void *)IT(v), input);
-      }
-      free(v_p);
-      free(i_p);
-      break;
-    }
-    case LAW: {
-      char *v_p = p_ptr(v);
-      // char *b_p = p_ptr(BD(v));
-      fprintf(f, "%s [label=\"\\{", v_p);
-      fprint_nat(f, NM(v));
-      fprintf(f, "\\}\"];\n");
-      // fprintf(f, " ar:");
-      // fprint_nat(f, AR(v));
-      // fprintf(f, "\"];\n");
-      // fprintf(f, "%s -> %s [label=bd];\n", v_p, b_p);
-      free(v_p);
-      // free(b_p);
-      // input = cons((void *)BD(v), input);
-      break;
-    }
-    case APP: {
-      char *v_p = p_ptr(v);
-      Value *h = HD(v), *t = TL(v);
-      char *h_p = p_ptr(h);
-      char *t_p = p_ptr(t);
-      char hbuf[256] = "", tbuf[256] = "";
-      if (is_direct(h)) { show_direct_nat(hbuf, h); }
-      if (is_direct(t)) { show_direct_nat(tbuf, t); }
-      fprintf(f, "%s [label=\" <f> %s | <x> %s \"]", v_p, hbuf, tbuf);
-      if (!is_direct(h)) {
-        fprintf(f, "%s:f -> %s;\n", v_p, h_p);
-        input = cons((void *)h, input);
-      }
-      if (!is_direct(t)) {
-        fprintf(f, "%s:x -> %s;\n", v_p, t_p);
-        input = cons((void *)t, input);
-      }
-      free(v_p);
-      free(h_p);
-      free(t_p);
-      break;
-    }
-    case BIG: {
-      char *v_p = p_ptr(v);
-      fprintf(f, "%s [label=\"", v_p);
-      fprint_nat(f, v);
-      fprintf(f, "\"];\n");
-      free(v_p);
-      break;
-    }
-    case IND: {
-      char *v_p = p_ptr(v);
-      char *i_p = p_ptr(IN(v));
-      fprintf(f, "%s [label=ind];\n", v_p);
-      fprintf(f, "%s -> %s [arrowhead=dot];\n", v_p, i_p);
-      free(v_p);
-      free(i_p);
-      input = cons((void *)IN(v), input);
-      break;
-    }
-    case MOV:
-      crash("MOV escaped GC");
-  }
-  seen = cons((void *)v, seen);
-  goto again;
-}
-
-void fprintf_stack(FILE *f) {
-  // print "stack topper"
-  // => stack [label="<ss> stack|<s0>|<s1>|<s2>", color=blue, height=2.5];
-  fprintf(f, "stack [label=\"<ss> stack");
-
-  ssize_t stack_size = get_stack_size();
-
-  for (int i = 0; i < stack_size; i++) {
-    char label[256] = "";
-    if (is_direct(get(i))) show_direct_nat(label, get(i));
-    fprintf(f, "| <s%d> %s ", i, label);
-  }
-  fprintf(f, "\", color=blue, height=2.5];\n");
-
-  // print edges between stack topper Values
-  for (int i = 0; i < stack_size; i++) {
-    Value *v = get(i);
-    if (is_direct(v)) continue;
-    char *v_p = p_ptr(v);
-    fprintf(f, "stack:s%d -> %s;\n", i, v_p);
-    free(v_p);
-  }
-}
-
-Node *stack_to_list_heap_only() {
-  ssize_t stack_size = get_stack_size();
-
-  Node *l = NULL;
-  if (stack_size == 0) return l;
-  for (u64 i = 0; i < stack_size; i++) {
-    if (is_direct(get(i))) continue;
-    l = cons((void *)get(i), l);
-  }
-  return l;
-}
-
-#if ENABLE_GRAPHVIZ
-void write_dot_extra(char *label, char *extra, Value *v) {
-  if (!enable_graphviz) return;
-  char fp[20] = {0};
-  sprintf(fp, "%s/%05d.dot", dot_dir_path, dot_count);
-  dot_count++;
-  FILE *f = fopen(fp, "w+");
-  fprintf(f, "digraph {\nbgcolor=\"#665c54\"\n");
-  fprintf(f, "label = \"%s\";\n", label);
-  fprintf(f, "node [shape=record,width=.1,height=.1];\n");
-  fprintf(f, "nodesep=.10;\n");
-  fprintf(f, "rankdir=LR;\n");
-  fprintf(f, "\n// stack\n");
-  fprintf_stack(f);
-  fprintf(f, "\n// heap\n");
-
-  Node *heap_input = stack_to_list_heap_only();
-  if (v != NULL) {
-    heap_input = cons((void *)v, heap_input);
-  }
-  fprint_heap(f, heap_input, NULL);
-
-  fprintf(f, "\n// extra\n");
-  fprintf(f, "%s\n", extra);
-  fprintf(f, "}\n");
-  fclose(f);
-}
-
-void write_dot(char *label) {
-  write_dot_extra(label, "", NULL);
-}
-#endif
-
-////////////////////////////////////////////////////////////////////////////////
 //  Interpreter
 
 static void update(u64 idx) {
@@ -3004,6 +2819,188 @@ int main (int argc, char **argv) {
   write_dot("main final");
   #endif
 }
+
+
+// Graphviz ////////////////////////////////////////////////////////////////////
+
+#if ENABLE_GRAPHVIZ
+
+int dot_count = 0;
+
+char *p_ptr(Value *x) {
+  char *buf = malloc(48);
+  if (x == NULL) {
+    sprintf(buf, "N_null");
+  } else if (is_direct(x)) {
+    sprintf(buf, "ptr_nat_%lu", get_direct(x));
+  } else {
+    sprintf(buf, "N_%p", x);
+  }
+  return buf;
+}
+
+Node *stack_to_list_heap_only() {
+  ssize_t stack_size = get_stack_size();
+
+  Node *l = NULL;
+  if (stack_size == 0) return l;
+  for (u64 i = 0; i < stack_size; i++) {
+    if (is_direct(get(i))) continue;
+    l = cons((void *)get(i), l);
+  }
+  return l;
+}
+
+// TODO turn `Node *` into `Value *` tree of APPs
+void fprint_heap(FILE *f, Node *input, Node *seen) {
+ again:
+  // empty input - done
+  if (null_list(input)) return;
+  //
+  Value *v = (Value *)input->ptr;
+  input = input->next;
+  //
+  // if NULL or seen, recur on tail of input
+  if ((v == NULL) || (member_list((void *)v, seen))) {
+    goto again;
+  }
+  //
+  // non-seen Value. print it, add `v` to `seen`, add any discovered addresses
+  // to `input`.
+  switch (TY(v)) {
+    case PIN: {
+      char *v_p = p_ptr(v);
+      char *i_p = p_ptr(IT(v));
+      if (is_direct(IT(v))) {
+        fprintf(f, "%s [label = \"\\<%lu\\>\"];\n", v_p, get_direct(IT(v)));
+      } else {
+        fprintf(f, "%s [label=pin];\n", v_p);
+        fprintf(f, "%s -> %s [arrowhead=box];\n", v_p, i_p);
+        input = cons((void *)IT(v), input);
+      }
+      free(v_p);
+      free(i_p);
+      break;
+    }
+    case LAW: {
+      char *v_p = p_ptr(v);
+      // char *b_p = p_ptr(BD(v));
+      fprintf(f, "%s [label=\"\\{", v_p);
+      fprint_nat(f, NM(v));
+      fprintf(f, "\\}\"];\n");
+      // fprintf(f, " ar:");
+      // fprint_nat(f, AR(v));
+      // fprintf(f, "\"];\n");
+      // fprintf(f, "%s -> %s [label=bd];\n", v_p, b_p);
+      free(v_p);
+      // free(b_p);
+      // input = cons((void *)BD(v), input);
+      break;
+    }
+    case APP: {
+      char *v_p = p_ptr(v);
+      Value *h = HD(v), *t = TL(v);
+      char *h_p = p_ptr(h);
+      char *t_p = p_ptr(t);
+      char hbuf[256] = "", tbuf[256] = "";
+      if (is_direct(h)) { show_direct_nat(hbuf, h); }
+      if (is_direct(t)) { show_direct_nat(tbuf, t); }
+      fprintf(f, "%s [label=\" <f> %s | <x> %s \"]", v_p, hbuf, tbuf);
+      if (!is_direct(h)) {
+        fprintf(f, "%s:f -> %s;\n", v_p, h_p);
+        input = cons((void *)h, input);
+      }
+      if (!is_direct(t)) {
+        fprintf(f, "%s:x -> %s;\n", v_p, t_p);
+        input = cons((void *)t, input);
+      }
+      free(v_p);
+      free(h_p);
+      free(t_p);
+      break;
+    }
+    case BIG: {
+      char *v_p = p_ptr(v);
+      fprintf(f, "%s [label=\"", v_p);
+      fprint_nat(f, v);
+      fprintf(f, "\"];\n");
+      free(v_p);
+      break;
+    }
+    case IND: {
+      char *v_p = p_ptr(v);
+      char *i_p = p_ptr(IN(v));
+      fprintf(f, "%s [label=ind];\n", v_p);
+      fprintf(f, "%s -> %s [arrowhead=dot];\n", v_p, i_p);
+      free(v_p);
+      free(i_p);
+      input = cons((void *)IN(v), input);
+      break;
+    }
+    case MOV:
+      crash("MOV escaped GC");
+  }
+  seen = cons((void *)v, seen);
+  goto again;
+}
+
+void fprint_stack(FILE *f) {
+  // print "stack topper"
+  // => stack [label="<ss> stack|<s0>|<s1>|<s2>", color=blue, height=2.5];
+  fprintf(f, "stack [label=\"<ss> stack");
+
+  ssize_t stack_size = get_stack_size();
+
+  for (int i = 0; i < stack_size; i++) {
+    char label[256] = "";
+    if (is_direct(get(i))) show_direct_nat(label, get(i));
+    fprintf(f, "| <s%d> %s ", i, label);
+  }
+  fprintf(f, "\", color=blue, height=2.5];\n");
+
+  // print edges between stack topper Values
+  for (int i = 0; i < stack_size; i++) {
+    Value *v = get(i);
+    if (is_direct(v)) continue;
+    char *v_p = p_ptr(v);
+    fprintf(f, "stack:s%d -> %s;\n", i, v_p);
+    free(v_p);
+  }
+}
+
+
+void write_dot_extra(char *label, char *extra, Value *v) {
+  if (!enable_graphviz) return;
+  char fp[20] = {0};
+  sprintf(fp, "%s/%05d.dot", dot_dir_path, dot_count);
+  dot_count++;
+  FILE *f = fopen(fp, "w+");
+  fprintf(f, "digraph {\nbgcolor=\"#665c54\"\n");
+  fprintf(f, "label = \"%s\";\n", label);
+  fprintf(f, "node [shape=record,width=.1,height=.1];\n");
+  fprintf(f, "nodesep=.10;\n");
+  fprintf(f, "rankdir=LR;\n");
+  fprintf(f, "\n// stack\n");
+  fprint_stack(f);
+  fprintf(f, "\n// heap\n");
+
+  Node *heap_input = stack_to_list_heap_only();
+  if (v != NULL) {
+    heap_input = cons((void *)v, heap_input);
+  }
+  fprint_heap(f, heap_input, NULL);
+
+  fprintf(f, "\n// extra\n");
+  fprintf(f, "%s\n", extra);
+  fprintf(f, "}\n");
+  fclose(f);
+}
+
+void write_dot(char *label) {
+  write_dot_extra(label, "", NULL);
+}
+#endif
+
 
 // Validation //////////////////////////////////////////////////////////////////
 
