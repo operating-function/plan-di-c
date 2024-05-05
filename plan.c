@@ -36,13 +36,13 @@
 #define CHECK_TAGS         0
 #define CHECK_DIRECT       0
 #define ENABLE_ASSERTIONS  0
+#define ENABLE_VALIDATION  0
 
 #if ENABLE_ASSERTIONS
 #define ASSERT_(x) assert(x)
 #else
 static inline void ASSERT_(bool b) {}
 #endif
-
 
 // Types ///////////////////////////////////////////////////////////////////////
 
@@ -109,6 +109,12 @@ static bool   read_exp        (FILE *f);
 #if ENABLE_GRAPHVIZ
 static void   write_dot       (char*);
 static void   write_dot_extra (char*, char*, Value*);
+#endif
+
+#if ENABLE_VALIDATION
+void check_value (Value *v);
+#else
+#define check_value(v)
 #endif
 
 
@@ -509,73 +515,6 @@ static inline len_t WID(Value *v) {
 static inline word_t *BUF(Value *v) {
   return (void*) (&(v->n.size) + 1);
 }
-
-
-////////////////////////////////////////////////////////////////////////////////
-//  Printing
-
-void check_nat(Value *v) {
-  if (v == NULL) crash("check_nat: NULL");
-
-  if (is_direct(v)) return;
-
-  if (v->type != BIG) crash("check_nat: not nat");
-
-  word_t sz = v->n.size;
-
-  if (sz == 0) crash("check_nat: bignat zero");
-
-  if (sz == 1) {
-    if (BUF(v)[0] < PTR_NAT_MASK) {
-      crash("check_nat: direct atom encoded as bignat");
-    }
-    return;
-  }
-
-  if (BUF(v)[sz - 1] == 0) {
-    crash("check_nat: bad size (high word is zero)");
-  }
-}
-
-void check_value(Value *v) {
-  if (v == NULL) crash("check_value: NULL");
-
-  if (is_direct(v)) return;
-
-  if ((char*)v < live_start) {
-    fprintf(stderr, "check_value: %p is before the heap", v);
-    crash("check_value");
-  }
-
-  if ((char*)v >= live_end) {
-    fprintf(stderr, "check_value: %p is past the heap", v);
-    crash("check_value");
-  }
-
-  switch (v->type) {
-    case PIN:
-      check_value(IT(v));
-      break;
-    case LAW:
-      check_nat(NM(v));
-      check_nat(AR(v));
-      check_value(BD(v));
-      break;
-    case APP:
-      check_value(HD(v));
-      check_value(TL(v));
-      break;
-    case BIG:
-      check_nat(v);
-      break;
-    case IND:
-      check_value(IN(v));
-      break;
-    default:
-      crash("BAD VALUE TAG");
-  }
-}
-
 void fprintf_value_internal(FILE *, Value *, int);
 
 void fprintf_nat(FILE *, Value *);
@@ -1537,6 +1476,10 @@ void seed_load(u64 *inpbuf) {
   }
 
   sop += (n_entries - 1); // drop everything besided the final entry.
+
+  check_value(get(0));
+  force_in_place(0);
+  check_value(get(0));
 }
 
 u64 *load_seed_file (const char *filename, u64 *sizeOut) {
@@ -2861,9 +2804,6 @@ again:
     u64 seedSz;
     u64 *words = load_seed_file(buf, &seedSz);
     seed_load(words);
-    // check_value(get(0));
-    force_in_place(0);
-    // check_value(get(0));
     return true;
   }
 
@@ -2890,7 +2830,6 @@ static void repl (void) {
       u64 seedSz;
       u64 *words = load_seed_file(sire_seed, &seedSz);
       seed_load(words);
-      force_in_place(0);
     }
 
     static char buf[128];
@@ -3025,7 +2964,6 @@ int main (int argc, char **argv) {
     u64 seedSz;
     u64 *words = load_seed_file(tracefile, &seedSz);
     seed_load(words);
-    force_in_place(0);
     printer_seed=get_ptr(0);
   }
 
@@ -3038,7 +2976,6 @@ int main (int argc, char **argv) {
     u64 seedSz;
     u64 *words = load_seed_file("./seed/jit", &seedSz);
     seed_load(words);
-    force_in_place(0);
     compiler_seed = get_ptr(0);
   }
 
@@ -3068,3 +3005,69 @@ int main (int argc, char **argv) {
   write_dot("main final");
   #endif
 }
+
+// Validation //////////////////////////////////////////////////////////////////
+
+#if ENABLE_VALIDATION
+void check_nat(Value *v) {
+  if (v == NULL) crash("check_nat: NULL");
+
+  if (is_direct(v)) return;
+
+  if (v->type != BIG) crash("check_nat: not nat");
+
+  word_t sz = v->n.size;
+
+  if (sz == 0) crash("check_nat: bignat zero");
+
+  if (sz == 1) {
+    if (BUF(v)[0] < PTR_NAT_MASK) {
+      crash("check_nat: direct atom encoded as bignat");
+    }
+    return;
+  }
+
+  if (BUF(v)[sz - 1] == 0) {
+    crash("check_nat: bad size (high word is zero)");
+  }
+}
+
+void check_value(Value *v) {
+  if (v == NULL) crash("check_value: NULL");
+
+  if (is_direct(v)) return;
+
+  if ((char*)v < live_start) {
+    fprintf(stderr, "check_value: %p is before the heap", v);
+    crash("check_value");
+  }
+
+  if ((char*)v >= live_end) {
+    fprintf(stderr, "check_value: %p is past the heap", v);
+    crash("check_value");
+  }
+
+  switch (v->type) {
+    case PIN:
+      check_value(IT(v));
+      break;
+    case LAW:
+      check_nat(NM(v));
+      check_nat(AR(v));
+      check_value(BD(v));
+      break;
+    case APP:
+      check_value(HD(v));
+      check_value(TL(v));
+      break;
+    case BIG:
+      check_nat(v);
+      break;
+    case IND:
+      check_value(IN(v));
+      break;
+    default:
+      crash("BAD VALUE TAG");
+  }
+}
+#endif
