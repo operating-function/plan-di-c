@@ -515,12 +515,11 @@ static inline len_t WID(Value *v) {
 static inline word_t *BUF(Value *v) {
   return (void*) (&(v->n.size) + 1);
 }
-void fprintf_value_internal(FILE *, Value *, int);
 
-void fprintf_nat(FILE *, Value *);
-
+void fprint_nat(FILE *, Value *);
 bool is_symbol(Value *);
-void fprintf_value(FILE*, Value*);
+void fprintv(FILE*, Value*);
+void fprintv_internal(FILE *, Value *, int);
 
 #define BIND_BUF_PTR(nm, v) \
   word_t tmp;               \
@@ -532,7 +531,7 @@ void fprintf_value(FILE*, Value*);
     nm = (char*) BUF(v);    \
   }
 
-void fprintf_func_name (FILE *f, Value *law, int recur) {
+void fprint_nm (FILE *f, Value *law, int recur) {
   ASSERT_(IS_LAW(law));
 
   Value *nm = NM(law);
@@ -558,41 +557,41 @@ void fprintf_func_name (FILE *f, Value *law, int recur) {
 
 fallback:
   fprintf(f, "<");
-  fprintf_value_internal(f, law, recur);
+  fprintv_internal(f, law, recur);
   fprintf(f, ">");
 }
 
-void fprintf_value(FILE *f , Value *v) {
+void fprintv(FILE *f , Value *v) {
   switch (TY(v)) {
   case PIN:
     fprintf(f, "<");
-    fprintf_value(f, IT(v));
+    fprintv(f, IT(v));
     fprintf(f, ">");
     break;
   case LAW:
     fprintf(f, "{");
-    fprintf_nat(f, NM(v));
+    fprint_nat(f, NM(v));
     fprintf(f, " ");
-    fprintf_nat(f, AR(v));
+    fprint_nat(f, AR(v));
     fprintf(f, " ");
-    fprintf_value_internal(f, BD(v), 0);
+    fprintv_internal(f, BD(v), 0);
     fprintf(f, "}");
     break;
   default:
-    fprintf_value_internal(f, v, 0);
+    fprintv_internal(f, v, 0);
   }
 }
 
-void fprintf_value_app(FILE *f, Value *v, int recur) {
+void fprintv_app(FILE *f, Value *v, int recur) {
   if (!IS_APP(v)) {
-    return fprintf_value_internal(f, v, recur);
+    return fprintv_internal(f, v, recur);
   }
-  fprintf_value_app(f, HD(v), recur);
+  fprintv_app(f, HD(v), recur);
   fprintf(f, " ");
-  fprintf_value_internal(f, TL(v), recur+1);
+  fprintv_internal(f, TL(v), recur+1);
 }
 
-void fprintf_value_internal(FILE *f, Value *v, int recur) {
+void fprintv_internal(FILE *f, Value *v, int recur) {
   v = deref(v);
   if (recur > 20) {
     fprintf(f, "‥");
@@ -600,7 +599,7 @@ void fprintf_value_internal(FILE *f, Value *v, int recur) {
   }
 
   if (is_direct(v)) {
-    fprintf_nat(f, v);
+    fprint_nat(f, v);
     return;
   }
 
@@ -609,29 +608,29 @@ void fprintf_value_internal(FILE *f, Value *v, int recur) {
       Value *item = deref(IT(v));
 
       if (IS_LAW(item)) {
-          fprintf_func_name(f, item, recur+1);
+          fprint_nm(f, item, recur+1);
           break;
       }
 
       fprintf(f, "<");
-      fprintf_value_internal(f, item, recur+1);
+      fprintv_internal(f, item, recur+1);
       fprintf(f, ">");
       break;
     case LAW:
       fprintf(f, "{");
-      fprintf_nat(f, NM(v));
+      fprint_nat(f, NM(v));
       fprintf(f, "}");
       break;
     case APP:
       fprintf(f, "(");
-      fprintf_value_app(f, v, recur+1);
+      fprintv_app(f, v, recur+1);
       fprintf(f, ")");
       break;
     case BIG:
-      fprintf_nat(f, v);
+      fprint_nat(f, v);
       break;
     case IND:
-      crash("fprintf_value_internal: got IND");
+      crash("fprintv_internal: got IND");
     default:
       fprintf(f, "!!");
       break;
@@ -679,7 +678,7 @@ bool is_string(Value *v) {
   return true;
 }
 
-void fprintf_nat(FILE *f, Value *v) {
+void fprint_nat(FILE *f, Value *v) {
   ASSERT_(IS_NAT(v));
 
   BIND_BUF_PTR(buf, v);
@@ -1606,7 +1605,7 @@ char *p_ptr(Value *x) {
 }
 
 // TODO turn `Node *` into `Value *` tree of APPs
-void fprintf_heap(FILE *f, Node *input, Node *seen) {
+void fprint_heap(FILE *f, Node *input, Node *seen) {
  again:
   // empty input - done
   if (null_list(input)) return;
@@ -1640,10 +1639,10 @@ void fprintf_heap(FILE *f, Node *input, Node *seen) {
       char *v_p = p_ptr(v);
       // char *b_p = p_ptr(BD(v));
       fprintf(f, "%s [label=\"\\{", v_p);
-      fprintf_nat(f, NM(v));
+      fprint_nat(f, NM(v));
       fprintf(f, "\\}\"];\n");
       // fprintf(f, " ar:");
-      // fprintf_nat(f, AR(v));
+      // fprint_nat(f, AR(v));
       // fprintf(f, "\"];\n");
       // fprintf(f, "%s -> %s [label=bd];\n", v_p, b_p);
       free(v_p);
@@ -1676,7 +1675,7 @@ void fprintf_heap(FILE *f, Node *input, Node *seen) {
     case BIG: {
       char *v_p = p_ptr(v);
       fprintf(f, "%s [label=\"", v_p);
-      fprintf_nat(f, v);
+      fprint_nat(f, v);
       fprintf(f, "\"];\n");
       free(v_p);
       break;
@@ -1754,7 +1753,7 @@ void write_dot_extra(char *label, char *extra, Value *v) {
   if (v != NULL) {
     heap_input = cons((void *)v, heap_input);
   }
-  fprintf_heap(f, heap_input, NULL);
+  fprint_heap(f, heap_input, NULL);
 
   fprintf(f, "\n// extra\n");
   fprintf(f, "%s\n", extra);
@@ -1932,11 +1931,11 @@ void mk_law() {
     Value *machBar = deref(TL(HD(pair)));
     // Value *cnsts   = TL(pair);
     fprintf(stderr, "pair: ");
-    fprintf_value(stderr, pair);
+    fprintv(stderr, pair);
     fprintf(stderr, "\n");
 
     fprintf(stderr, "machBar: ");
-    fprintf_value(stderr, machBar);
+    fprintv(stderr, machBar);
     fprintf(stderr, "\n");
 
     word_t *code  = BUF(machBar);
@@ -1945,7 +1944,7 @@ void mk_law() {
     memcpy(codePtr, code, codeSz);
 
     fprintf(stderr, "code_gen nm: ");
-    fprintf_value(stderr, get(2));
+    fprintv(stderr, get(2));
     fprintf(stderr, "\n");
     fprintf(stderr, "codePtr: %p (sz=%lu)\ncode: 0x", codePtr, codeSz);
     for (int i = 0; i < codeSz; i++) {
@@ -1986,7 +1985,7 @@ void mk_law() {
 
   if (TRACE_LAWS) {
     fprintf(stderr, "law: name=");
-    fprintf_value(stderr, n);
+    fprintv(stderr, n);
     fprintf(stderr, ",\t{lets=%lu, calls=%lu}\n", l.w.n_lets, l.w.n_calls);
   }
 
@@ -2252,7 +2251,7 @@ void eval_law(Law l) {
 void Trace (char *end) {
     force_in_place(0);
     if (printer_seed == NULL) {
-      fprintf_value(stderr, pop_deref());
+      fprintv(stderr, pop_deref());
       fprintf(stderr, "\n");
       return;
     }
@@ -2356,7 +2355,7 @@ JetTag jet_match(Value *item) {
 
     if (TRACE_JET_MATCHES) {
       fprintf(stderr, "MATCH: jet name + arity match: ");
-      fprintf_value(stderr, jet.name);
+      fprintv(stderr, jet.name);
       fprintf(stderr, "\n");
     }
 
@@ -2365,7 +2364,7 @@ JetTag jet_match(Value *item) {
 
   if (TRACE_JET_MATCHES) {
     fprintf(stderr, "NO MATCH: pinned law is not a jet: ");
-    fprintf_value(stderr, l.a);
+    fprintv(stderr, l.a);
     fprintf(stderr, "\n");
   }
 
@@ -2396,7 +2395,7 @@ bool law_step(u64 depth) {
 
     #if TRACE_CALLS
     for (int i=0; i<call_depth; i++) fprintf(stderr, " ");
-    fprintf_value(stderr, get_deref(depth-1));
+    fprintv(stderr, get_deref(depth-1));
     fprintf(stderr, "\n");
     call_depth++;
     #endif
@@ -2412,7 +2411,7 @@ bool law_step(u64 depth) {
       call_depth--;
       for (int i=0; i<call_depth; i++) fprintf(stderr, " ");
       fprintf(stderr, "=> ");
-      fprintf_value(stderr, get_deref(0));
+      fprintv(stderr, get_deref(0));
       fprintf(stderr, "\n");
     }
     #endif
@@ -2712,7 +2711,7 @@ void lookup_symbol() {
     if (EQ(nm, k)) { push_val(v); return; }
   }
 
-  fprintf_value(stderr, nm);
+  fprintv(stderr, nm);
   crash(": symbol not found");
 }
 
@@ -2914,15 +2913,15 @@ void test_repl (FILE *f) {
 
     if (NEQ(x,y)) {
       fprintf(stderr, "FAILED ");
-      fprintf_value(stderr, x);
+      fprintv(stderr, x);
       fprintf(stderr, " != ");
-      fprintf_value(stderr, y);
+      fprintv(stderr, y);
       fprintf(stderr, "\n");
       crash("assertion failed");
     }
 
     fprintf(stderr, "PASSED ");
-    fprintf_value(stderr, x);
+    fprintv(stderr, x);
     fprintf(stderr, "\n");
 
     gc();
@@ -2939,10 +2938,10 @@ void test_repl (FILE *f) {
     }
     fprintf(stderr, "=(");
     Value *nm = pop();
-    fprintf_value(stderr, nm);
+    fprintv(stderr, nm);
     fprintf(stderr, ") ");
     Value *val = pop();
-    fprintf_value(stderr, val);
+    fprintv(stderr, val);
     fprintf(stderr, "\n");
     goto next_input;
 
@@ -2950,7 +2949,7 @@ void test_repl (FILE *f) {
     ungetc(c, f);
     if (!read_exp(f)) return;
     force_in_place(0);
-    fprintf_value(stdout, pop_deref());
+    fprintv(stdout, pop_deref());
     printf("\n");
     goto next_input;
   }
