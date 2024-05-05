@@ -2,6 +2,11 @@
 // - TODO pinspace backed by file.
 // - TODO resume from pinspace snapshots + log
 // - TODO WASM
+// - TODO Seed loader uses only system calls, no stdlib IO.
+// - TODO Trace() uses only system calls, no stdlib IO.
+// - TODO Trace() uses only system calls, no stdlib IO.
+// - TODO repl() uses only system calls, no stdlib IO.
+// - TODO Remove all uses of malloc() (including in BSDNT).
 
 #include <stdint.h>
 #define __STDC_WANT_LIB_EXT2__  1
