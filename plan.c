@@ -10,23 +10,16 @@
 //     need to use pin-hashing.
 
 // # Correctness Issues
-// - ☐ Bottom-safe version of the cmp jet.
+// - ☐ Bottom-safe version of the cmp jet (don't force first).
 
 // # Minimize the Heap Layout
 // - ☐ Bit-pack the nat size directly into the tag.
 // - ☐ Bit-pack the law size directly into the tag.
 // - ☐ Use smaller numbers for the law weights.
-// - ☐ Don't store the law weights if we codegen.
+// - ☐ Don't store the law weights if we codegen (Law is a union type)
 
 // # Only one mmap() region.
-// - ☐ Put the stack directly in front of the heap.
-// - ☐ Make the heap executable.
 // - ☐ Put the JIT code directly on the laws.
-// - ☐ Eliminate the jitspace heap.
-// - ☐ Preallocate a large region with MAP_NORESERVE
-//     - Just to find a region that's safe to use.
-//     - Then release the mapping (so that core dumps aren't huge).
-//     - Then allocate within that region useing MAP_FIXED.
 
 // # Persist
 // - ☐ Use offsets instead of pointers.
@@ -194,9 +187,7 @@ noreturn void crash(char *s) { printf("Error: %s\n", s); exit(1); }
 int call_depth = 0; // for debugging traces
 #endif
 
-static char *jitspace = NULL;
-static char *jp       = NULL;
-
+static char *loom       = NULL;
 static char *heap_start = NULL;
 static char *heap_end   = NULL;
 
@@ -219,39 +210,41 @@ static Value **symbol_table  = NULL;
 // GC Heap /////////////////////////////////////////////////////////////////////
 
 void rts_init (void) {
-    const int rw  = PROT_READ | PROT_WRITE;
     const int rwx = PROT_READ | PROT_WRITE | PROT_EXEC;
 
-    const int heap_flags = MAP_FIXED | MAP_PRIVATE | MAP_ANON;
+    const int heap_flags = MAP_PRIVATE | MAP_ANON;
 
-    if (HEAP_LOCAL != mmap(HEAP_LOCAL, BLOCK_SIZE, rw, heap_flags, -1, 0))
-        { perror("rts_init(heap): mmap"); exit(1); }
+    ssize_t initialLoomSz = (sizeof(Value) * STACK_SIZE) + BLOCK_SIZE;
 
-    const int jit_flags = MAP_FIXED | MAP_PRIVATE | MAP_ANON | MAP_NORESERVE;
+    // Find a safe place to put the heap, then release it to avoid
+    // massive core dumps.
 
-    if (JIT_LOCAL != mmap(JIT_LOCAL, (1ULL<<40), rwx, jit_flags, -1, 0))
-        { perror("rts_init(jit): mmap"); exit(1); }
+    loom = mmap(NULL, (1ULL<<40), rwx, heap_flags | MAP_NORESERVE, -1, 0);
 
-    const int stack_flags = MAP_PRIVATE | MAP_ANON;
+    if (loom == MAP_FAILED) perror("rts_init: reserve: mmap"), exit(1);
 
-    stack = mmap(NULL, (STACK_SIZE * sizeof(Value*)), rw, stack_flags, -1, 0);
+    int err = munmap(loom, (1ULL<<40));
 
-    if (stack == MAP_FAILED)
-        { perror("rts_init(stk): mmap"); exit(1); }
+    if (err != 0) perror("rts_init: munmap"), exit(1);
 
-    memset(stack, 0, STACK_SIZE);
+    // Then allocate the section that we need to start with using MAP_FIXED.
 
-    heap_start = HEAP_LOCAL;
+    loom = mmap(loom, initialLoomSz, rwx, heap_flags | MAP_FIXED, -1, 0);
+
+    if (loom == MAP_FAILED) { perror("rts_init: mmap"); exit(1); }
+
+    // Initialize the globals used for the stack/heap.
+
+    stack      = (void*) loom;
+    stack_end  = stack + STACK_SIZE;
+    sp         = stack_end;
+
+    heap_start = (void*) stack_end;
     heap_end   = heap_start + BLOCK_SIZE;
     live_start = heap_start;
     live_end   = heap_end;
     hp         = live_start;
 
-    jitspace   = JIT_LOCAL;
-    jp         = jitspace;
-
-    stack_end  = stack + STACK_SIZE;
-    sp         = stack_end;
 }
 
 /*
@@ -268,14 +261,14 @@ void rts_init (void) {
     the live area (but that shouldn't actually happen in practice).
 */
 void extend_mmap (void) {
-    const int prot   = PROT_READ | PROT_WRITE;
-    const int flags  = MAP_FIXED | MAP_PRIVATE | MAP_ANON;
+    const int rwx   = PROT_READ | PROT_WRITE | PROT_EXEC;
+    const int flags = MAP_FIXED | MAP_PRIVATE | MAP_ANON;
 
     while (live_end > heap_end) {
-        len_t mapped_bytes = heap_end - heap_start;
-        if (heap_end != mmap(heap_end, mapped_bytes, prot, flags, -1, 0))
+        len_t heapSz = heap_end - heap_start;
+        if (heap_end != mmap(heap_end, heapSz, rwx, flags, -1, 0))
             { perror("extend_mmap: mmap"); exit(1); }
-        heap_end += mapped_bytes;
+        heap_end += heapSz;
     }
 }
 
@@ -330,9 +323,7 @@ static inline void *alloc(size_t bytes) {
 
 // argument is in bytes, but must be a multiple of 8.
 static inline void *jit_alloc(size_t bytes) {
-  char *res = jp;
-  jp += bytes;
-  return res;
+  crash("TODO: just put this directly into the law.");
 }
 
 
