@@ -17,13 +17,27 @@
       in
       {
         devShells = rec {
-          plankShell = import ./shell.nix { inherit pkgs; };
-          default = plankShell;
+          default = pkgs.mkShell {
+            buildInputs = with pkgs; [
+              gdb
+              linuxPackages.perf
+              valgrind
+            ];
+          };
         };
 
         packages = rec {
-          plank = import ./default.nix { inherit pkgs; };
-          default = plank;
+          default = pkgs.stdenv.mkDerivation {
+            name = "plan";
+            src = ./.;
+            buildPhase = ''
+              make plan
+            '';
+            installPhase = ''
+              mkdir -p $out/bin
+              cp plan $out/bin
+            '';
+          };
         };
       });
 }
