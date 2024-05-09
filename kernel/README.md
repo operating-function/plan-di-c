@@ -3,7 +3,7 @@ sire compiler.
 
 In order to run the test, run:
 
-    $ bash run.sh
+    $ bash repl.sh
 
 In order to get (slowly) a sire repl, run:
 
