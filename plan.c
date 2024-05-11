@@ -1802,11 +1802,12 @@ void backout(u64 depth) {
   // of the stack.
 }
 
-Value *kal(u64 maxRef, char **pool, Value *x) {
+Value *kal(u64 lets, u64 maxRef, char **pool, Value *x) {
   if (is_direct(x)) {
     u64 xv = get_direct(x);
     if (xv > maxRef) return x;                   // unquoted constant
-    return get(maxRef - xv);                     // var ref
+    if (xv+lets > maxRef) return get(maxRef-xv); // let binding
+    return get(xv + lets);                       // arg/self
   }
 
   if (x->type != APP) return x;                  // unquoted constant
@@ -1829,8 +1830,8 @@ Value *kal(u64 maxRef, char **pool, Value *x) {
   Value *this_call = (Value*) *pool;
   *pool += 24;
   this_call->type = APP;
-  this_call->a.f  = kal(maxRef, pool, f);
-  this_call->a.g  = kal(maxRef, pool, g);
+  this_call->a.f  = kal(lets, maxRef, pool, f);
+  this_call->a.g  = kal(lets, maxRef, pool, g);
   return this_call;
 }
 
@@ -1906,7 +1907,7 @@ void eval_law(Law l) {
       Value *next = TL(b);
       Value *exp  = TL(HD(b));
       b           = next;
-      Value *gr   = kal(maxRef, &apps, exp);
+      Value *gr   = kal(lets, maxRef, &apps, exp);
 
       Value *ptr = (Value*) (mem + (i*24));
       ptr->type  = IND;
@@ -1923,7 +1924,7 @@ void eval_law(Law l) {
   write_dot("constructing body graph");
   #endif
 
-  Value *gr = kal(maxRef, &apps, b);
+  Value *gr = kal(lets, maxRef, &apps, b);
   push_val(gr);                 // .. self args slots bodyGr
   eval();                       // .. self args slots bodyWhnf
   return slide(maxRef+1);       // .. bodyWhnf
@@ -2017,7 +2018,6 @@ void run_law(Value *self, u64 ar) {
 
   // self is still valid here, we haven't allocated
   push_val(self);
-  flip_stack(ar+1); // +num_constants
   eval_law(FUNC(self));
 }
 
