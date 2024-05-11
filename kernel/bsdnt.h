@@ -21,34 +21,6 @@ typedef word_t        preinv1_t;
 typedef word_t*       nn_t;
 typedef const word_t *nn_src_t;
 
-#define TMP_INIT \
-   typedef struct __tmp_struct { \
-      void * block; \
-      struct __tmp_struct * next; \
-   } __tmp_t; \
-   __tmp_t * __tmp_root; \
-   __tmp_t * __t
-
-#define TMP_START \
-   __tmp_root = NULL
-
-#define TMP_END \
-   while (__tmp_root) { \
-      free(__tmp_root->block); \
-      __tmp_root = __tmp_root->next; \
-   }
-
-#define TMP_ALLOC_BYTES(size) \
-   ((size) > 8192 ? \
-      (__t = (__tmp_t *) alloca(sizeof(__tmp_t)), \
-       __t->next = __tmp_root, \
-       __tmp_root = __t, \
-       __t->block = malloc(size)) : \
-      alloca(size))
-
-#define TMP_ALLOC(size) \
-   TMP_ALLOC_BYTES(sizeof(word_t)*(size))
-
 static inline void nn_zero(nn_t a, len_t m) {
    for (long i = 0; i < m; i++) a[i] = 0;
 }

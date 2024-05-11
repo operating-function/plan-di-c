@@ -1,7 +1,4 @@
 #include <stdlib.h>
-#include <stdint.h>
-#include <math.h>
-#include <limits.h>
 #include "bsdnt.h"
 
 void nn_mul(nn_t p, nn_src_t a, len_t m, nn_src_t b, len_t n);
@@ -158,15 +155,6 @@ word_t nn_submul1_c(nn_t a, nn_src_t b, len_t m, word_t c, word_t ci)
 #define nn_submul1(a, b, m, c) \
    nn_submul1_c(a, b, m, c, (word_t) 0)
 
-#define divapprox21_preinv1(q, u_hi, u_lo, d, dinv) \
-   do { \
-      dword_t __q1 = (dword_t) u_hi * (dword_t) (dinv) \
-                  + (((dword_t) u_hi) << WORD_BITS) + (dword_t) u_lo; \
-      const dword_t __q0 = (dword_t) u_lo * (dword_t) (dinv); \
-      __q1 += (dword_t) ((__q0) >> WORD_BITS); \
-      (q) = (__q1 >> WORD_BITS); \
-   } while (0)
-
 #define divapprox21_preinv2(q, a_hi, a_lo, dinv) \
    do { \
       const dword_t __a = ((dword_t) (a_hi) << WORD_BITS) + (dword_t) (a_lo); \
@@ -202,91 +190,6 @@ void nn_divrem_classical_preinv_c(nn_t q, nn_t a, len_t m, nn_src_t d,
       /* fetch next word now that it has been updated */
       ci = a[0];
    }
-}
-
-/*
-   Set a = b + c + ci where b is bm words, c is cm words in length,
-   and bm >= cm. We return the carry out.
-*/
-#define nn_add(a, b, bm, c, cm) \
-   nn_add_c(a, b, bm, c, cm, (word_t) 0)
-
-word_t _nn_divapprox_helper(nn_t q, nn_t a, nn_src_t d, len_t s)
-{
-   word_t ci;
-   len_t i;
-
-   nn_sub_m(a + 1, a + 1, d, s + 1);
-   ci = a[2] + nn_add1(a + 1, a + 1, 1, d[s]);
-
-   for (i = s - 1; i >= 0; i--)
-   {
-      q[i] = ~WORD(0);
-      ci += nn_add1(a, a, 2, d[i]);
-   }
-
-   return ci;
-}
-
-word_t nn_divapprox_classical_preinv_c(nn_t q, nn_t a, len_t m, nn_src_t d,
-                                  len_t n, preinv2_t dinv, word_t ci)
-{
-   word_t cy = 0;
-   len_t s = m - n + 1;
-
-   a += m;
-
-   /* Reduce until n - 2 >= s */
-   for (s = m - n; s > n - 2; s--)
-   {
-      a--;
-      divapprox21_preinv2(q[s], ci, a[0], dinv);
-
-	  /* a -= d*q1 */
-      ci -= nn_submul1(a - n + 1, d, n, q[s]);
-
-      /* correct if remainder is too large */
-      if (ci || nn_cmp_m(a - n + 1, d, n) >= 0)
-      {
-         q[s]++;
-         ci -= nn_sub_m(a - n + 1, a - n + 1, d, n);
-      }
-
-      /* fetch next word now that it has been updated */
-      cy = ci;
-      ci = a[0];
-   }
-
-   s++;
-   d = d + n - s - 1; /* make d length s + 1 */
-
-   for ( ; s > 0; s--)
-   {
-      a--;
-      /* rare case where truncation ruins normalisation */
-      if (ci > d[s] || (ci == d[s] && nn_cmp_m(a - s + 1, d, s) >= 0))
-         return _nn_divapprox_helper(q, a - s, d, s);
-
-      divapprox21_preinv2(q[s - 1], ci, a[0], dinv);
-
-      /* a -= d*q1 */
-      ci -= nn_submul1(a - s, d, s + 1, q[s - 1]);
-
-	   /* correct if remainder is too large */
-      if (ci || nn_cmp_m(a - s, d, s + 1) >= 0)
-      {
-         q[s - 1]++;
-         ci -= nn_sub_m(a - s, a - s, d, s + 1);
-      }
-
-      /* fetch next word now that it has been updated */
-      cy = ci;
-      ci = a[0];
-
-      d++;
-   }
-
-   return cy;
 }
 
 static inline preinv1_t precompute_inverse1(word_t d) {
@@ -350,9 +253,6 @@ word_t nn_shl_c(nn_t a, nn_src_t b, len_t m, bits_t bits, word_t ci)
    return ci;
 }
 
-#define nn_shl(a, b, m, bits) \
-   nn_shl_c(a, b, m, bits, (word_t) 0)
-
 word_t nn_shr_c(nn_t a, nn_src_t b, len_t m, bits_t bits, word_t ci)
 {
    dword_t t;
@@ -370,65 +270,10 @@ word_t nn_shr_c(nn_t a, nn_src_t b, len_t m, bits_t bits, word_t ci)
    return ci;
 }
 
+#define nn_shl(a, b, m, bits) nn_shl_c(a, b, m, bits, (word_t) 0)
 #define nn_shr(a, b, m, bits) nn_shr_c(a, b, m, bits, (word_t) 0)
 #define nn_mul_m(p, a, b, m)  nn_mul_classical(p, a, m, b, m)
 #define nn_mul(p, a, m, b, n) nn_mul_classical(p, a, m, b, n)
-
-void nn_mullow_classical(nn_t ov, nn_t r, nn_src_t a, len_t m1,
-                                              nn_src_t b, len_t m2)
-{
-   len_t i;
-   dword_t t;
-
-   t = (dword_t) nn_mul1(r, a, m1, b[0]);
-
-   for (i = 1; i < m2; i++)
-      t += (dword_t) nn_addmul1(r + i, a, m1 - i, b[i]);
-
-   ov[0] = (word_t) t;
-   ov[1] = (word_t) (t >> WORD_BITS);
-}
-
-#define nn_mullow_kara nn_mullow_classical
-
-void nn_mulmid_classical(nn_t ov, nn_t p,
-                            nn_src_t a, len_t m, nn_src_t b, len_t n)
-{
-  dword_t t; /* overflow */
-
-  a += n - 1;
-  m -= n - 1;
-
-  t = nn_mul1(p, a, m, b[0]);
-
-  for (n--; n > 0; n--)
-  {
-      a--; b++;
-      t += nn_addmul1(p, a, m, b[0]);
-  }
-
-  ov[0] = (word_t) t;
-  ov[1] = (t >> WORD_BITS);
-}
-
-#define nn_mulmid_kara nn_mulmid_classical
-
-/*
-   As per nn_divapprox_classical_preinv_c.
-*/
-static inline
-word_t nn_divapprox_preinv_c(nn_t q, nn_t a, len_t m,
-                          nn_src_t d, len_t n, preinv2_t dinv, word_t ci)
-{
-   return nn_divapprox_classical_preinv_c(q, a, m, d, n, dinv, ci);
-}
-
-
-static inline
-void nn_divrem_preinv_c(nn_t q, nn_t a, len_t m, nn_src_t d,
-                               len_t n, preinv2_t dinv, word_t ci) {
-    nn_divrem_classical_preinv_c(q, a, m, d, n, dinv, ci);
-}
 
 /*
    Given a double word u, a normalised divisor d and a precomputed
@@ -465,32 +310,24 @@ void nn_divrem(nn_t q, nn_t a, len_t m, nn_src_t d, len_t n) {
    word_t norm, ci = 0;
    nn_t t;
 
-   TMP_INIT;
-
-   TMP_START;
-
    if ((norm = high_zero_bits(d[n - 1])))
    {
-      t = (nn_t) TMP_ALLOC(n);
+      t = (nn_t) alloca(sizeof(word_t) * n);
       ci = nn_shl(a, a, m, norm);
       nn_shl(t, d, n, norm);
    } else
       t = (nn_t) d;
 
-   if (n == 1)
-   {
+   if (n == 1) {
       preinv1_t inv = precompute_inverse1(t[0]);
       a[0] = nn_divrem1_preinv_c(q, a, m, t[0], inv, ci);
-   } else
-   {
+   } else {
       preinv2_t inv = precompute_inverse2(t[n - 1], t[n - 2]);
       nn_divrem_classical_preinv_c(q, a, m, t, n, inv, ci);
    }
 
    if (norm)
       nn_shr(a, a, n, norm);
-
-   TMP_END;
 }
 
 word_t nn_divrem1_simple_c(nn_t q, nn_src_t a, len_t m, word_t d, word_t ci)
