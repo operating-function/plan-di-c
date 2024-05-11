@@ -1491,7 +1491,7 @@ static inline void mk_app() {
 
 // before: ..rest x f
 // after:  ..rest (f x)
-static inline void mk_app_rev() {
+static inline void mk_app_rev (void) {
   #if ENABLE_GRAPHVIZ
   write_dot("mk_app_rev");
   #endif
@@ -1503,12 +1503,13 @@ static inline void mk_app_rev() {
   push_val(res);
 }
 
-void mk_pin() {
+static inline void mk_pin (void) {
   #if ENABLE_GRAPHVIZ
   write_dot("mk_pin");
   #endif
 
-  Value *top = pop_deref();
+  force_in_place(0);
+  Value *top = pop();
   Value *p = a_Pin(normalize(top));
   push_val(p);
 }
@@ -1592,8 +1593,9 @@ void mk_law() {
   write_dot("mk_law");
   #endif
 
-  to_nat(1); // a
-  to_nat(2); // n
+  force_in_place(0);          // b
+  to_nat(1);                  // a
+  to_nat(2);                  // n
 
   if (compiler_seed && false) {
                               // [.. n a b]
@@ -1678,7 +1680,8 @@ void incr() {
   write_dot("incr");
   #endif
 
-  Value *x = pop_deref();
+  eval_update(0);
+  Value *x = pop();
 
   if (is_direct(x)) {
     // this doesn't need to deal with overflow because get_direct returns
@@ -1695,23 +1698,26 @@ void incr() {
   BigPlusWord(1, x);
 }
 
-void prim_case() {
+static inline void prim_case() {
   #if ENABLE_GRAPHVIZ
   write_dot("prim_case");
   #endif
 
-  Value *o = pop_deref();
-  Value *m = pop_deref();
-  Value *z = pop_deref();
-  Value *a = pop_deref();
-  Value *l = pop_deref();
-  Value *p = pop_deref();
+  eval_update(0);
+
+  Value *o = pop();
+  Value *m = pop(); // m/z/a/l/p could be indirections, but that's fine.
+  Value *z = pop();
+  Value *a = pop();
+  Value *l = pop();
+  Value *p = pop();
+
   switch (TY(o)) {
     case PIN:
       push_val(IT(o)); // o
       push_val(p);     // o p
       mk_app_rev();    // (p o)
-      return;
+      break;
     case LAW:
       push_val(BD(o)); // b
       push_val(AR(o)); // b a
@@ -1720,29 +1726,30 @@ void prim_case() {
       mk_app_rev();    // b a (l n)
       mk_app_rev();    // b (l n a)
       mk_app_rev();    // (l n a b)
-      return;
+      break;
     case APP:
       push_val(TL(o)); // t
       push_val(HD(o)); // t h
       push_val(a);     // t h a
       mk_app_rev();    // t (a h)
       mk_app_rev();    // (a h t)
-      return;
+      break;
     case BIG: {
       if (EQZ(o)) {
         push_val(z);
-        return;
+        break;
       }
       push_val(m); // m
       push_val(o); // m o
       Dec();       // m d
       mk_app();    // (m d)
-      return;
+      break;
     }
     case IND: crash("plan_case: IND: impossible");
-    case MOV:
-      crash("MOV escaped GC");
+    case MOV: crash("MOV escaped GC");
   }
+
+  eval();
 }
 
 void setup_call(u64 depth) {
@@ -2121,36 +2128,15 @@ void do_prim(Value *op) {
   #if ENABLE_GRAPHVIZ
   write_dot(dot_lab);
   #endif
-  //
+
   if (!is_direct(op)) goto exception_case;
 
-  // char lob[40];
-  // sprintf(lob, "do_prim: %lu", get_direct(op));
-
   switch (get_direct(op)) {
-    case 0: { // mk_pin
-      force_in_place(0);
-      return mk_pin();
-    }
-    case 1: { // mk_law
-      force_in_place(0);          // b
-      eval_update(1);             // a
-      eval_update(2);             // n
-      return mk_law();
-    }
-    case 2: { // incr
-      eval_update(0);
-      return incr();
-    }
-    case 3: { // case
-      eval_update(0);
-      prim_case();
-      eval();
-      return;
-    }
-    default: {
-      goto exception_case;
-    }
+    case 0:  return mk_pin();
+    case 1:  return mk_law();
+    case 2:  return incr();
+    case 3:  return prim_case();
+    default: goto exception_case;
   }
  exception_case:
   push_val(op);
