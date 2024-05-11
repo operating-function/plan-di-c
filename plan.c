@@ -1802,12 +1802,11 @@ void backout(u64 depth) {
   // of the stack.
 }
 
-Value *kal(u64 lets, u64 maxRef, char **pool, Value *x) {
+Value *kal(u64 maxRef, char **pool, Value *x) {
   if (is_direct(x)) {
     u64 xv = get_direct(x);
     if (xv > maxRef) return x;                   // unquoted constant
-    if (xv+lets > maxRef) return get(maxRef-xv); // let binding
-    return get(xv + lets);                       // arg/self
+    return get(xv);                              // environment reference
   }
 
   if (x->type != APP) return x;                  // unquoted constant
@@ -1830,8 +1829,8 @@ Value *kal(u64 lets, u64 maxRef, char **pool, Value *x) {
   Value *this_call = (Value*) *pool;
   *pool += 24;
   this_call->type = APP;
-  this_call->a.f  = kal(lets, maxRef, pool, f);
-  this_call->a.g  = kal(lets, maxRef, pool, g);
+  this_call->a.f  = kal(maxRef, pool, f);
+  this_call->a.g  = kal(maxRef, pool, g);
   return this_call;
 }
 
@@ -1889,7 +1888,10 @@ void eval_law(Law l) {
     #endif
 
     // Add a black hole per let.
-    for (u64 i = 0; i < lets; i++) *(--sp) = (Value*) (mem + 24*i);
+    sp -= lets;
+    Value **fill = sp;
+    for (u64 i = 0; i <= args; i++, fill++) *fill = fill[lets];
+    for (u64 i = 0; i < lets;  i++, fill++) *fill = (Value*) (mem + 24*i);
 
     #if ENABLE_GRAPHVIZ
     for (u64 i = 0; i < lets; i++) {
@@ -1907,7 +1909,7 @@ void eval_law(Law l) {
       Value *next = TL(b);
       Value *exp  = TL(HD(b));
       b           = next;
-      Value *gr   = kal(lets, maxRef, &apps, exp);
+      Value *gr   = kal(maxRef, &apps, exp);
 
       Value *ptr = (Value*) (mem + (i*24));
       ptr->type  = IND;
@@ -1924,7 +1926,7 @@ void eval_law(Law l) {
   write_dot("constructing body graph");
   #endif
 
-  Value *gr = kal(lets, maxRef, &apps, b);
+  Value *gr = kal(maxRef, &apps, b);
   push_val(gr);                 // .. self args slots bodyGr
   eval();                       // .. self args slots bodyWhnf
   return slide(maxRef+1);       // .. bodyWhnf
