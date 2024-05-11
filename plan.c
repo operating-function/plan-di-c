@@ -1768,7 +1768,7 @@ static inline void setup_call(u64 depth) {
   sp -= depth;
 }
 
-void handle_oversaturated_application(u64 count) {
+static inline void handle_oversaturated_application(u64 count) {
   #if ENABLE_GRAPHVIZ
   snprintf(dot_lab, 1024, "handle_oversaturated_application %lu", count);
   write_dot(dot_lab);
@@ -1776,9 +1776,7 @@ void handle_oversaturated_application(u64 count) {
   //
   // if our application is oversaturated, `depth` will exceed the arity. in this
   // case, we want to re-assemble the apps, and eval the result.
-  for (u64 i = 0; i < count; i++) {
-    mk_app_rev();
-  }
+  for (u64 i = 0; i < count; i++) mk_app_rev();
   eval();
 }
 
@@ -2054,7 +2052,7 @@ bool law_step(u64 depth) {
   snprintf(dot_lab, 1024, "law_step %lu", depth);
   write_dot(dot_lab);
   #endif
-  //
+
   Value *self = pop_deref();
   if (GT(AR(self), DIRECT(depth))) {
     // unsaturated application. this is a little weird, but works?
@@ -2078,7 +2076,11 @@ bool law_step(u64 depth) {
     #endif
 
     setup_call(depth);
+
+    #if ENABLE_ASSERTIONS
     if (!is_direct(AR(self))) crash("impossible: called law with huge arity");
+    #endif
+
     u64 ar = get_direct(AR(self));
 
     run_law(self, ar);
@@ -2179,13 +2181,10 @@ bool unwind(u64 depth) {
           pop();
           setup_call(depth);
           do_prim(item);
-          //
-          if (arity < depth) {
-            // oversaturated
-            handle_oversaturated_application(depth - arity);
-          } else {
-            // application was perfectly saturated.
-          }
+
+          // oversaturated
+          if (arity < depth) handle_oversaturated_application(depth - arity);
+
           return true;
         }
         // unwind "through" pins & apps
