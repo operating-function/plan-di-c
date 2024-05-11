@@ -1593,11 +1593,18 @@ void mk_law() {
   write_dot("mk_law");
   #endif
 
-  force_in_place(0);          // b
-  to_nat(1);                  // a
-  to_nat(2);                  // n
+  force_in_place(2);          // b
+  to_nat(0);                  // a
+  to_nat(1);                  // n
+
+  Value *n = pop_deref();
+  Value *a = pop_deref();
+  Value *b = normalize(pop_deref());
 
   if (compiler_seed && false) {
+    push_val(n);
+    push_val(a);
+    push_val(b);
                               // [.. n a b]
     push(0);                  // [.. n a b b]
     push(2);                  // [.. n a b b a]
@@ -1659,9 +1666,6 @@ void mk_law() {
     // in run_law no_jet case, push cnsts to stack after self and before args.
   }
 
-  Value *b = normalize(pop_deref());
-  Value *a = pop_deref();
-  Value *n = pop_deref();
   Law l = { .n = n, .a = a, .b=b, .w = { .n_lets = 0, .n_calls = 0 } };
 
   weigh_law(1, &l.w, b);
@@ -1703,14 +1707,14 @@ static inline void prim_case() {
   write_dot("prim_case");
   #endif
 
-  eval_update(0);
+  eval_update(5);
 
-  Value *o = pop();
-  Value *m = pop(); // m/z/a/l/p could be indirections, but that's fine.
-  Value *z = pop();
-  Value *a = pop();
+  Value *p = pop(); // m,z,a,l,p could be indirections, but that's fine.
   Value *l = pop();
-  Value *p = pop();
+  Value *a = pop();
+  Value *z = pop();
+  Value *m = pop();
+  Value *o = pop();
 
   switch (TY(o)) {
     case PIN:
@@ -1762,22 +1766,6 @@ void setup_call(u64 depth) {
   // unwound.  (TODO: use pointer arithmetic)
   for (u64 i = 0; i < depth; i++) {
     sp[i] = TL(sp[i]);
-  }
-}
-
-void flip_stack(u64 depth) {
-  #if ENABLE_GRAPHVIZ
-  snprintf(dot_lab, 1024, "flip_stack %lu", depth);
-  write_dot(dot_lab);
-  #endif
-  //
-  if (depth == 0) return;
-  u64 d1 = depth-1;
-  for (u64 i = 0; i < depth/2; i++) {
-    Value *tmp = sp[i];
-    sp[i]      = sp[d1-i];
-    sp[d1-i]   = tmp;
-    // TODO: pointer arithmatic, not index arithmetic.
   }
 }
 
@@ -2178,7 +2166,6 @@ bool unwind(u64 depth) {
           // run primop
           pop();
           setup_call(depth);
-          flip_stack(arity);
           do_prim(item);
           //
           if (arity < depth) {
