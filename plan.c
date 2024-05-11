@@ -1762,11 +1762,15 @@ void setup_call(u64 depth) {
   write_dot(dot_lab);
   #endif
 
-  // setup the call by pulling the TLs out of all apps which we have
-  // unwound.  (TODO: use pointer arithmetic)
-  for (u64 i = 0; i < depth; i++) {
-    sp[i] = TL(sp[i]);
+  // get the actual args by taking the tail of every arg-slot.
+  Value **end = sp+depth;
+
+  while (sp < end) {
+      *sp = (**sp).a.g;
+      sp++;
   }
+
+  sp -= depth;
 }
 
 void handle_oversaturated_application(u64 count) {
@@ -2142,8 +2146,21 @@ bool unwind(u64 depth) {
   write_dot(dot_lab);
   #endif
   //
-  Value *x = get_deref(0);
-  switch (TY(x)) {
+  Value *x = get(0);
+
+ without_ind:
+
+  if (is_direct(x)) {
+    backout(depth);
+    return false;
+  }
+
+  switch (x->type) {
+    case IND: {
+        x = x->i.ptr;
+        *sp = x;
+        goto without_ind;
+    }
     case APP: {
       push_val(HD(x));
       depth++;
@@ -2198,9 +2215,6 @@ bool unwind(u64 depth) {
     case BIG: {
       backout(depth);
       return false;
-    }
-    case IND: {
-      crash("unwind: bad deref");
     }
     case MOV:
       crash("MOV escaped GC");
