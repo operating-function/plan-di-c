@@ -1,8 +1,6 @@
-#include <stdlib.h>
 #include <stdint.h>
 #include <math.h>
 #include <limits.h>
-#include <stdio.h>
 
 #define BSDNT_MIN(x, y) \
    ((x) <= (y) ? (x) : (y))

@@ -2,7 +2,6 @@
 #include <stdint.h>
 #include <math.h>
 #include <limits.h>
-#include <stdio.h>
 #include "bsdnt.h"
 
 void nn_mul(nn_t p, nn_src_t a, len_t m, nn_src_t b, len_t n);
@@ -290,10 +289,6 @@ word_t nn_divapprox_classical_preinv_c(nn_t q, nn_t a, len_t m, nn_src_t d,
    return cy;
 }
 
-void talker(const char * str) {
-   fprintf(stderr, "Error: %s\n", str);
-}
-
 static inline preinv1_t precompute_inverse1(word_t d) {
    d++;
 
@@ -511,47 +506,4 @@ word_t nn_divrem1_simple_c(nn_t q, nn_src_t a, len_t m, word_t d, word_t ci)
    }
 
    return ci;
-}
-
-char * nn_get_str(nn_src_t a, len_t m)
-{
-   /* 9.63... is log_10(2^32) */
-   size_t i = 0, j;
-   size_t digits = (long) ceil(m * 9.632959861247398 * (WORD_BITS/32)) + (m == 0);
-   char * str = (char *) malloc(digits + 1);
-   word_t ci, d = 10UL << (WORD_BITS - 4);
-   nn_t q1, q2, t;
-   TMP_INIT;
-
-   if (m == 0)
-      str[0] = '0';
-   else
-   {
-      TMP_START;
-      q1 = (nn_t) TMP_ALLOC(m);
-      q2 = (nn_t) TMP_ALLOC(m);
-      nn_copy(q1, a, m);
-
-      /* compute digits in reverse order */
-      for (i = digits; m > 0; i--)
-      {
-         ci = nn_shl(q1, q1, m, WORD_BITS - 4);
-         str[i - 1] = 48 + (char) (nn_divrem1_simple_c(q2, q1, m, d, ci) >> (WORD_BITS - 4));
-         t = q1; q1 = q2; q2 = t;
-         m = nn_normalise(q1, m);
-      }
-
-      TMP_END;
-
-      /* didn't get the right number of digits, shift */
-      if (i)
-      {
-         for (j = i; j < digits; j++)
-            str[j - i] = str[j];
-      }
-   }
-
-   str[digits - i] = '\0';
-
-   return str;
 }
