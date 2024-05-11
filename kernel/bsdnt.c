@@ -425,129 +425,14 @@ static inline
 word_t nn_divapprox_preinv_c(nn_t q, nn_t a, len_t m,
                           nn_src_t d, len_t n, preinv2_t dinv, word_t ci)
 {
-   if (m - n + 1 <= DIVAPPROX_CLASSICAL_CUTOFF || n == 1)
-      return nn_divapprox_classical_preinv_c(q, a, m, d, n, dinv, ci);
-   else
-      return nn_divapprox_divconquer_preinv_c(q, a, m, d, n, dinv, ci);
+   return nn_divapprox_classical_preinv_c(q, a, m, d, n, dinv, ci);
 }
 
-word_t nn_divapprox_divconquer_preinv_c(nn_t q, nn_t a, len_t m, nn_src_t d,
-                                            len_t n, preinv2_t dinv, word_t ci)
-{
-   len_t s = m - n + 1;
-   len_t sh, sl;
-   nn_t t;
-   len_t i;
-
-   TMP_INIT;
-
-   /* special case, s <= 3 */
-   if (s <= 3 || n <= 5) return nn_divapprox_classical_preinv_c(q, a, m, d, n, dinv, ci);
-
-   /* Reduce until n - 2 >= s */
-   while (n - 2 < s)
-   {
-      sh = BSDNT_MIN(n, s - n + 2);
-      nn_divrem_divconquer_preinv_c(q + s - sh, a + m - n - sh + 1,
-                                                   n + sh - 1, d, n, dinv, ci);
-      s -= sh; m -= sh;
-      ci = a[m];
-   }
-
-   /* split into two parts */
-   sh = s/2; sl = s - sh;
-
-   /* Rare case where truncation ruins normalisation */
-   if (ci > d[n - 1] || (ci == d[n - 1]
-     && nn_cmp_m(a + m - s + 1, d + n - s, s - 1) >= 0))
-      return _nn_divapprox_helper(q, a + m - s - 1, d + n - s - 1, s);
-
-   ci = nn_divapprox_preinv_c(q + sl, a + sl, n + sh - 1, d, n, dinv, ci);
-
-   TMP_START;
-   t = (nn_t) TMP_ALLOC(sl + 2);
-
-   nn_mulmid_kara(t + sl, t, d + n - s - 1, s - 1, q + sl, sh);
-   ci -= nn_sub_m(a + m - s - 1, a + m - s - 1, t, sl + 2);
-
-   TMP_END;
-
-   if ((sword_t) ci < 0)
-   {
-
-      nn_sub1(q + sl, q + sl, sh, 1); /* ensure quotient is not too big */
-
-      /*
-         correct remainder, noting that "digits" of quotient aren't base B
-         but in base varying with truncation, thus correction needs fixup
-      */
-      ci += nn_add_m(a + m - s - 1, a + m - s - 1, d + n - sl - 2, sl + 2);
-
-      for (i = 0; i < sh - 1 && q[sl + i] == ~WORD(0); i++)
-         ci += nn_add1(a + m - s - 1, a + m - s - 1, sl + 2, d[n - sl - 3 - i]);
-   }
-
-   if (ci != 0 || nn_cmp_m(a + sl, d, n) >= 0) /* special case: unable to canonicalise */
-      return _nn_divapprox_helper(q, a + m - s - 1, d + n - sl - 1, sl);
-
-   ci = nn_divapprox_preinv_c(q, a, n + sl - 1, d, n, dinv, a[m - sh]);
-
-   return ci;
-}
 
 static inline
 void nn_divrem_preinv_c(nn_t q, nn_t a, len_t m, nn_src_t d,
                                len_t n, preinv2_t dinv, word_t ci) {
-   if (n <= DIVREM_CLASSICAL_CUTOFF || m == n)
-      nn_divrem_classical_preinv_c(q, a, m, d, n, dinv, ci);
-   else
-      nn_divrem_divconquer_preinv_c(q, a, m, d, n, dinv, ci);
-}
-
-void nn_divrem_divconquer_preinv_c(nn_t q, nn_t a, len_t m, nn_src_t d,
-                                            len_t n, preinv2_t dinv, word_t ci)
-{
-   len_t sh, s = m - n + 1;
-   nn_t t;
-
-   TMP_INIT;
-
-   /* Base case */
-   if (n <= 3 || s <= 1)
-   {
-      nn_divrem_classical_preinv_c(q, a, m, d, n, dinv, ci);
-      return;
-   }
-
-   /* Reduce until n - 2 >= s */
-   while (n - 2 < s)
-   {
-      sh = BSDNT_MIN(n, s - n + 2);
-      nn_divrem_preinv_c(q + s - sh, a + m - n - sh + 1,
-                                                   n + sh - 1, d, n, dinv, ci);
-      s -= sh; m -= sh;
-      ci = a[m];
-   }
-
-   ci = nn_divapprox_preinv_c(q, a, m, d, n, dinv, ci);
-
-   TMP_START;
-   t = (nn_t) TMP_ALLOC(n);
-
-   if (s > 0)
-   {
-      nn_mullow_kara(t + n - 2, t, d, n - 2, q, s);
-      ci -= nn_sub_m(a, a, t, n);
-   }
-
-   TMP_END;
-
-   while ((sword_t) ci < 0)
-   {
-      nn_sub1(q, q, s, 1); /* ensure quotient is not too big */
-
-      ci += nn_add_m(a, a, d, n);
-   }
+    nn_divrem_classical_preinv_c(q, a, m, d, n, dinv, ci);
 }
 
 /*
@@ -604,7 +489,7 @@ void nn_divrem(nn_t q, nn_t a, len_t m, nn_src_t d, len_t n) {
    } else
    {
       preinv2_t inv = precompute_inverse2(t[n - 1], t[n - 2]);
-      nn_divrem_divconquer_preinv_c(q, a, m, t, n, inv, ci);
+      nn_divrem_classical_preinv_c(q, a, m, t, n, inv, ci);
    }
 
    if (norm)

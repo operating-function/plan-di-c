@@ -4,9 +4,6 @@
 #include <limits.h>
 #include <stdio.h>
 
-#define DIVAPPROX_CLASSICAL_CUTOFF 45L
-#define DIVREM_CLASSICAL_CUTOFF    80L
-
 #define BSDNT_MIN(x, y) \
    ((x) <= (y) ? (x) : (y))
 
