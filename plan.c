@@ -2129,24 +2129,20 @@ void do_prim(Value *op) {
 
   switch (get_direct(op)) {
     case 0: { // mk_pin
-      pop();
       force_in_place(0);
       return mk_pin();
     }
     case 1: { // mk_law
-      pop();
       force_in_place(0);          // b
       eval_update(1);             // a
       eval_update(2);             // n
       return mk_law();
     }
     case 2: { // incr
-      pop();
       eval_update(0);
       return incr();
     }
     case 3: { // case
-      pop();
       eval_update(0);
       prim_case();
       eval();
@@ -2156,12 +2152,13 @@ void do_prim(Value *op) {
       goto exception_case;
     }
   }
-exception_case:                      // param tag
+ exception_case:
+  push_val(op);
   force_in_place(1);                 // *param tag
   fprintf(stderr, "Exception(");
   Trace("): ");                      // param
   Trace("\n");                       //
-  exit(0);
+  exit(1);
 }
 
 bool unwind(u64 depth) {
@@ -2196,7 +2193,6 @@ bool unwind(u64 depth) {
           pop();
           setup_call(depth);
           flip_stack(arity);
-          push_val(item);
           do_prim(item);
           //
           if (arity < depth) {
