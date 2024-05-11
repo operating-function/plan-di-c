@@ -1756,7 +1756,7 @@ static inline void prim_case() {
   eval();
 }
 
-void setup_call(u64 depth) {
+static inline void setup_call(u64 depth) {
   #if ENABLE_GRAPHVIZ
   snprintf(dot_lab, 1024, "setup_call %lu", depth);
   write_dot(dot_lab);
@@ -1764,12 +1764,7 @@ void setup_call(u64 depth) {
 
   // get the actual args by taking the tail of every arg-slot.
   Value **end = sp+depth;
-
-  while (sp < end) {
-      *sp = (**sp).a.g;
-      sp++;
-  }
-
+  while (sp < end) { *sp = (**sp).a.g; sp++; }
   sp -= depth;
 }
 
