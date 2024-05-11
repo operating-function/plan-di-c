@@ -7,8 +7,6 @@
 
 void nn_mul(nn_t p, nn_src_t a, len_t m, nn_src_t b, len_t n);
 
-void nn_mul_m(nn_t p, nn_src_t a, nn_src_t b, len_t m);
-
 /*
    Set a = b + c where b and c are both m words in length. Return
    any carry out.
@@ -99,9 +97,6 @@ word_t nn_mul1_c(nn_t a, nn_src_t b, len_t m, word_t c, word_t ci)
    return ci;
 }
 
-#define nn_mul1(a, b, m, c) \
-   nn_mul1_c(a, b, m, c, (word_t) 0)
-
 word_t nn_addmul1_c(nn_t a, nn_src_t b, len_t m, word_t c, word_t ci)
 {
    dword_t t;
@@ -117,8 +112,8 @@ word_t nn_addmul1_c(nn_t a, nn_src_t b, len_t m, word_t c, word_t ci)
    return ci;
 }
 
-#define nn_addmul1(a, b, m, c) \
-   nn_addmul1_c(a, b, m, c, (word_t) 0)
+#define nn_mul1(a, b, m, c)    nn_mul1_c(a, b, m, c, (word_t) 0)
+#define nn_addmul1(a, b, m, c) nn_addmul1_c(a, b, m, c, (word_t) 0)
 
 void nn_mul_classical(nn_t r, nn_src_t a, len_t m1, nn_src_t b, len_t m2) {
    len_t i;
@@ -128,7 +123,6 @@ void nn_mul_classical(nn_t r, nn_src_t a, len_t m1, nn_src_t b, len_t m2) {
    for (i = 1; i < m2; i++)
       r[m1 + i] = nn_addmul1(r + i, a, m1, b[i]);
 }
-
 
 word_t nn_sub_mc(nn_t a, nn_src_t b, nn_src_t c, len_t m, word_t bi) {
    dword_t t;
@@ -381,291 +375,9 @@ word_t nn_shr_c(nn_t a, nn_src_t b, len_t m, bits_t bits, word_t ci)
    return ci;
 }
 
-#define nn_shr(a, b, m, bits) \
-   nn_shr_c(a, b, m, bits, (word_t) 0)
-
-word_t nn_neg_c(nn_t a, nn_src_t b, len_t m, word_t ci)
-{
-   dword_t t;
-   long i;
-
-   ci = 1 - ci;
-
-   for (i = 0; i < m && ci != 0; i++)
-   {
-      t = (dword_t) ~b[i] + (dword_t) ci;
-      a[i] = (word_t) t;
-      ci = (t >> WORD_BITS);
-   }
-
-   for ( ; i < m; i++)
-      a[i] = ~b[i];
-
-   return (word_t) 1 - ci;
-}
-
-#define nn_neg(a, b, m) \
-    nn_neg_c(a, b, m, 0)
-
-void nn_mul_toom33(nn_t p, nn_src_t a, len_t m, nn_src_t b, len_t n)
-{
-   len_t m3 = (m + 2)/3;
-   len_t h1 = m - 2*m3;
-   len_t h2 = n - 2*m3;
-   len_t nn;
-   word_t ci;
-   bits_t norm;
-   nn_t t;
-   TMP_INIT;
-
-   TMP_START;
-   t = (nn_t) TMP_ALLOC(6*m3 + 6);
-
-#define r1 p
-#define r2 t
-#define r3 (t + 2*m3 + 2)
-#define r4 (t + 4*m3 + 4)
-#define r5 (p + 4*m3)
-#define s1 (p + m3 + 1)
-
-   r1[m3]  = nn_add_m(r1, a, a + m3, m3); /* Evaluate at 1 */
-   r1[m3] += nn_add(r1, r1, m3, a + 2*m3, h1);
-   s1[m3]  = nn_add_m(s1, b, b + m3, m3);
-   s1[m3] += nn_add(s1, s1, m3, b + 2*m3, h2);
-   nn_mul_m(r2, r1, s1, m3 + 1);
-
-   ci = nn_shl(r1, a + 2*m3, h1, 1); /* Evaluate at 2 */
-   r1[m3]  = nn_add(r1, a + m3, m3, r1, h1);
-   r1[m3] += nn_add1(r1 + h1, r1 + h1, m3 - h1, ci);
-   nn_shl(r1, r1, m3 + 1, 1);
-   r1[m3] += nn_add_m(r1, r1, a, m3);
-   ci = nn_shl(s1, b + 2*m3, h2, 1);
-   s1[m3]  = nn_add(s1, b + m3, m3, s1, h2);
-   s1[m3] += nn_add1(s1 + h2, s1 + h2, m3 - h2, ci);
-   nn_shl(s1, s1, m3 + 1, 1);
-   s1[m3] += nn_add_m(s1, s1, b, m3);
-   nn_mul_m(r3, r1, s1, m3 + 1);
-
-   ci = nn_shl(r1, a + 2*m3, h1, 2); /* Evaluate at 4 */
-   r1[m3]  = nn_add(r1, a + m3, m3, r1, h1);
-   r1[m3] += nn_add1(r1 + h1, r1 + h1, m3 - h1, ci);
-   nn_shl(r1, r1, m3 + 1, 2);
-   r1[m3] += nn_add_m(r1, r1, a, m3);
-   ci = nn_shl(s1, b + 2*m3, h2, 2);
-   s1[m3]  = nn_add(s1, b + m3, m3, s1, h2);
-   s1[m3] += nn_add1(s1 + h2, s1 + h2, m3 - h2, ci);
-   nn_shl(s1, s1, m3 + 1, 2);
-   s1[m3] += nn_add_m(s1, s1, b, m3);
-   nn_mul_m(r4, r1, s1, m3 + 1);
-
-   nn_mul_m(r1, a, b, m3); /* Evaluate at 0 */
-   nn_mul(r5, a + 2*m3, h1, b + 2*m3, h2); /* Evaluate at oo */
-
-   nn_zero(p + 2*m3, 2*m3);
-
-   r3[2*m3 + 1] = -nn_sub(r3, r3, 2*m3 + 1, r1, 2*m3); /* Interpolate */
-   r4[2*m3 + 1] = -nn_sub(r4, r4, 2*m3 + 1, r1, 2*m3);
-   r2[2*m3 + 1] = -nn_sub(r2, r2, 2*m3 + 1, r1, 2*m3);
-   nn_submul1(r3, r2, 2*m3 + 1, 2);
-   nn_submul1(r4, r2, 2*m3 + 1, 4);
-   ci = nn_submul1(r4, r5, h1 + h2, 112);
-   nn_sub1(r4 + h1 + h2, r4 + h1 + h2, 2*m3 - h1 - h2 + 1, ci);
-   nn_submul1(r4, r3, 2*m3 + 1, 10);
-   nn_neg(r4, r4, 2*m3 + 1);
-   nn_shr(r4, r4, 2*m3 + 1, 3);
-   nn_submul1(r3, r4, 2*m3 + 1, 2);
-   ci = nn_submul1(r3, r5, h1 + h2, 14);
-   nn_sub1(r3 + h1 + h2, r3 + h1 + h2, 2*m3 - h1 - h2 + 1, ci);
-
-   norm = high_zero_bits(WORD(3));
-   // word_t ninv = precompute_inverse1(WORD(3) << norm);
-   r3[2*m3 + 1] = nn_shl(r3, r3, 2*m3 + 1, norm);
-
-   nn_shr(r3, r3, 2*m3 + 1, 1);
-   nn_sub_m(r2, r2, r3, 2*m3 + 1);
-   nn_sub_m(r2, r2, r4, 2*m3 + 1);
-   nn_sub(r2, r2, 2*m3 + 1, r5, h1 + h2);
-
-   nn = nn_normalise(r3, 2*m3 + 1); /* Normalise */
-
-   nn_add(p + m3, p + m3, 3*m3 + h1 + h2, r2, 2*m3 + 1); /* Recombine */
-   nn_add(p + 2*m3, p + 2*m3, 2*m3 + h1 + h2, r4, 2*m3 + 1);
-   nn_add(p + 3*m3, p + 3*m3, m3 + h1 + h2, r3, nn);
-
-   TMP_END;
-
-#undef r1
-#undef r2
-#undef r3
-#undef r4
-#undef r5
-#undef s1
-}
-
-void nn_mul_kara(nn_t p, nn_src_t a, len_t m, nn_src_t b, len_t n)
-{
-   len_t m2 = (m + 1)/2;
-   len_t h1 = m - m2;
-   len_t h2 = n - m2;
-
-   nn_t t;
-   TMP_INIT;
-
-   p[m2]       = nn_add(p, a, m2, a + m2, h1);
-   p[2*m2 + 1] = nn_add(p + m2 + 1, b, m2, b + m2, h2);
-
-   TMP_START;
-   t = (nn_t) TMP_ALLOC(2*m2 + 2);
-
-   nn_mul_m(t, p + m2 + 1, p, m2 + 1);
-
-   nn_mul_m(p, a, b, m2);
-   nn_mul(p + 2*m2, a + m2, h1, b + m2, h2);
-
-   nn_sub(t, t, 2*m2 + 1, p, 2*m2);
-   nn_sub(t, t, 2*m2 + 1, p + 2*m2, h1 + h2);
-
-   /* add a_hi*b_lo + a_lo*b_hi, cannot exceed m + 1 words */
-   nn_add(p + m2, p + m2, m + h2, t, m + 1);
-
-   TMP_END;
-}
-
-void nn_mul_m(nn_t p, nn_src_t a, nn_src_t b, len_t m)
-{
-   if (m <= MUL_CLASSICAL_CUTOFF)
-      nn_mul_classical(p, a, m, b, m);
-   else if (m <= MUL_KARA_CUTOFF)
-      nn_mul_kara(p, a, m, b, m);
-   else if (m <= MUL_TOOM33_CUTOFF)
-      nn_mul_toom33(p, a, m, b, m);
-   else
-      talker("Out of options in nn_mul_m\n");
-}
-
-void nn_mul_toom32(nn_t p, nn_src_t a, len_t m, nn_src_t b, len_t n) {
-   len_t m3 = (m + 2)/3;
-   len_t h1 = m - 2*m3;
-   len_t h2 = n - m3;
-   len_t nn;
-   nn_t t;
-   word_t ci;
-   TMP_INIT;
-
-   TMP_START;
-   t = (nn_t) TMP_ALLOC(4*m3 + 4);
-
-#define r1 p
-#define r2 t
-#define r3 (t + 2*m3 + 2)
-#define r4 (p + 3*m3)
-#define s1 (p + m3 + 1)
-
-   r1[m3]  = nn_add(r1, a, m3, a + 2*m3, h1); /* Evaluate at 1 */
-   r1[m3] += nn_add_m(r1, r1, a + m3, m3);
-   s1[m3]  = nn_add(s1, b, m3, b + m3, h2);
-   nn_mul_m(r2, r1, s1, m3 + 1);
-
-   ci = nn_shl(r1, a + 2*m3, h1, 1); /* Evaluate at 2 */
-   r1[m3]  = nn_add(r1, a + m3, m3, r1, h1);
-   r1[m3] += nn_add1(r1 + h1, r1 + h1, m3 - h1, ci);
-   nn_shl(r1, r1, m3 + 1, 1);
-   r1[m3] += nn_add_m(r1, r1, a, m3);
-   ci = nn_shl(s1, b + m3, h2, 1);
-   s1[m3]  = nn_add(s1, b, m3, s1, h2);
-   s1[m3] += nn_add1(s1 + h2, s1 + h2, m3 - h2, ci);
-   nn_mul_m(r3, r1, s1, m3 + 1);
-
-   nn_mul_m(r1, a, b, m3); /* Evaluate at 0 */
-   if (h1 >= h2) nn_mul(r4, a + 2*m3, h1, b + m3, h2); /* Evaluate at oo */
-   else nn_mul(r4, b + m3, h2, a + 2*m3, h1);
-   nn_zero(p + 2*m3, m3);
-
-   nn_sub_m(r2, r2, r1, 2*m3 + 1); /* Interpolate */
-   nn_sub_m(r3, r3, r1, 2*m3 + 1);
-   nn_submul1(r3, r2, 2*m3 + 1, 2);
-   ci = nn_submul1(r3, r4, h1 + h2, 6);
-   nn_sub1(r3 + h1 + h2, r3 + h1 + h2, 2*m3 - h1 - h2 + 1, ci);
-
-   nn_sub(r2, r2, 2*m3 + 1, r4, h1 + h2);
-   nn_sub_m(r2, r2, r3, 2*m3 + 1);
-
-   nn = nn_normalise(r3, 2*m3 + 1); /* Normalise */
-
-   nn_add(p + m3, p + m3, 2*m3 + h1 + h2, r2, 2*m3 + 1); /* Recombine */
-   nn_add(p + 2*m3, p + 2*m3, m3 + h1 + h2, r3, nn);
-
-   TMP_END;
-
-#undef r1
-#undef r2
-#undef r3
-#undef r4
-#undef s1
-}
-
-void nn_mul(nn_t p, nn_src_t a, len_t m, nn_src_t b, len_t n)
-{
-   len_t r;
-   nn_t t;
-   TMP_INIT;
-
-   if (n <= MUL_CLASSICAL_CUTOFF)
-   {
-      nn_mul_classical(p, a, m, b, n);
-      return;
-   }
-
-   if (n <= MUL_KARA_CUTOFF)
-   {
-      if (n > (m + 1)/2)
-      {
-         nn_mul_kara(p, a, m, b, n);
-         return;
-      }
-   } else /* too big for Karatsuba */
-   {
-      const len_t m3 = (m + 2)/3;
-
-      if (n > m3)
-      {
-         if (n <= 2*m3)
-         {
-            if (n <= MUL_TOOM32_CUTOFF)
-            {
-               nn_mul_toom32(p, a, m, b, n);
-               return;
-            } else
-               talker("Out of options in nn_mul\n");
-         } else /* n > 2*m3 */
-         {
-            if (n <= MUL_TOOM33_CUTOFF)
-            {
-               nn_mul_toom33(p, a, m, b, n);
-               return;
-            } else
-               talker("Out of options in nn_mul\n");
-         }
-      }
-   }
-
-   r = m;
-
-   while (r > n) r -= n;
-
-   nn_mul(p, b, n, a, r);
-
-   TMP_START;
-   t = (nn_t) TMP_ALLOC(n + 1);
-   while (m > r)
-   {
-      nn_copy(t, p + r, n); /* temporarily save top n + 1 limbs */
-      nn_mul_m(p + r, a + r, b, n);
-      nn_add(p + r, p + r, 2*n, t, n);
-      r += n;
-   }
-   TMP_END;
-}
+#define nn_shr(a, b, m, bits) nn_shr_c(a, b, m, bits, (word_t) 0)
+#define nn_mul_m(p, a, b, m)  nn_mul_classical(p, a, m, b, m)
+#define nn_mul(p, a, m, b, n) nn_mul_classical(p, a, m, b, n)
 
 void nn_mullow_classical(nn_t ov, nn_t r, nn_src_t a, len_t m1,
                                               nn_src_t b, len_t m2)

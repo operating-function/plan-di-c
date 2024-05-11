@@ -4,10 +4,6 @@
 #include <limits.h>
 #include <stdio.h>
 
-#define MUL_CLASSICAL_CUTOFF       33L
-#define MUL_KARA_CUTOFF            400L
-#define MUL_TOOM32_CUTOFF          LONG_MAX
-#define MUL_TOOM33_CUTOFF          LONG_MAX
 #define MULMID_CLASSICAL_CUTOFF    80L
 #define MULLOW_CLASSICAL_CUTOFF    120L
 #define DIVAPPROX_CLASSICAL_CUTOFF 45L
