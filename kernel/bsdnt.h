@@ -4,8 +4,6 @@
 #include <limits.h>
 #include <stdio.h>
 
-#define MULMID_CLASSICAL_CUTOFF    80L
-#define MULLOW_CLASSICAL_CUTOFF    120L
 #define DIVAPPROX_CLASSICAL_CUTOFF 45L
 #define DIVREM_CLASSICAL_CUTOFF    80L
 
