@@ -10,7 +10,7 @@
 //     need to use pin-hashing.
 
 // # Correctness Issues
-// - ☐ Bottom-safe version of the cmp jet (don't force first).
+// - ✓ Bottom-safe version of the cmp jet (don't force first).
 
 // # Minimize the Heap Layout
 // - ☐ Bit-pack the nat size directly into the tag.
@@ -738,6 +738,34 @@ static inline int cmp_normalized(Value *a, Value *b) {
     return cmp_direct(get_direct(a), get_direct(b));
 
   return cmp_recur(a,b);
+}
+
+static inline int cmp_lazy() {
+  tail_recur:
+    eval_update(0);
+    eval_update(1); // TODO: which order does the PLAN eval in?
+    Value *a = *sp++;
+    Value *b = *sp++;
+
+    if (a == b) return equals; // pointer-equality shortcut
+
+    int aTy=TY(a), bTy=TY(b);
+
+    if (aTy != APP) {
+        if (bTy != APP) return cmp_normalized(a, b);
+        return less;
+    }
+
+    if (bTy != APP) return greater;
+
+    push_val(TL(b));
+    push_val(TL(a));
+    push_val(HD(b));
+    push_val(HD(a));
+
+    int ord = cmp_lazy();
+    if (ord != 1) { sp += 2; return ord; }
+    goto tail_recur;
 }
 
 static inline bool LT(Value *a, Value *b) {
@@ -1988,13 +2016,7 @@ void run_law(Value *self, u64 ar) {
     return;
 
   case J_CMP:
-    // TODO: cmp should only eval as much as needed in order to find
-    // a difference.  These force calls are wrong.
-    force_in_place(0);
-    force_in_place(1);
-    Value *a = pop();
-    Value *b = pop();
-    int ord = cmp_normalized(a, b);
+    int ord = cmp_lazy();
     push_word(ord);
     return;
 

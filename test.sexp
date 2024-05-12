@@ -389,45 +389,65 @@
 
 ! 1 (@Sub 2 1)
 ! 6 (@Mul 2 3)
-! 0 (@Cmp 0 2)
-! 1 (@Cmp 2 2)
-! 2 (@Cmp 4 2)
 
-! 2 (@Cmp #2 2)
-! 1 (@Cmp #2 #2)
-! 0 (@Cmp #2 (0 1))
-! 2 (@Cmp 5 0)
-! 1 (@Cmp 5 5)
-! 1 (@Cmp #5 #5)
-! 0 (@Cmp #0 #5)
-! 2 (@Cmp #5 #0)
-! 2 (@Cmp (#1 2 3 4) #0)
-! 2 (@Cmp (#1 2 3 4) #1)
-! 0 (@Cmp (#1 2 3 4) (0 1))
-! 1 (@Cmp (#1 2 3 4) (#1 2 3 4))
-! 2 (@Cmp (#1 2 3 4) (#1 2 3 3))
-! 2 (@Cmp (#1 2 4 4) (#1 2 3 3))
-! 2 (@Cmp (#1 2 4 4) (#1 2 3 5))
-! 0 (@Cmp (#1 2 3 4) (#1 2 3 5))
-! 2 (@Cmp (#1 2 3 4) (#1 0 3 5))
-! 0 (@Cmp (#1 0 3 4) (#1 0 3 5))
-! 2 (@Cmp (#1 1 3 4) (#1 0 3 5))
-! 2 (@Cmp (#1 1 3 4) (#1 0 3 5))
+=Cmp @Cmp
+! 0 (Cmp 0 2)
+! 1 (Cmp 2 2)
+! 2 (Cmp 4 2)
 
-; 0 (@Cmp (0 (#7 7)) (1 (#7 7)))
+! 2 (Cmp #2 2)
+! 1 (Cmp #2 #2)
+! 0 (Cmp #2 (0 1))
+! 2 (Cmp 5 0)
+! 1 (Cmp 5 5)
+! 1 (Cmp #5 #5)
+! 0 (Cmp #0 #5)
+! 2 (Cmp #5 #0)
+! 2 (Cmp (#1 2 3 4) #0)
+! 2 (Cmp (#1 2 3 4) #1)
+! 0 (Cmp (#1 2 3 4) (0 1))
+! 1 (Cmp (#1 2 3 4) (#1 2 3 4))
+! 2 (Cmp (#1 2 3 4) (#1 2 3 3))
+! 2 (Cmp (#1 2 4 4) (#1 2 3 3))
+! 2 (Cmp (#1 2 4 4) (#1 2 3 5))
+! 0 (Cmp (#1 2 3 4) (#1 2 3 5))
+! 2 (Cmp (#1 2 3 4) (#1 0 3 5))
+! 0 (Cmp (#1 0 3 4) (#1 0 3 5))
+! 2 (Cmp (#1 1 3 4) (#1 0 3 5))
+! 2 (Cmp (#1 1 3 4) (#1 0 3 5))
+
+! 0 (Cmp (0 0) (0 1))
+! 1 (Cmp (0 1) (0 1))
+! 2 (Cmp (0 2) (0 1))
+! 0 (Cmp (0 0) (1 1))
+! 0 (Cmp (1 0) (1 1))
+! 2 (Cmp (2 0) (1 1))
+! 0 (Cmp (0 1) (1 1))
+! 1 (Cmp (1 1) (1 1))
+! 2 (Cmp (2 1) (1 1))
+
+! 0 (Cmp (0 (#7 7)) (1 1))
+! 2 (Cmp (2 (#7 7)) (1 1))
+! 0 (Cmp (0 (#7 7)) (1 (#7 7)))
 
 ! (0 7 7 1 2 7 7) (@Splice 2 (0 1 2) (0 7 7 7 7))
 
-! 1 (@strFindIndexOff (@Neq 32) 0 { x y })
-! 1 (@strFindIndexOff (@Neq 32) 1 { x y })
-! 3 (@strFindIndexOff (@Neq 32) 2 { x y })
-! 3 (@strFindIndexOff (@Neq 32) 3 { x y })
-! 5 (@strFindIndexOff (@Neq 32) 4 { x y })
-! 5 (@strFindIndexOff (@Neq 32) 5 { x y })
-! 5 (@strFindIndexOff (@Neq 32) 6 { x y })
+=Neq             @Neq
+=strFindIndexOff @strFindIndexOff
+=lexerTest       @lexerTest
 
-! (0 (0 %fn 1 %x) 0 1 %LWORD)        (@lexerTest %x)
-! (0 (0 %fn 1 544897400) 0 3 %LWORD) (@lexerTest {xyz })
+! 1 (strFindIndexOff (Neq 32) 0 { x y })
+! 1 (strFindIndexOff (Neq 32) 1 { x y })
+! 3 (strFindIndexOff (Neq 32) 2 { x y })
+! 3 (strFindIndexOff (Neq 32) 3 { x y })
+! 5 (strFindIndexOff (Neq 32) 4 { x y })
+! 5 (strFindIndexOff (Neq 32) 5 { x y })
+! 5 (strFindIndexOff (Neq 32) 6 { x y })
+
+! (0 (0 %fn 1 %x) 0 1 %LWORD)        (lexerTest %x)
+! (0 (0 %fn 1 544897400) 0 3 %LWORD) (lexerTest {xyz })
+
+=rexTrial @rexTrial
 
 ! (0
    (0 %REPL 2 %WOODS)
@@ -442,10 +462,10 @@
                   (%WORD #rex %i 0))
              0))
       0))))
-  (@rexTrial
+  (rexTrial
    (0 {= (Pin i)            | ##0 i}))
 
-(@rexTrial
+(rexTrial
  (0 {= (Pin i)            | ##0 i}
     {= (Law n a b)        | ##1 n a b}
     {= (Inc m)            | ##2 m}
@@ -453,17 +473,19 @@
     {= (Die x)            | ##die x  ; Calling a primop above 3 is a crash.}
  ))
 
+=sireTrial @sireTrial
+
 ! (0 (%A (%K #2) (%K 3)))
-  (@sireTrial (0 {| ##2} {| 3}))
+  (sireTrial (0 {| ##2} {| 3}))
 
 ! (0 (%F (0 1 0 0 %Pin 1 (%A (%K #0) (%V 0)))))
-  (@sireTrial (0 {?? (Pin i)            | ##0 i}))
+  (sireTrial (0 {?? (Pin i)            | ##0 i}))
 
 ; (WORD n)=(%WORD #rex n 0)
 =WORD (Pin (Law %WORD 1) (A (A (%WORD #rex) 1) (K 0)))
 
 !
-  (@rexTrial
+  (rexTrial
    (0 {?? (Case p l a z m o)}
       { | ##3 p l a z m o}))
 
@@ -489,9 +511,11 @@
 
 {Parsing very long lines}
 
+=Ix @Ix
+
 !
-(@Ix 1
- (@rexTrial
+(Ix 1
+ (rexTrial
   (0
    {   ?? (Car x)}
    {    | PlanCase}
@@ -500,13 +524,13 @@
    {      (h _)&h}
    {      0}
    {      x})))
-(@Ix 1
- (@rexTrial
+(Ix 1
+ (rexTrial
   (0
    {   ?? (Car x)}
    {    | PlanCase _&(##0) (n a _)&(##1 n a) (h _)&h 0 x})))
 
-(@sireTrial
+(sireTrial
   (0
    {@ Case}
    {  ?? (Case p l a z m o)}
@@ -525,8 +549,10 @@
    {| Car (2 3)}
 ))
 
+=runSire @runSire
+
 ! (0 3 4)
-(@runSire
+(runSire
  (0 {= x 3}
     {}
     {y=4}
@@ -534,7 +560,7 @@
     {(0 x y)}))
 
 ! (1 0 0)
-(@runSire
+(runSire
  (0 {= (Pin i)            | ##0 i}
     {= (Law n a b)        | ##1 n a b}
     {= (Inc m)            | ##2 m}
