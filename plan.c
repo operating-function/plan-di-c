@@ -42,8 +42,8 @@
 
 // # No Stdlib
 // - ✓ Seed loader uses only system calls, no stdlib IO.
-// - ☐ Trace() uses only system calls, no stdlib IO.
-// - ☐ Trace() uses only system calls, no stdlib IO.
+// - ✓ Trace() does not use stdlib.
+// - ☐ printv does not use stdlib.
 // - ☐ repl() uses only system calls, no stdlib IO.
 // - ☐ Remove all uses of malloc() (including in BSDNT).
 
@@ -1963,9 +1963,11 @@ void Trace (char *end) {
     char *bbuf = (void*) obuf;
     if (bwid < 1) return;
     int owid = bwid - 1;
-    int wrote = fwrite(bbuf, 1, owid, stderr);
-    ASSERT_(owid == wrote);
-    fprintf(stderr, "%s", end);
+
+    // TODO: Use a loop to handle larger outputs correctly.
+    int endSz = strlen(end);
+    if (owid != write(2, bbuf, owid)) pexit("write (TODO)");
+    if (endSz != write(2, end, endSz)) pexit("write (TODO)");
 }
 
 void run_law(Value *self, u64 ar) {
