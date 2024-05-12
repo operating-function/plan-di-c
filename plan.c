@@ -41,12 +41,13 @@
 // - ☐ Get this to compile to WASM.
 
 // # No Stdlib
-// - ☐ Seed loader uses only system calls, no stdlib IO.
+// - ✓ Seed loader uses only system calls, no stdlib IO.
 // - ☐ Trace() uses only system calls, no stdlib IO.
 // - ☐ Trace() uses only system calls, no stdlib IO.
 // - ☐ repl() uses only system calls, no stdlib IO.
 // - ☐ Remove all uses of malloc() (including in BSDNT).
 
+#include <fcntl.h>
 #include <stdint.h>
 #define __STDC_WANT_LIB_EXT2__  1
 #include <stdio.h>
@@ -180,6 +181,7 @@ static void fprintv_internal(FILE *, Value *, int);
 // Utils ///////////////////////////////////////////////////////////////////////
 
 noreturn void crash(char *s) { printf("Error: %s\n", s); exit(1); }
+noreturn void pexit(char *s) { perror(s); exit(1); }
 
 // Globals /////////////////////////////////////////////////////////////////////
 
@@ -1370,30 +1372,21 @@ void seed_load(u64 *inpbuf) {
   check_value(get(0));
 }
 
-u64 *load_seed_file (const char *filename, u64 *sizeOut) {
-  FILE *f = fopen (filename, "rb");
+void load_seed_file (const char *filename) {
+  int fd = open(filename, O_RDONLY);
+  if (fd < 0) pexit("open");
 
-  if (!f) {
-    fprintf(stderr, "\n%s\n", filename);
-    crash("seed file does not exist");
-  }
+  struct stat statbuf;
+  if (0 != fstat(fd, &statbuf)) pexit("fstat");
 
-  fseek(f, 0, SEEK_END);
-  u64 szBytes = ftell(f);
+  u64 *buf = mmap(NULL, statbuf.st_size, PROT_READ, MAP_SHARED, fd, 0);
+  if (buf == MAP_FAILED) pexit("mmap");
 
-  u64 szWords = (szBytes / 8) + (szBytes%8 ? 1 : 0);
+  if (0 != close(fd)) pexit("close");
 
-  fseek(f, 0, SEEK_SET);
-  u64 *buf = calloc(szWords+1, 8); // We add an extra word here
-                                   // so that we can over-read
-                                   // by one word, this simplifies
-                                   // decoding.
-  if (!buf) crash("load_seed_file: allocation failed");
-  if (fread (buf, 1, szBytes, f) != szBytes) crash("load_seed_file: can't read");
-  fclose(f);
+  seed_load(buf);
 
-  *sizeOut = szWords;
-  return buf;
+  munmap(buf, statbuf.st_size);
 }
 
 
@@ -2486,9 +2479,7 @@ again:
     if (!len) crash("Empty seed");
     char buf[1234] = "./seed/";
     strcpy(buf+7, str_buf);
-    u64 seedSz;
-    u64 *words = load_seed_file(buf, &seedSz);
-    seed_load(words);
+    load_seed_file(buf);
     return true;
   }
 
@@ -2512,9 +2503,7 @@ again:
 static void repl (void) {
     { // load seed (starting state)
       static const char *sire_seed = "./seed/sire-in-sire";
-      u64 seedSz;
-      u64 *words = load_seed_file(sire_seed, &seedSz);
-      seed_load(words);
+      load_seed_file(sire_seed);
     }
 
     static char buf[128];
@@ -2642,9 +2631,7 @@ int main (int argc, char **argv) {
 
   { // load printer
     static const char *tracefile = "./seed/renderPlan";
-    u64 seedSz;
-    u64 *words = load_seed_file(tracefile, &seedSz);
-    seed_load(words);
+    load_seed_file(tracefile);
     printer_seed=get_ptr(0);
   }
 
@@ -2654,9 +2641,7 @@ int main (int argc, char **argv) {
   }
 
   { // load the compiler seed
-    u64 seedSz;
-    u64 *words = load_seed_file("./seed/jit", &seedSz);
-    seed_load(words);
+    load_seed_file("./seed/jit");
     compiler_seed = get_ptr(0);
   }
 
