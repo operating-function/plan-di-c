@@ -45,7 +45,7 @@
 // - ✓ Trace() does not use stdlib.
 // - ☐ printv does not use stdlib.
 // - ☐ repl() uses only system calls, no stdlib IO.
-// - ☐ Remove all uses of malloc() (including in BSDNT).
+// - ✓ Remove all uses of malloc() (including in BSDNT).
 
 #include <fcntl.h>
 #include <stdint.h>
